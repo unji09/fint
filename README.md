@@ -37,7 +37,7 @@
 
 ## 아키텍처
 - [Git Convention (Notion)](https://www.notion.so/Git-Convention-3324479f510880f6b3b8f812ccf676e6)
-![System Architecture](docs/architecture.png)
+![System Architecture](docs/images/architecture.png)
 
 상세: [Draw.io](https://drive.google.com/file/d/16TekfqxYtelc9bR-hm7cTv0CNRSkxOSR/view?usp=drive_link)
 
