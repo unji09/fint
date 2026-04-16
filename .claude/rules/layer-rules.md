@@ -24,8 +24,8 @@ paths: src/main/java/**
 - API 출력: `*Response`
 - API 입력: `*Request`
 - `*DTO` 범용 네이밍 남용 금지
-- Response가 Entity 직접 참조 금지
-- 매핑은 Service/Mapper에서 수행. Entity의 LAZY 연관을 Response까지 전달 금지
+- Response가 Document 직접 참조 금지
+- 매핑은 Service/Mapper에서 수행. Document 를 Response 까지 그대로 전달 금지
 
 ## 공통 응답 객체 위치
 - `ApiResponse`, `PaginationResponse`류는 도메인 하위 패키지에 두지 않음

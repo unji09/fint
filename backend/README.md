@@ -58,7 +58,7 @@ com.ssafy.fint/
 │   ├── ApiResponse.java
 │   ├── common/
 │   │   ├── constant/            # ApiPath, ErrorMessage
-│   │   └── entity/              # BaseDocument (멀티테넌트 + 타임스탬프)
+│   │   └── document/            # BaseDocument (멀티테넌트 + 타임스탬프)
 │   ├── config/                  # MongoConfig, OpenApiConfig, SecurityConfig, RestTemplateConfig
 │   └── exception/               # 5종 예외 + GlobalExceptionHandler
 │

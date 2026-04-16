@@ -63,7 +63,7 @@ fint/
 
 각 서비스의 README 참고:
 
-- [`backend/fint/README.md`](backend/fint/README.md) — Spring Boot
+- [`backend/README.md`](backend/README.md) — Spring Boot
 - [`ai/README.md`](ai/README.md) — FastAPI
 - [`frontend-web/README.md`](frontend-web/README.md) — Next.js
 - [`frontend-app/README.md`](frontend-app/README.md) — React Native

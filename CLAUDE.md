@@ -36,7 +36,7 @@
 ## 테스트 명령어
 ```bash
 # Backend
-cd backend/fint
+cd backend
 ./gradlew test
 ./gradlew jacocoTestReport
 
@@ -62,7 +62,7 @@ uv run pytest
 
 ## 기본 컨벤션 요약
 - 계층 책임 분리 (Controller → Service → Repository)
-- Entity / Document는 DTO를 import하지 않음. 변환은 Service에서 수행
+- Document는 DTO를 import하지 않음. 변환은 Service에서 수행
 - 예외는 구체 타입으로 (`BadRequestException`, `NotFoundException` 등). `catch (Exception)` 남발 금지
 - 로그에 식별자(`tenant_id`, `user_id`, `resource_id`) 포함, 민감 정보 로그 금지
 - DTO / Response 분리. Document 직접 노출 금지
