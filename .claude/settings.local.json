@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew test:*)",
+      "Bash(./gradlew compileJava:*)",
+      "Bash(./gradlew compileTestJava:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew bootRun:*)",
+      "Bash(curl:*)",
+      "Bash(git log:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(gradle --version)",
+      "Bash(where gradle *)",
+      "Bash(where gradle.bat)",
+      "Read(//c/Program Files/**)",
+      "Bash(./gradlew --version)",
+      "Bash(./gradlew clean *)"
+    ]
+  }
+}
