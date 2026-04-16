@@ -60,7 +60,7 @@ com.ssafy.fint/
 │   │   ├── constant/            # ApiPath, ErrorMessage
 │   │   └── document/            # BaseDocument (멀티테넌트 + 타임스탬프)
 │   ├── config/                  # MongoConfig, OpenApiConfig, SecurityConfig, RestTemplateConfig
-│   └── exception/               # 5종 예외 + GlobalExceptionHandler
+│   └── exception/               # ErrorCode + BusinessException + GlobalExceptionHandler
 │
 ├── auth/                        # (추후) 인증 · JWT 발급 · 재발급
 ├── tenant/                      # (추후) 테넌트 관리
@@ -101,12 +101,15 @@ com.ssafy.fint/
 - `SecurityContext` 에서 `tenantId` 를 꺼내 사용. Controller 에서 직접 받지 않는다.
 
 ### 예외
-- `BadRequestException`, `UnauthorizedException`, `ForbiddenException`, `NotFoundException`, `ConflictException` 중 적절한 것 사용.
-- 새로운 케이스는 원칙적으로 위 5개 중 하나로 매핑. 꼭 필요할 때만 신규 예외 추가.
+- `throw new BusinessException(<Domain>ErrorCode.XXX)` 패턴 사용.
+- 도메인별 에러는 해당 도메인의 `<Domain>ErrorCode` enum 을 `ErrorCode` 인터페이스로 구현.
+- 공통 에러는 `CommonErrorCode` 참조. 메시지 오버라이드가 필요하면 `new BusinessException(errorCode, message)`.
 
 ### 응답
 - 모든 응답은 `ApiResponse<T>` 로 감싼다.
-- `ApiResponse.ok(data)` / `ApiResponse.created(data)` / `ApiResponse.fail(status, message)`.
+- 성공: `ApiResponse.ok(data)` / `ApiResponse.ok()` / `ApiResponse.created(data)`
+- 실패(도메인): `ApiResponse.fail(errorCode)` / `ApiResponse.fail(errorCode, message)`
+- 실패(프레임워크 예외): `ApiResponse.fail(status, message)`
 
 ### 로깅
 - 로그에 `tenantId`, `userId`, `resourceId` 포함.

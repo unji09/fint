@@ -63,7 +63,7 @@ uv run pytest
 ## 기본 컨벤션 요약
 - 계층 책임 분리 (Controller → Service → Repository)
 - Document는 DTO를 import하지 않음. 변환은 Service에서 수행
-- 예외는 구체 타입으로 (`BadRequestException`, `NotFoundException` 등). `catch (Exception)` 남발 금지
+- 예외는 `BusinessException(ErrorCode)` 패턴 사용. `catch (Exception)` 남발 금지
 - 로그에 식별자(`tenant_id`, `user_id`, `resource_id`) 포함, 민감 정보 로그 금지
 - DTO / Response 분리. Document 직접 노출 금지
 - 입력 값 검증 필수 (`@Valid`)
