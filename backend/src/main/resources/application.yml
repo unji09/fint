@@ -10,6 +10,9 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
   jackson:
+    # Spring Boot 4는 Jackson 3을 기본으로 사용. 마이그레이션 안정성을 위해 Jackson 2 디폴트 유지.
+    # Jackson 3 디폴트로 전환할 준비가 되면 false로 변경.
+    use-jackson2-defaults: true
     time-zone: Asia/Seoul
     default-property-inclusion: non_null
     deserialization:

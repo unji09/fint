@@ -16,7 +16,9 @@
       "Bash(where gradle.bat)",
       "Read(//c/Program Files/**)",
       "Bash(./gradlew --version)",
-      "Bash(./gradlew clean *)"
+      "Bash(./gradlew clean *)",
+      "WebSearch",
+      "WebFetch(domain:www.notion.so)"
     ]
   }
 }
