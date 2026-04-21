@@ -75,6 +75,7 @@ fint/
 
 ### 설계
 
+- [요구사항 명세서](docs/requirements.md)
 - [3 Layer 기능 구조](docs/3-layer.md)
 - [ERD (MongoDB · Neo4j)](docs/erd.md)
 - [API 명세](docs/api.md)
