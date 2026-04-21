@@ -92,6 +92,7 @@ fint/
 ### 운영
 
 - [인프라 · 배포 · 모니터링](docs/infra.md)
+- [모니터링 가이드](docs/monitoring.md)
 - [Claude Code 가이드](CLAUDE.md)
 
 ---
