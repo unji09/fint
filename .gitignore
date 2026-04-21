@@ -60,3 +60,6 @@ venv/
 *.tmp
 *.swp
 *.bak
+
+# ===== Personal workspace (local only, not tracked) =====
+mydocs/
