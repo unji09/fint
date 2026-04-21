@@ -30,12 +30,16 @@ springdoc:
   default-consumes-media-type: application/json
   default-produces-media-type: application/json
 
-# Actuator (health/info만 공개, 나머지는 기본값대로 비공개)
+# Actuator (health/info/prometheus만 공개, 나머지는 기본값대로 비공개)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
+  prometheus:
+    metrics:
+      export:
+        enabled: true
