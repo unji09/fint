@@ -61,5 +61,8 @@ venv/
 *.swp
 *.bak
 
+# ===== Claude Code (user-local settings, not tracked) =====
+.claude/settings.local.json
+
 # ===== Personal workspace (local only, not tracked) =====
 mydocs/
