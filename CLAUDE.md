@@ -72,7 +72,11 @@ DART API, 뉴스 크롤링, LLM API (OpenAI / Claude), STT, FCM
 ## 필수 규칙
 - **TDD**: Red → Green → Refactor. 테스트 없는 프로덕션 코드 금지.
 - **멀티에이전트**: 탐색/검증은 subagent로. 메인 context 오염 방지.
-- **Git 조작 금지**: Claude는 git 명령을 실행하지 않는다. 커밋/푸시/브랜치/PR은 사용자가 직접 수행.
+- **Git 조작 범위**:
+  - **허용 (Claude 실행 가능)**: 브랜치 전환/생성 (`checkout`, `switch`, `checkout -b`), 최신화 (`pull`, `fetch`), 조회 (`status`, `log`, `diff`, `branch`, `remote -v`)
+  - **금지 (사용자 직접 수행)**: 변경 확정 (`add`, `commit`), 원격 조작 (`push`, PR 생성), 병합/재작성 (`merge`, `rebase`, `cherry-pick`, `tag`)
+  - **파괴적 작업은 사용자 명시 승인 필요**: `reset --hard`, `checkout -- <file>`, `branch -D`, `push --force`, `stash drop/clear`
+  - 원칙: 작업 공간 준비는 Claude, 변경 확정과 원격 반영은 사용자
 
 ## 규칙 충돌 시 우선순위
 1. **런타임 안정성 / 데이터 정합성** (특히 `tenant_id` 멀티테넌트 격리)
