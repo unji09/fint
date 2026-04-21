@@ -50,8 +50,9 @@ public class SecurityConfig {
                     "/v3/api-docs/**",
                     "/swagger-ui.html"
                 ).permitAll()
-                // Actuator (health/info만 열고, 민감 엔드포인트는 닫음)
-                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                // Actuator (health/info/prometheus만 열고, 민감 엔드포인트는 닫음)
+                // prometheus: Prometheus 컨테이너가 내부망에서 scrape 용도로 호출
+                .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                 // Auth (로그인/재발급은 비인증)
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/reissue").permitAll()
                 // 그 외
