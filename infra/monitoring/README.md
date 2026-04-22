@@ -16,6 +16,75 @@ Docker Compose로 Prometheus + Grafana + Alertmanager + exporters를 기동한�
 
 **MongoDB/Redis exporter는 Phase 0에 포함되지 않음**. 해당 컨테이너가 compose에 도입되는 시점에 별도 PR로 추가한다.
 
+## 전체 흐름 (한눈에)
+
+### 각 서비스의 역할
+
+| 서비스 | 한 줄 요약 | 쉽게 말하면 |
+| --- | --- | --- |
+| **node_exporter** | 호스트(서버) 자체의 CPU/메모리/디스크/네트워크 지표 노출 | **체온계** — 서버 본체 상태 측정 |
+| **cAdvisor** | 컨테이너별 CPU/메모리/재시작 횟수 지표 노출 | **반장** — 컨테이너 하나하나 상태 보고 |
+| **Prometheus** | 위 지표들을 15초마다 수집 · 저장 · 룰 평가 | **창고지기** — 숫자 모아 창고에 쌓고 임계치 감시 |
+| **Grafana** | Prometheus의 데이터를 그래프/대시보드로 시각화 | **화가** — 창고의 숫자를 그래프로 그림 |
+| **Alertmanager** | 룰 위반 시 알람을 Mattermost로 라우팅 | **전달사** — "이상해!" 신호를 팀 채널로 전송 |
+
+### 데이터 흐름
+
+```
+┌───────────────────────────────────────────────────────────┐
+│                     [ 지표 소스 ]                          │
+│                                                             │
+│   호스트 OS ──→ node_exporter                               │
+│   컨테이너들 ──→ cAdvisor                                    │
+│   Spring Actuator ──(/actuator/prometheus)                 │
+└───────────────────────────────────────────────────────────┘
+                            │  15초마다 scrape (pull 방식)
+                            ↓
+                    ┌───────────────┐
+                    │  Prometheus   │  ← 저장 + 룰 평가
+                    │  (TSDB 7일)    │
+                    └───────┬───────┘
+                            │
+              ┌─────────────┴─────────────┐
+              │                            │
+              ↓                            ↓
+        ┌──────────┐              ┌────────────────┐
+        │ Grafana  │              │  Alertmanager  │
+        │ (시각화)  │              │  (룰 위반 시)   │
+        └──────────┘              └────────┬───────┘
+                                           │ webhook
+                                           ↓
+                                     Mattermost
+                                     #alert-fint
+```
+
+### 예시 시나리오 — "디스크 사용률 85%" 상황
+
+1. **node_exporter**: "저의 `/` 파티션 사용률 85%입니다" → 메트릭으로 노출
+2. **Prometheus**: 15초마다 위 숫자 scrape → DB 저장 → 룰 평가 (`> 80%` 해당)
+3. **Alertmanager**: Prometheus로부터 "DiskUsageHigh 발화" 통보 받음 → Mattermost webhook 호출
+4. **Mattermost** `#alert-fint`: `[CRITICAL] DiskUsageHigh` 메시지 도착
+5. **Grafana** (선택적으로 사용자가 들어와서 확인): 디스크 그래프가 빨간 영역에 진입한 시점 시각적 확인
+6. **cAdvisor** (조사 단계): "어느 컨테이너가 디스크를 많이 쓰는지" 조사 시 활용
+
+### 개발자가 실제로 보는 것
+
+| 상황 | 보는 곳 | URL |
+| --- | --- | --- |
+| 평소 대시보드 확인 | Grafana | http://localhost:3000 |
+| "왜 이 엔드포인트 느리지?" | Grafana JVM 대시보드 | http://localhost:3000 |
+| "메트릭 직접 쿼리" | Prometheus 쿼리 창 | http://localhost:9090/graph |
+| "타겟 UP/DOWN 확인" | Prometheus targets | http://localhost:9090/targets |
+| "현재 발화 중인 알람" | Alertmanager | http://localhost:9093 |
+| **알람 발생 순간** | **Mattermost `#alert-fint`** | — |
+
+### Pull 방식인 이유
+
+Prometheus는 **"찾아가서 긁어오는"** pull 방식이다. 장점:
+- 각 서비스는 자기 지표만 노출하면 됨 (Prometheus 존재 몰라도 됨)
+- Prometheus가 다운되어도 애플리케이션 서비스는 영향 없음
+- 새 서비스 추가 시 Prometheus 설정에 scrape 타겟 한 줄만 추가
+
 ## 기동 전 준비
 
 ### 1. Grafana 관리자 비밀번호
