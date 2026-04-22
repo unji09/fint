@@ -1,0 +1,5 @@
+# 로컬 환경변수 (Grafana 비밀번호 등)
+.env
+
+# Mattermost Incoming Webhook URL (개인별 시크릿)
+alertmanager/webhook_url

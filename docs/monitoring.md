@@ -19,25 +19,27 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 | Alertmanager | 알람 라우팅 |
 | node_exporter | 호스트 CPU/메모리/디스크 |
 | cAdvisor | 컨테이너별 리소스 |
-| mongodb_exporter | MongoDB 연결/쿼리 지표 |
-| redis_exporter | Redis 큐 길이/메모리 |
 | Micrometer (Spring) | JVM/HTTP/DB 풀 자동 계측 |
 | prometheus-fastapi-instrumentator | FastAPI HTTP 자동 계측 |
+| mongodb_exporter | *(MongoDB 컨테이너 도입 시 추가)* |
+| redis_exporter | *(Redis 컨테이너 도입 시 추가)* |
 
 알람 채널: **Mattermost** `#alert-fint` (Incoming Webhook)
 
 ## 3. Phase 0 — 초기 구성 (구현 시작 시점)
 
 ### 포함
-- 위 4개 exporter + Spring Actuator + FastAPI instrumentator
+- **node_exporter** (호스트) + **cAdvisor** (컨테이너) + **Spring Actuator** (애플리케이션) 메트릭
 - Grafana 대시보드 2개
-  - **System Overview**: 노드/컨테이너/DB/Redis 기본 지표
+  - **System Overview**: 호스트/컨테이너 기본 지표
   - **API Performance**: 엔드포인트별 RPS · 응답시간 · 에러율
 - Alertmanager 알람 룰 3개 (아래 참조)
 
 ### 제외 (확장 시점에 추가)
 | 제외 항목 | 추가 시점 |
 | --- | --- |
+| mongodb_exporter / redis_exporter | MongoDB/Redis 컨테이너가 compose에 도입될 때 함께 추가 |
+| FastAPI instrumentator | FastAPI 서비스 착수 시 |
 | Loki + Promtail (로그) | 운영 전환 또는 디버깅 필요해질 때 |
 | Neo4j exporter | REQ-WIKI-13 시맨틱 검색 착수 시 |
 | 커스텀 비즈니스 메트릭 (LLM 비용/STT 큐/위키 실패율) | 해당 기능 PR과 함께 |
@@ -72,10 +74,9 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 ## 5. 대시보드
 
 ### System Overview
-- Host: CPU / Memory / Disk / Network
-- Container: 컨테이너별 CPU · Memory · 재시작 횟수
-- MongoDB: 연결 수, 느린 쿼리, 인덱스 hit ratio
-- Redis: 키 수, 메모리, hit ratio
+- Host: CPU / Memory / Disk / Network (node_exporter)
+- Container: 컨테이너별 CPU · Memory · 재시작 횟수 (cAdvisor)
+- MongoDB/Redis 패널은 해당 exporter 도입 시 추가
 
 ### API Performance
 - HTTP RPS (엔드포인트별)
@@ -88,6 +89,8 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 
 | 트리거 | 추가할 것 |
 | --- | --- |
+| MongoDB/Redis 컨테이너 compose 도입 | mongodb_exporter + redis_exporter + 대시보드 패널 |
+| FastAPI 서비스 착수 | prometheus-fastapi-instrumentator 연동 + scrape 타겟 추가 |
 | 첫 LLM 호출 코드 머지 | LLM 비용 · 캐시 히트율 메트릭 + 알람 |
 | 첫 STT 파이프라인 머지 | 큐 길이 · 처리 시간 메트릭 + 알람 |
 | 외부 수집 스케줄러 구현 | 뉴스/DART 수집 성공률 메트릭 |

@@ -1,0 +1,26 @@
+global:
+  resolve_timeout: 5m
+  # Mattermost Incoming Webhook URL은 Slack-compatible.
+  # 실제 URL은 alertmanager/webhook_url 파일에 저장되며 gitignored.
+  slack_api_url_file: '/etc/alertmanager/webhook_url'
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'mattermost'
+
+# 주의: Mattermost webhook은 channel / username override가 서버 설정에 따라 차단될 수 있다.
+# 404 에러 발생 시 channel 필드를 제거하고 webhook 생성 시 지정된 채널로만 전송하도록 구성.
+receivers:
+  - name: 'mattermost'
+    slack_configs:
+      - send_resolved: true
+        title: '{{ if eq .Status "firing" }}[{{ .CommonLabels.severity | toUpper }}] {{ .CommonLabels.alertname }}{{ else }}[RESOLVED] {{ .CommonLabels.alertname }}{{ end }}'
+        text: |
+          {{ range .Alerts -}}
+          *Summary*: {{ .Annotations.summary }}
+          *Description*: {{ .Annotations.description }}
+          *Started*: {{ .StartsAt.Local.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}

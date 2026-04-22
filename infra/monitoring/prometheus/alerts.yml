@@ -1,0 +1,39 @@
+groups:
+  - name: fint-phase0
+    interval: 30s
+    rules:
+      # 디스크 80% 초과 - 단일 Lightsail 인스턴스 환경에서 치명적
+      - alert: DiskUsageHigh
+        expr: |
+          (1 - (node_filesystem_avail_bytes{mountpoint="/host",fstype!~"tmpfs|fuse.lxcfs|overlay"} / node_filesystem_size_bytes{mountpoint="/host",fstype!~"tmpfs|fuse.lxcfs|overlay"})) > 0.8
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "디스크 사용률 80% 초과"
+          description: "{{ $labels.instance }} ({{ $labels.mountpoint }}): {{ $value | humanizePercentage }} 사용 중"
+
+      # API p95 응답시간 500ms 초과 - 성능 목표(명세 3.2) 위반
+      - alert: ApiLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, uri) (rate(http_server_requests_seconds_bucket{job="fint-backend"}[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 응답시간 500ms 초과"
+          description: "{{ $labels.uri }}: p95 = {{ $value }}s"
+
+      # 컨테이너 반복 재시작 - OOM / 반복 장애 조기 감지
+      - alert: ContainerRestarting
+        expr: |
+          changes(container_start_time_seconds{name=~"fint-.+"}[1h]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "컨테이너 반복 재시작 감지"
+          description: "{{ $labels.name }}: 최근 1시간 내 {{ $value }}회 재시작"

@@ -1,0 +1,8 @@
+# 이 디렉터리는 Grafana provisioning의 대시보드 저장 위치.
+# 초기에는 비어 있고, Grafana UI에서 공개 대시보드를 import한 뒤
+# JSON으로 export해서 여기 커밋하거나, Grafana UI에서 직접 관리한다.
+#
+# 권장 import (infra/monitoring/README.md 참조):
+# - Node Exporter Full (ID: 1860)
+# - JVM (Micrometer) (ID: 4701)
+# - Docker cAdvisor (ID: 14282)

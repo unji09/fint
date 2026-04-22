@@ -1,0 +1,43 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: fint
+
+rule_files:
+  - 'alerts.yml'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # Prometheus 자체 모니터
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Alertmanager 자체 모니터
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+
+  # 호스트 메트릭 (CPU/메모리/디스크/네트워크)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node_exporter:9100']
+
+  # 컨테이너 메트릭
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # F!NT Spring Boot 애플리케이션 (호스트에서 기동)
+  # Windows/Mac Docker Desktop: host.docker.internal로 호스트 접근
+  # Linux: docker-compose의 extra_hosts로 host-gateway 연결
+  - job_name: 'fint-backend'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8080']

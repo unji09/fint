@@ -1,0 +1,103 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: fint-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    mem_limit: 1g
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - monitoring
+    depends_on:
+      - node_exporter
+      - cadvisor
+      - alertmanager
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: fint-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    mem_limit: 256m
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+  alertmanager:
+    # KST 타임존 표기를 위해 tzdata를 포함한 커스텀 이미지를 빌드
+    build:
+      context: ./alertmanager
+      dockerfile: Dockerfile
+    image: fint-alertmanager:kst
+    container_name: fint-alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+    mem_limit: 128m
+    networks:
+      - monitoring
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.0
+    container_name: fint-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    # Windows Docker Desktop에서 rslave 옵션을 지원하지 않음.
+    # 운영(Linux)에선 rslave를 붙이는 것이 정석이나, 개발 환경 호환을 위해 제외.
+    volumes:
+      - '/:/host:ro'
+    mem_limit: 128m
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: fint-cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    mem_limit: 256m
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    name: fint-monitoring
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
