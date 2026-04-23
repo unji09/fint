@@ -61,13 +61,55 @@ fint/
 
 ## 시작하기
 
-각 서비스의 README 참고:
+### 전제 조건
+- Docker Desktop (Windows/Mac) 또는 Docker Engine + Compose plugin (Linux)
+- JDK 21 (Liberica / Temurin 권장)
+- Git
 
-- [`backend/README.md`](backend/README.md) — Spring Boot
-- [`ai/README.md`](ai/README.md) — FastAPI
-- [`frontend-web/README.md`](frontend-web/README.md) — Next.js
-- [`frontend-app/README.md`](frontend-app/README.md) — Kotlin 네이티브
-- [`infra/README.md`](infra/README.md) — Docker Compose (전체 스택 기동)
+### 5분 퀵스타트 (백엔드 최소 실행)
+
+```bash
+# 1. 레포 클론 + dev 브랜치
+git clone <repo-url>
+cd S14P31A301
+git checkout dev
+
+# 2. 데이터 스택 기동 (PostgreSQL + Redis)
+cd infra
+cp .env.example .env
+docker compose up -d
+
+# 3. 백엔드 기동 (별도 터미널)
+cd ../backend
+cp .env.example .env
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+기동 확인:
+- API: http://localhost:8080
+- Swagger: http://localhost:8080/swagger-ui.html
+- Health: http://localhost:8080/actuator/health → `{"status":"UP"}`
+
+### (선택) 모니터링 스택 함께 기동
+
+```bash
+cd infra/monitoring
+cp .env.example .env
+echo "https://meeting.ssafy.com/hooks/<팀-webhook-id>" > alertmanager/webhook_url
+docker compose up -d
+```
+
+접속: Grafana http://localhost:3000 / Prometheus http://localhost:9090 / Alertmanager http://localhost:9093
+
+### 서비스별 상세 문서
+
+| 서비스 | 역할 | README |
+| --- | --- | --- |
+| `infra/` | Docker Compose 데이터 스택 + 모니터링 | [infra/README.md](infra/README.md) |
+| `backend/` | Spring Boot (메인 API) | [backend/README.md](backend/README.md) |
+| `ai/` | FastAPI (AI 전용, 스켈레톤) | [ai/README.md](ai/README.md) |
+| `frontend-web/` | Next.js (웹) | [frontend-web/README.md](frontend-web/README.md) |
+| `frontend-app/` | Kotlin 네이티브 (Android) | [frontend-app/README.md](frontend-app/README.md) |
 
 ---
 
