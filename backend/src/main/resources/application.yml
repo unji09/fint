@@ -43,3 +43,11 @@ management:
     metrics:
       export:
         enabled: true
+  # HTTP 요청 지연시간 히스토그램(_bucket) 노출.
+  # histogram_quantile()로 p95/p99 계산하려면 필수.
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 100ms, 300ms, 500ms, 1s
