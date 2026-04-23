@@ -1,7 +1,17 @@
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fint_test
+    username: fint
+    password: fint
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
   data:
-    mongodb:
-      uri: mongodb://localhost:27017/fint_test
     redis:
       host: localhost
       port: 6379

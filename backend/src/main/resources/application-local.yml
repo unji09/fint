@@ -1,8 +1,20 @@
 spring:
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/fint_local}
+    username: ${POSTGRES_USER:fint}
+    password: ${POSTGRES_PASSWORD:fint}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Seoul
   data:
-    mongodb:
-      uri: ${MONGODB_URI:mongodb://localhost:27017/fint_local}
-      auto-index-creation: true
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -33,4 +45,5 @@ logging:
   level:
     com.ssafy.fint: DEBUG
     org.springframework.security: DEBUG
-    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
