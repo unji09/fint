@@ -25,10 +25,10 @@
 | 영역 | 스택 |
 |------|------|
 | Web | Next.js (React) |
-| App | React Native (Android, minSdk 35) |
+| App | Kotlin 네이티브 (Android, minSdk 35) |
 | Backend | Spring Boot (Java) · 메인 API |
 | AI | FastAPI (Python) · stateless |
-| Data | MongoDB · Neo4j · Redis · AWS S3 |
+| Data | PostgreSQL (메인) · MongoDB (원본) · Neo4j · Redis · AWS S3 |
 | Infra | AWS Lightsail XL · Docker Compose · Nginx |
 | CI/CD | GitLab → Jenkins → Docker |
 | Monitoring | Prometheus · Loki · Grafana |
@@ -50,7 +50,7 @@ fint/
 ├── backend/           Spring Boot (메인 API)
 ├── ai/                FastAPI (AI 전용)
 ├── frontend-web/      Next.js
-├── frontend-app/      React Native (Android)
+├── frontend-app/      Kotlin 네이티브 (Android)
 ├── infra/             Docker Compose · Nginx · 모니터링
 ├── docs/              설계 문서
 ├── .claude/           Claude Code rules · skills
@@ -66,7 +66,7 @@ fint/
 - [`backend/README.md`](backend/README.md) — Spring Boot
 - [`ai/README.md`](ai/README.md) — FastAPI
 - [`frontend-web/README.md`](frontend-web/README.md) — Next.js
-- [`frontend-app/README.md`](frontend-app/README.md) — React Native
+- [`frontend-app/README.md`](frontend-app/README.md) — Kotlin 네이티브
 - [`infra/README.md`](infra/README.md) — Docker Compose (전체 스택 기동)
 
 ---
@@ -77,7 +77,7 @@ fint/
 
 - [요구사항 명세서](docs/requirements.md)
 - [3 Layer 기능 구조](docs/3-layer.md)
-- [ERD (MongoDB · Neo4j)](docs/erd.md)
+- [ERD (PostgreSQL · Neo4j · MongoDB)](docs/erd.md)
 - [API 명세](docs/api.md)
 - [AI 파이프라인](docs/ai-pipeline.md)
 - [영업 시그널 정의](docs/sales-signals.md) *(검토 중)*

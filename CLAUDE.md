@@ -11,20 +11,22 @@ B2B 영업 CRM. 뉴스/DART 데이터를 자동 수집해 영업 시그널로 �
 
 ### Frontend
 - **Web**: Next.js (React)
-- **Android**: React Native (`minSdkVersion 35` = Android 15 / OneUI 7 이상)
+- **Android**: Kotlin 네이티브 (`minSdkVersion 35` = Android 15 / OneUI 7 이상)
 - 두 플랫폼 동일 API 사용. 기능/권한 차이 금지.
 
 ### Backend
-- **Spring Boot 4.0.5 (Java 21)**: 메인 API. 비즈니스 로직, 인증(JWT), CRUD, 파일, 알림, 스케줄링, 데이터 수집.
-- **FastAPI (Python)**: AI 전용 stateless 서비스. LLM / RAG / 스코어링 / STT 처리.
+- **Spring Boot 4.0.5 (Java 21)**: 메인 API. 비즈니스 로직, 인증(JWT), CRUD, 파일 메타 관리, 알림, 스케줄링, 외부 데이터 수집(DART/뉴스).
+- **FastAPI (Python)**: AI 전용 stateless 서비스. LLM / RAG / 스코어링 / STT / 화자 분리 처리.
 - Spring → FastAPI **일방향 호출**. FastAPI는 외부 노출 없음.
 
 ### Data
-- **MongoDB**: 메인 데이터 (고객/딜/미팅/스코어). Spring 소유. `tenant_id`로 멀티테넌트 분리.
+- **PostgreSQL**: 마스터 DB (고객/딜/미팅/스코어/위키/감사로그 등). Spring 소유. `tenant_id`로 멀티테넌트 분리.
+  - 정형 필드는 **컬럼**, 가변 부가정보는 **JSONB** 하이브리드 전략.
   - **쓰기는 Spring만**. FastAPI는 **읽기 전용**으로 접근 가능 (단, `tenant_id` 필터 필수).
-- **Neo4j**: 관계 그래프. FastAPI 소유 (GraphRAG용).
-- **Redis**: 세션 / 캐시 / 비동기 큐. Spring 소유.
-- **AWS S3**: 파일 원본. Pre-signed URL 방식.
+- **MongoDB**: 원본 저장용. 뉴스/DART 원본 등을 보관하고, Redis Stream 이벤트 기반으로 Neo4j에 동기화.
+- **Neo4j**: 관계 그래프. FastAPI **전담** (쓰기/읽기 단독). GraphRAG용.
+- **Redis**: 세션 / 캐시 / 비동기 큐(Stream). **Spring + FastAPI 양방향** 사용 (소유는 Spring).
+- **AWS S3**: 파일 원본 (녹음/문서/이미지). Pre-signed URL 방식 업로드.
 
 ### Infra
 - AWS Lightsail XL (4 vCPU / 16GB RAM / 320GB SSD) 단일 인스턴스
@@ -37,16 +39,21 @@ B2B 영업 CRM. 뉴스/DART 데이터를 자동 수집해 영업 시그널로 �
 - Prometheus + Loki + Grafana
 
 ## 아키텍처 핵심 원칙
-1. **FastAPI는 stateless**. 필요한 데이터는 Spring이 payload로 전달하거나, FastAPI가 MongoDB에서 직접 읽는다.
+1. **FastAPI는 stateless**. 필요한 데이터는 Spring이 payload로 전달하거나, FastAPI가 PostgreSQL에서 직접 읽는다.
 2. **Nginx → Spring 단일 진입**. FastAPI는 내부망 전용.
-3. **파일 업로드는 Pre-signed URL**. 서버 경유 업로드 금지.
+3. **파일 업로드는 Pre-signed URL** (서버 경유 업로드 금지).
+   - URL 발급: **Spring 단일 주체**.
+   - 실제 업로드: 클라이언트 → S3 직통.
+   - FastAPI는 S3에서 `boto3`로 직접 읽기 (pre-signed 불필요).
 4. **`tenant_id` 필터링을 Interceptor로 강제**. Spring / FastAPI 양쪽 모두 적용.
 5. **LLM 응답은 Redis 캐싱**. 캐시 키에 `tenant_id` 포함.
-6. **MongoDB 쓰기는 Spring만, 읽기는 Spring + FastAPI**.
-7. **Spring → FastAPI 호출**은 타임아웃 · 재시도 · circuit breaker 정책을 명시한다.
+6. **PostgreSQL 쓰기는 Spring만, 읽기는 Spring + FastAPI**.
+7. **Neo4j 쓰기/읽기는 FastAPI 전담** (MongoDB 원본 → Neo4j 동기화는 Redis Stream 이벤트 기반).
+8. **Spring → FastAPI 호출**은 타임아웃 · 재시도 · circuit breaker 정책을 명시한다.
 
-## 외부 서비스
-DART API, 뉴스 크롤링, LLM API (OpenAI / Claude), STT, FCM
+## 외부 서비스 호출 주체
+- **Spring**: DART API, 뉴스 API/크롤링, FCM
+- **FastAPI**: LLM API (OpenAI / Claude), STT API (Whisper)
 
 ## 기획서 관련 주의
 - 최초 기획서(영업 시그널 정의, 3 Layer 구조, 대시보드 후보 등)는 **러프한 초안**.
@@ -85,7 +92,7 @@ DART API, 뉴스 크롤링, LLM API (OpenAI / Claude), STT, FCM
 4. 네이밍 / 가독성
 
 ## 멀티테넌트 세부 규칙 (최우선)
-- 모든 MongoDB 쿼리(Spring · FastAPI 공통)는 `tenant_id` 필터를 강제한다.
+- 모든 PostgreSQL 쿼리(Spring · FastAPI 공통)는 `tenant_id` 필터를 강제한다.
 - Controller / FastAPI Endpoint에서 `tenant_id`를 직접 읽지 않고, `SecurityContext` / Interceptor / Dependency를 거쳐 주입받는다.
 - Spring → FastAPI 호출 시 `tenant_id`는 JWT 또는 내부 헤더로 전달하며, FastAPI 쪽에서도 재검증한다.
 - 테스트에서 `tenant_id` 누락 케이스(다른 테넌트 데이터 노출)를 반드시 검증한다.
@@ -123,12 +130,12 @@ uv run pytest
 
 ## 기본 컨벤션 요약
 - 계층 책임 분리 (Controller → Service → Repository).
-- Document는 DTO를 import하지 않음. 변환은 Service에서 수행.
+- Entity는 DTO를 import하지 않음. 변환은 Service에서 수행.
 - 예외는 `BusinessException(ErrorCode)` 패턴 사용. `catch (Exception)` 남발 금지.
 - 로그에 식별자(`tenant_id`, `user_id`, `resource_id`) 포함, 민감 정보 로그 금지.
-- DTO / Response 분리. Document 직접 노출 금지.
+- DTO / Response 분리. Entity 직접 노출 금지.
 - 입력 값 검증 필수 (`@Valid`).
-- 트랜잭션 범위 적절성 확인 (MongoDB는 replica set에서만 multi-document 트랜잭션 가능).
+- 트랜잭션 범위 적절성 확인 (PostgreSQL은 native 트랜잭션 지원. `@Transactional` 경계 명시).
 
 ## 리팩토링 작업 절차
 - 변경 전/후 요약(Before/After) 필수 제공.
