@@ -142,7 +142,7 @@
 | REQ-COL-01 | STT 변환 | 시스템 | 사용자로서 업로드된 녹음 파일이 자동으로 텍스트로 변환되길 원한다 | Whisper-1 API / 화자 분리(pyannote.audio) | P0-H | 온디바이스 대안: whisper.cpp |
 | REQ-COL-02 | 이메일 파일 업로드 수집 | 사원 | 사원으로서 고객과 주고받은 .eml 파일을 업로드해 CRM에 반영하고 싶다 | .eml 파싱 → sender/receiver/subject/body 추출 / 이메일 주소로 Contact 매칭 / Activity 생성 | P1-M | REQ-ACT-03 특수 케이스 |
 | REQ-COL-03 | 이메일 OAuth 자동 수집 | 사원 | 사원으로서 Gmail/Outlook 계정을 연동해 고객 이메일이 자동 등록되길 원한다 | OAuth 연동 / Contact 자동 매칭 / 신규 메일 자동 Activity 생성 | P0-H | 확장 기능 |
-| REQ-COL-04 | 뉴스 CSV 적재 | 시스템 | 시스템은 사전 제공된 뉴스 CSV를 MongoDB에 배치 적재해야 한다 | CSV 배치 적재 / title+article 텍스트 인덱스로 회사명 매칭 | P0-H | 데이터 보유 기간: 2019~2025 |
+| REQ-COL-04 | 뉴스 CSV 적재 | 시스템 | 시스템은 사전 제공된 뉴스 CSV를 원본 저장소(MongoDB)에 적재하고, 매칭용 인덱스는 PostgreSQL에 구성해야 한다 | CSV 배치 적재 / PostgreSQL `tsvector` 또는 `pg_trgm`으로 회사명 매칭 인덱스 구성 | P0-H | 데이터 보유 기간: 2019~2025 |
 | REQ-COL-05 | 뉴스 API 주기 수집 | 시스템 | 시스템은 네이버/구글 등 외부 뉴스 API로부터 주기적으로 최신 뉴스를 수집해야 한다 | 스케줄러 주기 실행 / Account명 쿼리 / 중복 URL 스킵 / signals 저장 | P0-H | 수집 주기/대상 API 운영 설정 |
 | REQ-COL-06 | DART 공시 수집 | 시스템 | 시스템은 DART 전자공시 데이터를 주기적으로 수집해 Account 위키에 반영해야 한다 | 영업 대상 기업 공시 자동 수집 / 배치 스케줄러 | P0-H |  |
 | REQ-COL-07 | 기기 일정 수집 | 사원 | 사원으로서 내 기기에 저장된 일정을 CRM에 연동해 예정된 미팅을 파악받고 싶다 | 기기 캘린더 권한 획득 / 일정 제목·참석자·시간 수집 / Contact 매칭 시 예정 Activity 생성 / 미팅 전 브리핑 트리거 | P1-M | react-native-calendar-events / 권한 거부 시 수동 입력 대체 |
@@ -237,7 +237,7 @@
 ### 3.1 기술 전제
 
 - 모든 비즈니스 데이터는 `tenant_id` 필드로 격리된다. 쿼리에서 `tenant_id` 누락 시 시스템은 예외를 발생시킨다.
-- MongoDB 쓰기는 Spring Boot만 수행하며, FastAPI는 읽기 전용 접근을 가진다.
+- PostgreSQL 쓰기는 Spring Boot만 수행하며, FastAPI는 읽기 전용 접근을 가진다.
 - 파일 업로드는 S3 Pre-signed URL 방식으로 서버 부하를 최소화한다.
 - LLM 응답은 Redis에 캐싱되어 비용을 절감한다.
 
