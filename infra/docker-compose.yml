@@ -1,0 +1,66 @@
+# F!NT 앱 데이터 스택 (개발용)
+#
+# 기동 대상:
+#   - PostgreSQL 16 (메인 DB)
+#   - Redis 7       (세션 / 캐시 / 비동기 큐)
+#
+# 포함되지 않음:
+#   - Spring Boot (로컬에선 호스트에서 ./gradlew bootRun 으로 실행)
+#   - FastAPI, MongoDB, Neo4j (추후 서비스 도입 시 별도 compose 또는 이 파일에 서비스 추가)
+#   - 모니터링 스택 (infra/monitoring/docker-compose.yml 별도)
+#
+# 사용법은 infra/README.md 참조.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: fint-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fint}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fint}
+      POSTGRES_DB: ${POSTGRES_DB:-fint_local}
+      TZ: Asia/Seoul
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fint}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    networks:
+      - app
+
+  redis:
+    image: redis:7-alpine
+    container_name: fint-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    networks:
+      - app
+
+networks:
+  app:
+    name: fint-app
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
