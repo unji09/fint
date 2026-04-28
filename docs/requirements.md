@@ -142,7 +142,7 @@
 | REQ-COL-01 | STT 변환 | 시스템 | 사용자로서 업로드된 녹음 파일이 자동으로 텍스트로 변환되길 원한다 | Whisper-1 API / 화자 분리(pyannote.audio) | P0-H | 온디바이스 대안: whisper.cpp |
 | REQ-COL-02 | 이메일 파일 업로드 수집 | 사원 | 사원으로서 고객과 주고받은 .eml 파일을 업로드해 CRM에 반영하고 싶다 | .eml 파싱 → sender/receiver/subject/body 추출 / 이메일 주소로 Contact 매칭 / Activity 생성 | P1-M | REQ-ACT-03 특수 케이스 |
 | REQ-COL-03 | 이메일 OAuth 자동 수집 | 사원 | 사원으로서 Gmail/Outlook 계정을 연동해 고객 이메일이 자동 등록되길 원한다 | OAuth 연동 / Contact 자동 매칭 / 신규 메일 자동 Activity 생성 | P0-H | 확장 기능 |
-| REQ-COL-04 | 뉴스 CSV 적재 | 시스템 | 시스템은 사전 제공된 뉴스 CSV를 원본 저장소(MongoDB)에 적재하고, 매칭용 인덱스는 PostgreSQL에 구성해야 한다 | CSV 배치 적재 / PostgreSQL `tsvector` 또는 `pg_trgm`으로 회사명 매칭 인덱스 구성 | P0-H | 데이터 보유 기간: 2019~2025 |
+| REQ-COL-04 | 뉴스 CSV 적재 | 시스템 | 시스템은 사전 제공된 뉴스 CSV를 PostgreSQL에 적재하고, 매칭용 인덱스를 구성해야 한다 | CSV 배치 적재 / PostgreSQL `tsvector` 또는 `pg_trgm`으로 회사명 매칭 인덱스 구성 | P0-H | 데이터 보유 기간: 2019~2025 |
 | REQ-COL-05 | 뉴스 API 주기 수집 | 시스템 | 시스템은 네이버/구글 등 외부 뉴스 API로부터 주기적으로 최신 뉴스를 수집해야 한다 | 스케줄러 주기 실행 / Account명 쿼리 / 중복 URL 스킵 / signals 저장 | P0-H | 수집 주기/대상 API 운영 설정 |
 | REQ-COL-06 | DART 공시 수집 | 시스템 | 시스템은 DART 전자공시 데이터를 주기적으로 수집해 Account 위키에 반영해야 한다 | 영업 대상 기업 공시 자동 수집 / 배치 스케줄러 | P0-H |  |
 | REQ-COL-07 | 기기 일정 수집 | 사원 | 사원으로서 내 기기에 저장된 일정을 CRM에 연동해 예정된 미팅을 파악받고 싶다 | 기기 캘린더 권한 획득 / 일정 제목·참석자·시간 수집 / Contact 매칭 시 예정 Activity 생성 / 미팅 전 브리핑 트리거 | P1-M | Android `CalendarContract` (Calendar Provider) / 권한 거부 시 수동 입력 대체 |
@@ -163,8 +163,8 @@
 | REQ-WIKI-09 | 엔티티 자동 추출 | 시스템 | 시스템은 대화/텍스트에서 사람/회사/제품/금액/날짜를 자동 태깅해야 한다 | NER 적용 / 기존 DB에 없는 엔티티는 신규 등록 제안 | P0-H |  |
 | REQ-WIKI-10 | 이벤트 자동 분류 | 시스템 | 시스템은 대화 내용을 미팅/계약논의/이슈제기/요청사항/일정약속으로 분류해야 한다 | 분류된 이벤트는 타임라인에 자동 추가 | P0-H |  |
 | REQ-WIKI-11 | Contact 위키 상세 조회 | 사원·팀장·관리자 | 사원으로서 Contact 위키 화면에서 기본정보/위키/관계/회사 동향/미팅 요약을 한 화면에서 보고 싶다 | 통합 뷰 제공 | P0-H |  |
-| REQ-WIKI-12 | Contact ↔ Account 위키 연동 | 시스템 | 사용자로서 Contact 위키 조회 시 소속 Account 최근 동향도 함께 보고 싶다 | 미팅 브리핑에 회사 동향 자동 포함 / Neo4j 관계 | P1-M | 대시보드 정해진 다음에 |
-| REQ-WIKI-13 | 시맨틱 검색 | 사원·팀장 | 사원으로서 자연어로 위키를 검색하고 싶다 | text-embedding-3-large 임베딩 / Neo4j Vector Index | P3 |  |
+| REQ-WIKI-12 | Contact ↔ Account 위키 연동 | 시스템 | 사용자로서 Contact 위키 조회 시 소속 Account 최근 동향도 함께 보고 싶다 | 미팅 브리핑에 회사 동향 자동 포함 / PostgreSQL JOIN | P1-M | 대시보드 정해진 다음에 |
+| REQ-WIKI-13 | 시맨틱 검색 | 사원·팀장 | 사원으로서 자연어로 위키를 검색하고 싶다 | text-embedding-3-large 임베딩 / PostgreSQL pgvector | P3 |  |
 
 ### 2.9 AI 인사이트/브리핑
 
@@ -179,7 +179,7 @@
 
 | ID | 기능명 | 대상 | 사용자 스토리 | 수락 기준 | 우선순위 | 비고 |
 | --- | --- | --- | --- | --- | --- | --- |
-| REQ-REL-01 | 관계 수동 등록 | 사원·팀장 | 사원으로서 Contact 간 관계(소개/동료/경쟁/상하)를 직접 등록하고 싶다 | Neo4j edge로 저장 | P2-L |  |
+| REQ-REL-01 | 관계 수동 등록 | 사원·팀장 | 사원으로서 Contact 간 관계(소개/동료/경쟁/상하)를 직접 등록하고 싶다 | PostgreSQL 관계 테이블로 저장 | P2-L |  |
 | REQ-REL-02 | 관계 자동 추출 | 시스템 | 시스템은 미팅 대화에서 Contact 간 관계를 자동 추출해야 한다 | 예: "박부장이 김상무를 소개해줬다" → 소개 관계 / 사용자 확인 후 저장 | P1-H |  |
 | REQ-REL-03 | 관계 그래프 시각화 | 사원·팀장·관리자 | 사원으로서 관계를 그래프로 시각화해 보고 싶다 | 회사 선택 시 연결된 인물/관계 / 노드 클릭 시 위키 이동 | P1-H | 구현 방식 추후 결정 |
 

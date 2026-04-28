@@ -23,8 +23,6 @@ B2B 영업 CRM. 뉴스/DART 데이터를 자동 수집해 영업 시그널로 �
 - **PostgreSQL**: 마스터 DB (고객/딜/미팅/스코어/위키/감사로그 등). Spring 소유. `tenant_id`로 멀티테넌트 분리.
   - 정형 필드는 **컬럼**, 가변 부가정보는 **JSONB** 하이브리드 전략.
   - **쓰기는 Spring만**. FastAPI는 **읽기 전용**으로 접근 가능 (단, `tenant_id` 필터 필수).
-- **MongoDB**: 원본 저장용. 뉴스/DART 원본 등을 보관하고, Redis Stream 이벤트 기반으로 Neo4j에 동기화.
-- **Neo4j**: 관계 그래프. FastAPI **전담** (쓰기/읽기 단독). GraphRAG용.
 - **Redis**: 세션 / 캐시 / 비동기 큐(Stream). **Spring + FastAPI 양방향** 사용 (소유는 Spring).
 - **AWS S3**: 파일 원본 (녹음/문서/이미지). Pre-signed URL 방식 업로드.
 
@@ -48,8 +46,7 @@ B2B 영업 CRM. 뉴스/DART 데이터를 자동 수집해 영업 시그널로 �
 4. **`tenant_id` 필터링을 Interceptor로 강제**. Spring / FastAPI 양쪽 모두 적용.
 5. **LLM 응답은 Redis 캐싱**. 캐시 키에 `tenant_id` 포함.
 6. **PostgreSQL 쓰기는 Spring만, 읽기는 Spring + FastAPI**.
-7. **Neo4j 쓰기/읽기는 FastAPI 전담** (MongoDB 원본 → Neo4j 동기화는 Redis Stream 이벤트 기반).
-8. **Spring → FastAPI 호출**은 타임아웃 · 재시도 · circuit breaker 정책을 명시한다.
+7. **Spring → FastAPI 호출**은 타임아웃 · 재시도 · circuit breaker 정책을 명시한다.
 
 ## 외부 서비스 호출 주체
 - **Spring**: DART API, 뉴스 API/크롤링, FCM

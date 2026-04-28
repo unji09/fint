@@ -6,7 +6,7 @@
 #
 # 포함되지 않음:
 #   - Spring Boot (로컬에선 호스트에서 ./gradlew bootRun 으로 실행)
-#   - FastAPI, MongoDB, Neo4j (추후 서비스 도입 시 별도 compose 또는 이 파일에 서비스 추가)
+#   - FastAPI (추후 서비스 도입 시 별도 compose 또는 이 파일에 서비스 추가)
 #   - 모니터링 스택 (infra/monitoring/docker-compose.yml 별도)
 #
 # 사용법은 infra/README.md 참조.
