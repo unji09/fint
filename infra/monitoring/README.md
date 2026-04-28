@@ -9,7 +9,7 @@ Docker Compose로 Prometheus + Grafana + Alertmanager + exporters를 기동한�
 | 서비스 | 포트 | 역할 |
 | --- | --- | --- |
 | Prometheus | 9090 | 메트릭 수집 · 저장 (retention 7일) |
-| Grafana | 3000 | 시각화 · 대시보드 |
+| Grafana | 3001 | 시각화 · 대시보드 |
 | Alertmanager | 9093 | 알람 라우팅 (→ Mattermost) |
 | node_exporter | 내부 | 호스트 메트릭 |
 | cAdvisor | 내부 | 컨테이너 메트릭 |
@@ -71,8 +71,8 @@ Docker Compose로 Prometheus + Grafana + Alertmanager + exporters를 기동한�
 
 | 상황 | 보는 곳 | URL |
 | --- | --- | --- |
-| 평소 대시보드 확인 | Grafana | http://localhost:3000 |
-| "왜 이 엔드포인트 느리지?" | Grafana JVM 대시보드 | http://localhost:3000 |
+| 평소 대시보드 확인 | Grafana | http://localhost:3001 |
+| "왜 이 엔드포인트 느리지?" | Grafana JVM 대시보드 | http://localhost:3001 |
 | "메트릭 직접 쿼리" | Prometheus 쿼리 창 | http://localhost:9090/graph |
 | "타겟 UP/DOWN 확인" | Prometheus targets | http://localhost:9090/targets |
 | "현재 발화 중인 알람" | Alertmanager | http://localhost:9093 |
@@ -116,7 +116,7 @@ docker compose ps   # 모든 컨테이너 running 확인
 
 | 서비스 | URL | 로그인 |
 | --- | --- | --- |
-| Grafana | http://localhost:3000 | admin / `.env`의 `GRAFANA_ADMIN_PASSWORD` |
+| Grafana | http://localhost:3001 | admin / `.env`의 `GRAFANA_ADMIN_PASSWORD` |
 | Prometheus | http://localhost:9090/targets | 모든 타겟 UP 확인 |
 | Alertmanager | http://localhost:9093 | - |
 
