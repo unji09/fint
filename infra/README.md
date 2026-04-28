@@ -159,7 +159,7 @@ docker compose up -d
 - 추후 Spring 이 컨테이너화되면 두 네트워크를 `external` 로 공유하는 구조로 변경 예정.
 
 ### 4. 운영 환경
-이 compose 는 **로컬 개발 전용**. 운영(Lightsail)에선 `docker-compose.prod.yml` override 로 별도 설정 (Nginx, TLS, 시크릿 주입 등). 해당 파일은 배포 파이프라인 구축 시 추가.
+이 compose 는 **로컬 개발 전용**. 배포(Lightsail)에선 `docker-compose.dev.yml` override 로 별도 설정 (Nginx, TLS, 시크릿 주입 등). 해당 파일은 배포 파이프라인 구축 시 추가.
 
 ---
 

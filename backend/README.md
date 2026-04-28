@@ -44,8 +44,7 @@ Swagger: http://localhost:8080/swagger-ui.html
 | Profile | 용도 | DB | DDL |
 |---------|------|----|----|
 | `local` | 개발자 로컬 | 로컬 도커 PostgreSQL/Redis | `update` |
-| `dev` | 상시 개발 서버 | Lightsail 공용 PostgreSQL/Redis | `validate` |
-| `prod` | 실서비스 | Lightsail 전용 PostgreSQL/Redis | `validate` |
+| `dev` | EC2 배포 서버 | Lightsail PostgreSQL/Redis | `validate` |
 
 모든 값은 `.env` 또는 환경변수로 주입. `application-*.yml` 에는 기본값 + `${VAR:default}` 패턴만 둔다.
 

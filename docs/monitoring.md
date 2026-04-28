@@ -97,7 +97,7 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 
 ## 7. 운영 정책
 
-- **환경 분리**: 알람 룰은 `prod` 프로파일에만 적용. `dev`/`local`에 적용하면 오탐으로 알람 피로 발생
+- **환경 분리**: 알람 룰은 `dev` (배포) 프로파일에만 적용. `local`에 적용하면 오탐으로 알람 피로 발생
 - **Retention**: 7일 (Phase 0), 운영 전환 시 14일
 - **리소스 예산** (16GB Lightsail): Prometheus ~1GB, Grafana ~200MB, Alertmanager ~100MB, exporter 합계 ~200MB
 - **장기 저장**: 현재 단일 노드 로컬 저장만. 필요 시 Thanos / VictoriaMetrics 검토 (로드맵)
