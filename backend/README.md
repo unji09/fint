@@ -43,10 +43,35 @@ Swagger: http://localhost:8080/swagger-ui.html
 
 | Profile | 용도 | DB | DDL |
 |---------|------|----|----|
-| `local` | 개발자 로컬 | 로컬 도커 PostgreSQL/Redis | `update` |
+| `local` | 개발자 로컬 | 로컬 도커 PostgreSQL/Redis | `validate` |
 | `dev` | EC2 배포 서버 | Lightsail PostgreSQL/Redis | `validate` |
+| `test` | 테스트 | 로컬 도커 PostgreSQL (추후 Testcontainers) | `none` |
 
 모든 값은 `.env` 또는 환경변수로 주입. `application-*.yml` 에는 기본값 + `${VAR:default}` 패턴만 둔다.
+
+---
+
+## DB 마이그레이션 (Flyway)
+
+스키마 변경은 Flyway SQL 파일로 버전 관리한다. `ddl-auto: update` (Hibernate 자동 생성)는 사용하지 않음.
+
+### 마이그레이션 파일 규칙
+
+- 위치: `src/main/resources/db/migration/`
+- 파일명: `V{번호}__{설명}.sql` (더블 언더스코어 `__` 필수)
+- 예시: `V2__create_tenant_table.sql`, `V3__add_account_columns.sql`
+
+### 워크플로우
+
+1. Entity 클래스 작성/수정
+2. 대응하는 마이그레이션 SQL 파일 작성 (Entity PR에 반드시 포함)
+3. `make clean && make up && make backend` 로 검증 (깨끗한 DB에서 전체 마이그레이션 실행)
+
+### 주의사항
+
+- **머지된 마이그레이션 파일은 절대 수정 금지** — 새 마이그레이션으로 변경
+- 기존 로컬 DB가 있으면 `make clean` 으로 초기화 권장 (Flyway가 깨끗하게 재시작)
+- `baseline-on-migrate: true` (local) — 기존 DB가 있어도 Flyway가 V1부터 추적 시작
 
 ---
 
@@ -130,7 +155,7 @@ com.ssafy.fint/
 ./gradlew jacocoTestReport   # (jacoco 플러그인 추가 후)
 ```
 
-테스트 프로파일은 로컬 PostgreSQL `fint_test` DB를 사용 (`ddl-auto: create-drop`).
+테스트 프로파일은 로컬 PostgreSQL `fint_test` DB를 사용. Flyway가 스키마를 생성 (`ddl-auto: none`).
 CI 에서는 Testcontainers 도입 예정.
 
 테스트 계층 가이드는 `.claude/skills/tdd-workflow/SKILL.md` 참조.
