@@ -30,7 +30,7 @@ B2B 영업 CRM. 뉴스/DART 데이터를 자동 수집해 영업 시그널로 �
 - AWS Lightsail XL (4 vCPU / 16GB RAM / 320GB SSD) 단일 인스턴스
 - Docker Compose로 모든 컨테이너 관리
 - Nginx Reverse Proxy (단일 진입점)
-- 환경 분리: `local` / `dev` / `prod`
+- 환경 분리: `local` (개발자 PC) / `dev` (EC2 배포)
 
 ### CI/CD & 모니터링
 - GitLab → Jenkins → Docker Image → 배포
