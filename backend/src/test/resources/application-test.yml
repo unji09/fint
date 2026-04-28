@@ -1,9 +1,4 @@
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/fint_test
-    username: fint
-    password: fint
-    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: none

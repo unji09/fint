@@ -1,0 +1,15 @@
+# Jenkins CD 전용 경량 Dockerfile
+# Gradle 빌드 stage 없음 — Jenkins가 이미 JAR을 만들었으므로 복사만 수행.
+# 사용법: docker build -f Dockerfile.runtime -t fint-backend:${BUILD_NUMBER} .
+FROM eclipse-temurin:21-jre
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+COPY build/libs/*.jar app.jar
+
+EXPOSE 8080
+
+ENV TZ=Asia/Seoul
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
