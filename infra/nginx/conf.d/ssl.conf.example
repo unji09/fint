@@ -1,0 +1,27 @@
+# HTTPS 활성화 템플릿
+# 사용법:
+#   1. ssl/ 디렉토리에 인증서 파일 배치 (fullchain.pem, privkey.pem)
+#   2. 이 파일을 ssl.conf로 복사
+#   3. docker compose 재시작
+
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+
+    ssl_certificate     /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # default.conf와 동일한 location 블록을 여기에 복사
+    include /etc/nginx/conf.d/locations.conf;
+}
+
+# HTTP -> HTTPS 리다이렉트
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$host$request_uri;
+}
