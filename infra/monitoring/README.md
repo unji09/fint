@@ -14,7 +14,7 @@ Docker Compose로 Prometheus + Grafana + Alertmanager + exporters를 기동한�
 | node_exporter | 내부 | 호스트 메트릭 |
 | cAdvisor | 내부 | 컨테이너 메트릭 |
 
-**DB exporter (postgres / redis / mongodb) 는 Phase 0에 포함되지 않음**. 해당 DB 컨테이너가 compose에 도입되는 시점에 별도 PR로 추가한다.
+**DB exporter (postgres / redis) 는 Phase 0에 포함되지 않음**. 해당 DB 컨테이너가 compose에 도입되는 시점에 별도 PR로 추가한다.
 
 ## 전체 흐름 (한눈에)
 
@@ -178,7 +178,7 @@ docker compose down -v           # 볼륨(누적된 메트릭)까지 삭제
 
 | 트리거 | 추가 작업 |
 | --- | --- |
-| PostgreSQL / Redis / MongoDB 컨테이너 도입 | 각 DB별 exporter (`postgres_exporter`, `redis_exporter`, `mongodb_exporter`) + scrape_config 추가 |
+| PostgreSQL / Redis 컨테이너 도입 | 각 DB별 exporter (`postgres_exporter`, `redis_exporter`) + scrape_config 추가 |
 | FastAPI 서비스 착수 | FastAPI scrape 타겟 + `prometheus-fastapi-instrumentator` |
 | LLM 호출 코드 머지 | LLM 비용 · 캐시 히트율 메트릭 계측 + 알람 룰 추가 |
 | 운영 트래픽 발생 | Loki + Promtail 도입, Retention 14일, 알람 임계치 재조정 |

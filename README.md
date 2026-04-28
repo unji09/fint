@@ -28,7 +28,7 @@
 | App | Kotlin 네이티브 (Android, minSdk 35) |
 | Backend | Spring Boot (Java) · 메인 API |
 | AI | FastAPI (Python) · stateless |
-| Data | PostgreSQL (메인) · MongoDB (원본) · Neo4j · Redis · AWS S3 |
+| Data | PostgreSQL (메인) · Redis · AWS S3 |
 | Infra | AWS Lightsail XL · Docker Compose · Nginx |
 | CI/CD | GitLab → Jenkins → Docker |
 | Monitoring | Prometheus · Loki · Grafana |
@@ -119,7 +119,7 @@ docker compose up -d
 
 - [요구사항 명세서](docs/requirements.md)
 - [3 Layer 기능 구조](docs/3-layer.md)
-- [ERD (PostgreSQL · Neo4j · MongoDB)](docs/erd.md)
+- [ERD (PostgreSQL)](docs/erd.md)
 - [API 명세](docs/api.md)
 - [AI 파이프라인](docs/ai-pipeline.md)
 - [영업 시그널 정의](docs/sales-signals.md) *(검토 중)*

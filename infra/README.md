@@ -99,8 +99,6 @@ docker compose down -v         # 데이터까지 삭제 (초기화)
 | --- | --- | --- |
 | Spring Boot | 로컬은 호스트에서 gradle 로 기동이 편함 | Spring 컨테이너화 PR 시 |
 | FastAPI | 아직 구현 전 | AI 서비스 착수 시 |
-| MongoDB | 원본 저장용, 초기 구현 단계엔 불필요 | 뉴스/DART 원본 저장 로직 착수 시 |
-| Neo4j | FastAPI 전담, 아직 FastAPI 전 | GraphRAG 기능 착수 시 |
 
 이 모두 추가될 때는 **이 compose 파일에 서비스를 추가**하거나, 규모가 커지면 별도 compose 파일로 분리한다.
 

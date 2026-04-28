@@ -23,7 +23,6 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 | prometheus-fastapi-instrumentator | FastAPI HTTP 자동 계측 |
 | postgres_exporter | *(PostgreSQL 컨테이너 도입 시 추가)* |
 | redis_exporter | *(Redis 컨테이너 도입 시 추가)* |
-| mongodb_exporter | *(원본 저장용 MongoDB 컨테이너 도입 시 추가)* |
 
 알람 채널: **Mattermost** `#alert-fint` (Incoming Webhook)
 
@@ -39,10 +38,9 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 ### 제외 (확장 시점에 추가)
 | 제외 항목 | 추가 시점 |
 | --- | --- |
-| postgres_exporter / redis_exporter / mongodb_exporter | 해당 DB 컨테이너가 compose에 도입될 때 함께 추가 |
+| postgres_exporter / redis_exporter | 해당 DB 컨테이너가 compose에 도입될 때 함께 추가 |
 | FastAPI instrumentator | FastAPI 서비스 착수 시 |
 | Loki + Promtail (로그) | 운영 전환 또는 디버깅 필요해질 때 |
-| Neo4j exporter | REQ-WIKI-13 시맨틱 검색 착수 시 |
 | 커스텀 비즈니스 메트릭 (LLM 비용/STT 큐/위키 실패율) | 해당 기능 PR과 함께 |
 
 **원칙**: 메트릭은 **기능 PR에 함께 들어간다**. 없는 기능의 대시보드/알람은 미리 만들지 않는다.
@@ -77,7 +75,7 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 ### System Overview
 - Host: CPU / Memory / Disk / Network (node_exporter)
 - Container: 컨테이너별 CPU · Memory · 재시작 횟수 (cAdvisor)
-- PostgreSQL / Redis / MongoDB 패널은 해당 exporter 도입 시 추가
+- PostgreSQL / Redis 패널은 해당 exporter 도입 시 추가
 
 ### API Performance
 - HTTP RPS (엔드포인트별)
@@ -90,13 +88,12 @@ F!NT는 실시간 서비스가 아니지만 모니터링은 반드시 필요하�
 
 | 트리거 | 추가할 것 |
 | --- | --- |
-| PostgreSQL / Redis / MongoDB 컨테이너 compose 도입 | 각 exporter (postgres / redis / mongodb) + 대시보드 패널 |
+| PostgreSQL / Redis 컨테이너 compose 도입 | 각 exporter (postgres / redis) + 대시보드 패널 |
 | FastAPI 서비스 착수 | prometheus-fastapi-instrumentator 연동 + scrape 타겟 추가 |
 | 첫 LLM 호출 코드 머지 | LLM 비용 · 캐시 히트율 메트릭 + 알람 |
 | 첫 STT 파이프라인 머지 | 큐 길이 · 처리 시간 메트릭 + 알람 |
 | 외부 수집 스케줄러 구현 | 뉴스/DART 수집 성공률 메트릭 |
 | 운영 트래픽 발생 시작 | Loki + Promtail 도입, Retention 14일, 알람 임계치 재조정 |
-| REQ-WIKI-13 (시맨틱 검색) 착수 | Neo4j exporter + Vector Index 쿼리 지연 |
 
 ## 7. 운영 정책
 
