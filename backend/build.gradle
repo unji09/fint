@@ -38,6 +38,10 @@ dependencies {
     runtimeOnly 'org.postgresql:postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // ---------- Database Migration (Flyway) ----------
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+
     // ---------- Monitoring (Prometheus) ----------
     // Spring Actuator의 메트릭을 Prometheus scrape 포맷으로 노출
     implementation 'io.micrometer:micrometer-registry-prometheus'
