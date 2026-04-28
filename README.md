@@ -103,7 +103,7 @@ make backend   # Spring Boot 기동 (별도 터미널)
 make monitoring-up
 ```
 
-접속: Grafana http://localhost:3000 / Prometheus http://localhost:9090 / Alertmanager http://localhost:9093
+접속: Grafana http://localhost:3001 / Prometheus http://localhost:9090 / Alertmanager http://localhost:9093
 
 ### 수동 설정 (make 없이)
 
