@@ -23,7 +23,11 @@ B2B 영업 CRM. 뉴스/DART 데이터를 자동 수집해 영업 시그널로 �
 - **PostgreSQL**: 마스터 DB (고객/딜/미팅/스코어/위키/감사로그 등). Spring 소유. `tenant_id`로 멀티테넌트 분리.
   - 정형 필드는 **컬럼**, 가변 부가정보는 **JSONB** 하이브리드 전략.
   - **쓰기는 Spring만**. FastAPI는 **읽기 전용**으로 접근 가능 (단, `tenant_id` 필터 필수).
-- **Redis**: 세션 / 캐시 / 비동기 큐(Stream). **Spring + FastAPI 양방향** 사용 (소유는 Spring).
+  - **Refresh Token은 PostgreSQL에 저장**. rotation 이력 추적 + 탈취 감지에 영구 저장 필요.
+- **Redis**: AT 블랙리스트 / LLM 응답 캐시 / 비동기 큐(Stream). **Spring + FastAPI 양방향** 사용 (소유는 Spring).
+  - Access Token 블랙리스트: 로그아웃 시 남은 TTL 동안만 차단, 만료 시 자동 삭제.
+  - LLM 응답 캐시: 캐시 키에 `tenant_id` 포함.
+  - 비동기 큐(Redis Stream): Spring → FastAPI 간 비동기 작업 전달 (STT 등).
 - **AWS S3**: 파일 원본 (녹음/문서/이미지). Pre-signed URL 방식 업로드.
 
 ### Infra
