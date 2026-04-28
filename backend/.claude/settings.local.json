@@ -3,7 +3,10 @@
     "allow": [
       "Bash(xargs grep *)",
       "Bash(./gradlew compileJava)",
-      "Bash(./gradlew test *)"
+      "Bash(./gradlew test *)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git config *)"
     ]
   }
 }

@@ -63,43 +63,57 @@ fint/
 
 ### 전제 조건
 - Docker Desktop (Windows/Mac) 또는 Docker Engine + Compose plugin (Linux)
-- JDK 21 (Liberica / Temurin 권장)
 - Git
+- make (Windows: `choco install make` 또는 `winget install ezwinports.make`)
+- JDK 21은 Gradle이 자동 다운로드 (수동 설치 불필요)
 
-### 5분 퀵스타트 (백엔드 최소 실행)
+### 퀵스타트
 
 ```bash
-# 1. 레포 클론 + dev 브랜치
 git clone <repo-url>
 cd S14P31A301
 git checkout dev
 
-# 2. 데이터 스택 기동 (PostgreSQL + Redis)
-cd infra
-cp .env.example .env
-docker compose up -d
-
-# 3. 백엔드 기동 (별도 터미널)
-cd ../backend
-cp .env.example .env
-./gradlew bootRun --args='--spring.profiles.active=local'
+make doctor    # 환경 검사 + .env 자동 생성
+make up        # PostgreSQL + Redis 기동
+make backend   # Spring Boot 기동 (별도 터미널)
 ```
 
 기동 확인:
 - API: http://localhost:8080
 - Swagger: http://localhost:8080/swagger-ui.html
-- Health: http://localhost:8080/actuator/health → `{"status":"UP"}`
+- Health: http://localhost:8080/actuator/health
 
-### (선택) 모니터링 스택 함께 기동
+### 주요 make 명령
+
+| 명령 | 설명 |
+|------|------|
+| `make doctor` | 환경 사전 검사 (Docker, 포트, JDK, .env) |
+| `make up` | PostgreSQL + Redis 기동 |
+| `make down` | PostgreSQL + Redis 정지 |
+| `make backend` | Spring Boot 기동 (local 프로파일) |
+| `make logs` | 인프라 컨테이너 로그 |
+| `make clean` | DB 볼륨 포함 전체 초기화 |
+| `make status` | 컨테이너 상태 + Spring 헬스체크 |
+| `make monitoring-up` | Prometheus + Grafana 기동 |
+
+### (선택) 모니터링 스택
 
 ```bash
-cd infra/monitoring
-cp .env.example .env
-echo "https://meeting.ssafy.com/hooks/<팀-webhook-id>" > alertmanager/webhook_url
-docker compose up -d
+make monitoring-up
 ```
 
 접속: Grafana http://localhost:3000 / Prometheus http://localhost:9090 / Alertmanager http://localhost:9093
+
+### 수동 설정 (make 없이)
+
+```bash
+# 1. 데이터 스택 기동
+cd infra && cp .env.example .env && docker compose up -d
+
+# 2. 백엔드 기동 (별도 터미널)
+cd backend && cp .env.example .env && ./gradlew bootRun --args='--spring.profiles.active=local'
+```
 
 ### 서비스별 상세 문서
 
