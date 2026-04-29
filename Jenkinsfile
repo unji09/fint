@@ -33,7 +33,7 @@ pipeline {
         // ===== CD: dev 머지 시 배포 =====
         stage('Build JAR') {
             when {
-                branch 'dev'
+                expression { env.gitlabMergeRequestId == null }
             }
             steps {
                 dir('backend') {
@@ -44,7 +44,7 @@ pipeline {
 
         stage('Build Image') {
             when {
-                branch 'dev'
+                expression { env.gitlabMergeRequestId == null }
             }
             steps {
                 dir('backend') {
@@ -55,7 +55,7 @@ pipeline {
 
         stage('Deploy') {
             when {
-                branch 'dev'
+                expression { env.gitlabMergeRequestId == null }
             }
             steps {
                 sh "docker compose -f ${COMPOSE_FILE} --env-file ${DEPLOY_ENV_FILE} up -d"
@@ -64,7 +64,7 @@ pipeline {
 
         stage('Health Check') {
             when {
-                branch 'dev'
+                expression { env.gitlabMergeRequestId == null }
             }
             steps {
                 retry(15) {
