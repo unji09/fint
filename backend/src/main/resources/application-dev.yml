@@ -39,7 +39,7 @@ aws:
     secret-key: ${AWS_SECRET_ACCESS_KEY}
 
 app:
-  server-url: ${APP_SERVER_URL:http://k14a301.p.ssafy.io}
+  server-url: ${APP_SERVER_URL:https://k14a301.p.ssafy.io}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS}
