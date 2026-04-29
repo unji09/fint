@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         COMPOSE_FILE = 'infra/docker-compose.dev.yml'
-        ENV_FILE     = credentials('fint-env-dev')
         IMAGE_NAME   = 'fint-backend'
     }
 
@@ -59,7 +58,7 @@ pipeline {
                 branch 'dev'
             }
             steps {
-                sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d"
+                sh "docker compose -f ${COMPOSE_FILE} --env-file ${DEPLOY_ENV_FILE} up -d"
             }
         }
 
