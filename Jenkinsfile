@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         COMPOSE_FILE = 'infra/docker-compose.dev.yml'
-        ENV_FILE     = 'infra/.env.dev'
+        ENV_FILE     = credentials('fint-env-dev')
         IMAGE_NAME   = 'fint-backend'
     }
 
