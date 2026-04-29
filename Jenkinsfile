@@ -67,9 +67,9 @@ pipeline {
                 expression { env.gitlabMergeRequestId == null }
             }
             steps {
-                retry(15) {
-                    sleep 4
-                    sh 'curl -sf http://localhost/actuator/health'
+                retry(30) {
+                    sleep 10
+                    sh 'curl -sfk --connect-timeout 5 --max-time 10 https://localhost/actuator/health'
                 }
             }
         }
