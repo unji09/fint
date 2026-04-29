@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         COMPOSE_FILE = 'infra/docker-compose.dev.yml'
-        ENV_FILE     = 'infra/.env.dev'
         IMAGE_NAME   = 'fint-backend'
     }
 
@@ -20,7 +19,7 @@ pipeline {
             }
             post {
                 always {
-                    junit 'backend/build/test-results/test/*.xml'
+                    junit allowEmptyResults: true, testResults: 'backend/build/test-results/test/*.xml'
                 }
                 success {
                     updateGitlabCommitStatus name: 'jenkins-ci', state: 'success'
@@ -59,7 +58,7 @@ pipeline {
                 branch 'dev'
             }
             steps {
-                sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d"
+                sh "docker compose -f ${COMPOSE_FILE} --env-file ${DEPLOY_ENV_FILE} up -d"
             }
         }
 
