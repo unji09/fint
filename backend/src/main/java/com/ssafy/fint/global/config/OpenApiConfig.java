@@ -8,6 +8,7 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springdoc.core.models.GroupedOpenApi;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,10 +17,16 @@ public class OpenApiConfig {
 
     public static final String SECURITY_SCHEME_NAME = "JWT";
 
+    @Value("${app.server-url:http://localhost:8080}")
+    private String serverUrl;
+
+    @Value("${spring.profiles.active:local}")
+    private String activeProfile;
+
     @Bean
     public OpenAPI openAPI() {
         return new OpenAPI()
-                .addServersItem(new Server().url("http://localhost:8080").description("Local"))
+                .addServersItem(new Server().url(serverUrl).description(activeProfile))
                 .info(new Info()
                         .title("F!NT API")
                         .description("F!NT - 지능형 영업관리를 위한 인공지능 B2B CRM API 문서")
