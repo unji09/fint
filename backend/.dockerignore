@@ -3,6 +3,7 @@
 !.env.example
 .gradle/
 build/
+!build/libs/*.jar
 .idea/
 *.log
 .git/
