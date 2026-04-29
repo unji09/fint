@@ -109,6 +109,7 @@ CREATE TABLE deals (
                        won_at              TIMESTAMPTZ     NULL,
                        lost_at             TIMESTAMPTZ     NULL,
                        lost_reason         TEXT            NULL,
+                       current_pipeline    VARCHAR(50)     NULL,
                        created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
                        updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
                        is_deleted          BOOLEAN         NOT NULL DEFAULT FALSE
