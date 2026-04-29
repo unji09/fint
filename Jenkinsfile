@@ -2,9 +2,8 @@ pipeline {
     agent any
 
     environment {
-        COMPOSE_FILE    = 'infra/docker-compose.dev.yml'
-        IMAGE_NAME      = 'fint-backend'
-        DEPLOY_ENV_FILE = credentials('fint-env-dev')
+        COMPOSE_FILE = 'infra/docker-compose.dev.yml'
+        IMAGE_NAME   = 'fint-backend'
     }
 
     stages {
@@ -59,7 +58,7 @@ pipeline {
                 expression { env.gitlabMergeRequestId == null }
             }
             steps {
-                sh "docker compose -f ${COMPOSE_FILE} --env-file ${DEPLOY_ENV_FILE} up -d"
+                sh 'cd ${DEPLOY_DIR} && docker compose -f infra/docker-compose.dev.yml --env-file infra/.env.dev up -d'
             }
         }
 
