@@ -2,8 +2,9 @@ pipeline {
     agent any
 
     environment {
-        COMPOSE_FILE = 'infra/docker-compose.dev.yml'
-        IMAGE_NAME   = 'fint-backend'
+        COMPOSE_FILE    = 'infra/docker-compose.dev.yml'
+        IMAGE_NAME      = 'fint-backend'
+        DEPLOY_ENV_FILE = credentials('fint-env-dev')
     }
 
     stages {
