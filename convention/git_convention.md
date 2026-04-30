@@ -38,13 +38,13 @@ ex) feat/app/#2/user-signup
 | `docs` | 문서 추가, 수정, 삭제 |
 | `!Hotfix` | 급하게 치명적인 버그를 수정할 때 |
 
-### ✨ 이슈 번호 연결 규칙✨
+### ✨ 지라 이슈 번호 삽입 규칙✨
 
 **1️⃣** **기본 구조**
 
 ```
-#issue <태그> : <간단한 작업 요약>
-#3 feat : 회원가입 DTO 클래스 추가
+issue <태그> : <간단한 작업 요약>
+S14P31A301-12 feat : 회원가입 DTO 클래스 추가
 ```
 
 # 3. MR
@@ -68,7 +68,7 @@ ex) feat/app/#2/user-signup
     - [ ] docs: 문서 수정
     - [ ] test: 테스트 코드
     - [ ] chore: 설정, 빌드, 기타 작업
-    - [ ] !hotfix: 급하게 치명적인 버그를 수정할 때
+    - [ ] !Hotfix: 급하게 치명적인 버그를 수정할 때
     
     ## 🚀 작업 내용
     
@@ -77,5 +77,5 @@ ex) feat/app/#2/user-signup
     ## 💬 기타 사항 or 추가 코멘트
     
     ## 🎯 Resolve
-    - closes #(티켓번호)
+    - closes S14P31A301-()
     ```
