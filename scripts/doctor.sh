@@ -69,21 +69,13 @@ else
     echo "    -> JDK 21이 없지만, Gradle Foojay 플러그인이 자동 다운로드합니다."
 fi
 
-# 5. .env files
-if [ ! -f "$ROOT_DIR/infra/.env" ]; then
-    cp "$ROOT_DIR/infra/.env.example" "$ROOT_DIR/infra/.env"
-    print_result "infra/.env" "$WARN"
-    echo "    -> .env.example에서 자동 복사했습니다."
+# 5. .env.local (루트 통합 환경변수)
+if [ ! -f "$ROOT_DIR/.env.local" ]; then
+    cp "$ROOT_DIR/.env.local.example" "$ROOT_DIR/.env.local"
+    print_result ".env.local" "$WARN"
+    echo "    -> .env.local.example에서 자동 복사했습니다."
 else
-    print_result "infra/.env exists" "$PASS"
-fi
-
-if [ ! -f "$ROOT_DIR/backend/.env" ]; then
-    cp "$ROOT_DIR/backend/.env.example" "$ROOT_DIR/backend/.env"
-    print_result "backend/.env" "$WARN"
-    echo "    -> .env.example에서 자동 복사했습니다."
-else
-    print_result "backend/.env exists" "$PASS"
+    print_result ".env.local exists" "$PASS"
 fi
 
 # 6. Git autocrlf (Windows)
