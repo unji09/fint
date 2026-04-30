@@ -58,7 +58,18 @@ pipeline {
                 expression { env.gitlabMergeRequestId == null }
             }
             steps {
-                sh 'cd ${DEPLOY_DIR} && docker compose -f infra/docker-compose.dev.yml --env-file infra/.env.dev up -d'
+                sh '''
+                    cd ${DEPLOY_DIR}
+                    if [ -f .env.dev ]; then
+                        ENV_FILE=.env.dev
+                    elif [ -f infra/.env.dev ]; then
+                        ENV_FILE=infra/.env.dev
+                    else
+                        echo "ERROR: .env.dev not found"
+                        exit 1
+                    fi
+                    docker compose -f infra/docker-compose.dev.yml --env-file "$ENV_FILE" up -d
+                '''
             }
         }
 

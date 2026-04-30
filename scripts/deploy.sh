@@ -9,14 +9,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_TAG="${1:-latest}"
 COMPOSE_FILE="$ROOT_DIR/infra/docker-compose.dev.yml"
-ENV_FILE="$ROOT_DIR/infra/.env.dev"
+ENV_FILE="$ROOT_DIR/.env.dev"
 
 echo "=== F!NT Deploy (tag: $BUILD_TAG) ==="
 
 # 1. 환경변수 파일 확인
 if [ ! -f "$ENV_FILE" ]; then
     echo "ERROR: $ENV_FILE 파일이 없습니다."
-    echo "  cp infra/.env.dev.example infra/.env.dev 후 값을 채우세요."
+    echo "  cp .env.dev.example .env.dev 후 값을 채우세요."
     exit 1
 fi
 
