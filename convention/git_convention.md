@@ -5,10 +5,10 @@ dev에서 분기해서 사용
 - 티켓별로 작성
 
 ```html
-**feat/domain/#issue-epic/task**
-ex) feat/fe/#2/user-signup
-ex) feat/be/#2/user-signup
-ex) feat/app/#2/user-signup
+**feat/domain/issue-num/task**
+ex) feat/fe/S14P31A301/user-signup
+ex) feat/be/S14P31A301/user-signup
+ex) feat/app/S14P31A301/user-signup
 ```
 
 ### domain 리스트:
@@ -38,13 +38,10 @@ ex) feat/app/#2/user-signup
 | `docs` | 문서 추가, 수정, 삭제 |
 | `!Hotfix` | 급하게 치명적인 버그를 수정할 때 |
 
-### ✨ 지라 이슈 번호 삽입 규칙✨
-
-**1️⃣** **기본 구조**
 
 ```
-issue <태그> : <간단한 작업 요약>
-S14P31A301-12 feat : 회원가입 DTO 클래스 추가
+태그 : <간단한 작업 요약>
+feat : 회원가입 DTO 클래스 추가
 ```
 
 # 3. MR
