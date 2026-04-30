@@ -1,4 +1,4 @@
-package com.ssafy.fint.domain.tenant.repository;
+package com.ssafy.fint.domain.user.repositoty;
 
 import com.ssafy.fint.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
