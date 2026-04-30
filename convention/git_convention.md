@@ -6,9 +6,9 @@ dev에서 분기해서 사용
 
 ```html
 **feat/domain/issue-num/task**
-ex) feat/fe/S14P31A301/user-signup
-ex) feat/be/S14P31A301/user-signup
-ex) feat/app/S14P31A301/user-signup
+ex) feat/fe/S14P31A301-1/user-signup
+ex) feat/be/S14P31A301-2/user-signup
+ex) feat/app/S14P31A301-3/user-signup
 ```
 
 ### domain 리스트:
