@@ -22,6 +22,20 @@ spring:
     default-property-inclusion: non_null
     deserialization:
       fail-on-unknown-properties: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+    jackson:
+      default-property-inclusion: non_null   # ApiResponse.code null 숨김
+
+  jwt:
+    secret: ${JWT_SECRET:dGhpc2lzYXZlcnlsb25nc2VjcmV0a2V5Zm9yZmludGFwcGxpY2F0aW9u}
+    access-token-validity-in-seconds: 86400    # 24h
+    refresh-token-validity-in-seconds: 604800  # 7d
+
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
 
 # Swagger
 springdoc:
