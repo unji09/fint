@@ -15,8 +15,6 @@ spring:
     baseline-on-migrate: false
     clean-disabled: true
   jackson:
-    # Spring Boot 4는 Jackson 3을 기본으로 사용. 마이그레이션 안정성을 위해 Jackson 2 디폴트 유지.
-    # Jackson 3 디폴트로 전환할 준비가 되면 false로 변경.
     use-jackson2-defaults: true
     time-zone: Asia/Seoul
     default-property-inclusion: non_null
@@ -26,16 +24,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-    jackson:
-      default-property-inclusion: non_null   # ApiResponse.code null 숨김
-
-  jwt:
-    secret: ${JWT_SECRET:dGhpc2lzYXZlcnlsb25nc2VjcmV0a2V5Zm9yZmludGFwcGxpY2F0aW9u}
-    access-token-validity-in-seconds: 86400    # 24h
-    refresh-token-validity-in-seconds: 604800  # 7d
-
-  cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
 
 # Swagger
 springdoc:
@@ -49,7 +37,7 @@ springdoc:
   default-consumes-media-type: application/json
   default-produces-media-type: application/json
 
-# Actuator (health/info/prometheus만 공개, 나머지는 기본값대로 비공개)
+# Actuator
 management:
   endpoints:
     web:
@@ -62,8 +50,6 @@ management:
     metrics:
       export:
         enabled: true
-  # HTTP 요청 지연시간 히스토그램(_bucket) 노출.
-  # histogram_quantile()로 p95/p99 계산하려면 필수.
   metrics:
     distribution:
       percentiles-histogram:
