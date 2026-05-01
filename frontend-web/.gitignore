@@ -1,0 +1,56 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build / type cache
+.next
+out
+dist
+*.tsbuildinfo
+.eslintcache
+.swc
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Testing
+coverage
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Secrets / certificates / keys
+*.pem
+*.key
+*.pfx
+*.cert
+*.crt
+id_rsa*
+
+# Other package manager lockfiles (project uses pnpm)
+package-lock.json
+yarn.lock

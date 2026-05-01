@@ -1,0 +1,84 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.root.horizontal {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  position: relative;
+}
+
+/* 세로 방향 — 인디케이터끼리 세로선 연결 */
+.root:not(.horizontal) .step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 32px;
+  bottom: -8px;
+  width: 2px;
+  background-color: var(--color-border);
+}
+
+.root:not(.horizontal) .step.completed:not(:last-child)::after {
+  background-color: var(--color-main);
+}
+
+.indicator {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-bg-card);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  flex-shrink: 0;
+}
+
+.step.active .indicator {
+  border-color: var(--color-main);
+  color: var(--color-main);
+}
+
+.step.completed .indicator {
+  background-color: var(--color-main);
+  border-color: var(--color-main);
+  color: var(--color-text-on-brand);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--space-5);
+  flex: 1;
+}
+
+.label {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-secondary);
+}
+
+.step.active .label {
+  color: var(--color-text-primary);
+  font-weight: var(--fw-semibold);
+}
+
+.description {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}

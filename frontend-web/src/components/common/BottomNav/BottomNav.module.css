@@ -1,0 +1,57 @@
+.root {
+  display: flex;
+  align-items: stretch;
+  height: 60px;
+  background-color: var(--color-bg-card);
+  border-top: 1px solid var(--color-border);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-bottom-nav);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 데스크톱에서는 숨김 — 화면 셸이 사이드바로 대체 */
+@media (min-width: 1024px) {
+  .root {
+    display: none;
+  }
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-1) 0;
+}
+
+.tab:hover {
+  color: var(--color-text-secondary);
+}
+
+.tab.active {
+  color: var(--color-main);
+  font-weight: var(--fw-semibold);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.label {
+  font-size: 11px;
+  line-height: 1;
+}
