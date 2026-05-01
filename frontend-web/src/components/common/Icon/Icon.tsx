@@ -1,3 +1,5 @@
+'use client';
+
 import { forwardRef, type SVGProps, type ReactNode } from 'react';
 
 /**

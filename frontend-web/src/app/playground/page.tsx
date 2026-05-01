@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * 공통 컴포넌트 검증용 Playground.
  * Storybook 미도입 — `/playground` 라우트에서 모든 variant 한 페이지에 노출한다.

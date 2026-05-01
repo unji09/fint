@@ -1,3 +1,5 @@
+'use client';
+
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { PlusIcon } from '@/components/common/Icon';

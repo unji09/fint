@@ -1,3 +1,5 @@
+'use client';
+
 import { forwardRef, useId, type TextareaHTMLAttributes } from 'react';
 import clsx from 'clsx';
 import s from './Textarea.module.css';

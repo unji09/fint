@@ -5,17 +5,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
+# Dependencies
 node_modules
-dist
-dist-ssr
-*.local
+.pnp
+.pnp.js
 
 # Build / type cache
+.next
+out
+dist
 *.tsbuildinfo
 .eslintcache
-.vite
+.swc
 
 # Editor
 .vscode/*
@@ -28,6 +30,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
 # Testing
 coverage
 
@@ -35,3 +42,15 @@ coverage
 .env
 .env.local
 .env.*.local
+
+# Secrets / certificates / keys
+*.pem
+*.key
+*.pfx
+*.cert
+*.crt
+id_rsa*
+
+# Other package manager lockfiles (project uses pnpm)
+package-lock.json
+yarn.lock

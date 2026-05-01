@@ -1,3 +1,5 @@
+'use client';
+
 import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
 import clsx from 'clsx';
 import s from './Card.module.css';

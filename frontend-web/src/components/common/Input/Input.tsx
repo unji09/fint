@@ -1,3 +1,5 @@
+'use client';
+
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react';
 import clsx from 'clsx';
 import s from './Input.module.css';
