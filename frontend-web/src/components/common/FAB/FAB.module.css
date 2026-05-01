@@ -1,0 +1,33 @@
+.root {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(60px + env(safe-area-inset-bottom) + var(--space-4));
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-main);
+  color: var(--color-text-on-brand);
+  box-shadow: var(--shadow-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-fab);
+  transition: background-color var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.root:hover {
+  background-color: var(--color-sub);
+  box-shadow: var(--shadow-lg);
+}
+
+.root:active {
+  transform: translateY(1px);
+}
+
+/* 데스크톱에서는 노출하지 않는다 (사이드바 + 헤더 기반 액션으로 대체) */
+@media (min-width: 1024px) {
+  .root {
+    display: none;
+  }
+}

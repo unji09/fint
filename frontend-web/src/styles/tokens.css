@@ -1,0 +1,123 @@
+/**
+ * F!nt CRM Color System v3.0 — Design Tokens
+ * 출처: F!nt CRM Color System v3.0 (브랜드/텍스트/시스템/스테이지/온도/시그널/페르소나)
+ * 모든 컴포넌트는 이 토큰만 참조한다. 하드코드된 hex 금지.
+ */
+:root {
+  /* ─── Brand ───────────────────────── */
+  --color-main: #06b6d4;          /* Brand Cyan: 액티브 · 링크 · 강조 · 선택 테두리 */
+  --color-sub: #0e7490;           /* Deep Cyan: 헤더 · 강조 버튼 · 섹션 제목 */
+
+  /* ─── Surface ─────────────────────── */
+  --color-bg-page: #f5f7fa;
+  --color-bg-card: #ffffff;
+  --color-border: #e2eaf0;
+  --color-overlay: rgba(15, 23, 42, 0.45); /* 모달 backdrop */
+
+  /* ─── Text ────────────────────────── */
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-placeholder: #94a3b8;
+  --color-text-on-brand: #ffffff;
+
+  /* ─── System (3단계 위험도) ───────── */
+  --color-danger: #ef4444;        /* HOT · 녹음 · 에러 · 블로커 */
+  --color-warning: #ea580c;       /* 시스템 경고 · 협상 중 */
+  --color-caution: #f59e0b;       /* WARM · 팔로업 지연 */
+  --color-success: #22c55e;       /* 완료 · 챔피언 · 성사 */
+
+  /* ─── Pipeline Stages (7단계) ─────── */
+  --stage-first-meeting: #7c3aed;
+  --stage-needs: #2563eb;
+  --stage-proposal-write: #0d9488;
+  --stage-proposal-present: #06b6d4;
+  --stage-negotiation: #ea580c;
+  --stage-contract: #475569;
+  --stage-closed: #ef4444;
+
+  /* ─── Temperature ─────────────────── */
+  --temp-hot: #ef4444;
+  --temp-warm: #f59e0b;
+  --temp-cool: #0891b2;
+
+  /* ─── Signal Source ───────────────── */
+  --signal-dart: #0369a1;
+  --signal-news: #ea580c;
+  --signal-log: #475569;
+  --signal-ai: #7c3aed;
+
+  /* ─── Buying Committee Persona ────── */
+  /* bg / fg 페어 — Badge 배경/전경에 함께 사용 */
+  --persona-blocker-bg: #fef2f2;
+  --persona-blocker-fg: #ef4444;
+  --persona-champion-bg: #f0fdf4;
+  --persona-champion-fg: #22c55e;
+  --persona-skeptic-bg: #f8fafc;
+  --persona-skeptic-fg: #64748b;
+  --persona-companion-bg: #ecfeff;
+  --persona-companion-fg: #0891b2;
+
+  /* ─── Spacing (4pt grid) ──────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ─── Radius ──────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ─── Typography ──────────────────── */
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+
+  --lh-tight: 1.2;
+  --lh-normal: 1.5;
+  --lh-loose: 1.7;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* ─── Shadow ──────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.16);
+
+  /* ─── Z-index ─────────────────────── */
+  --z-fab: 100;
+  --z-bottom-nav: 200;
+  --z-top-app-bar: 200;
+  --z-tooltip: 800;
+  --z-modal-backdrop: 900;
+  --z-modal: 1000;
+
+  /* ─── Motion ──────────────────────── */
+  --transition-fast: 120ms ease-out;
+  --transition-normal: 200ms ease-out;
+
+  /*
+   * ─── Breakpoints (참고용) ──────────
+   * CSS 변수는 @media 조건절에 못 쓰므로, 미디어 쿼리에서는 픽셀 값 직접 기재.
+   *   --bp-sm: 640px   모바일 가로
+   *   --bp-md: 768px   태블릿
+   *   --bp-lg: 1024px  데스크톱 (모바일/데스크톱 분기 기준)
+   *   --bp-xl: 1280px  와이드
+   */
+}
