@@ -3,7 +3,6 @@ package com.ssafy.fint.domain.user.entity;
 import com.ssafy.fint.domain.tenant.entity.Team;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.global.common.entity.BaseSoftDeletableEntity;
-import io.hypersistence.utils.hibernate.type.json.JsonType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -17,7 +16,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.Map;
 
@@ -62,7 +62,7 @@ public class User extends BaseSoftDeletableEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "notification_prefs", columnDefinition = "jsonb")
     private Map<String, Object> notificationPrefs;
 

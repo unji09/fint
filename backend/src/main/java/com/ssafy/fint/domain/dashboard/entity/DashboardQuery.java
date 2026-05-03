@@ -1,7 +1,6 @@
 package com.ssafy.fint.domain.dashboard.entity;
 
 import com.ssafy.fint.global.common.entity.BaseEntity;
-import io.hypersistence.utils.hibernate.type.json.JsonType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -15,7 +14,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -42,7 +42,7 @@ public class DashboardQuery extends BaseEntity {
     @Column(name = "input_text", nullable = false, columnDefinition = "TEXT")
     private String inputText;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "result", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> result;
 

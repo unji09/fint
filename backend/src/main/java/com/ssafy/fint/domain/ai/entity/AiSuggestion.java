@@ -3,7 +3,6 @@ package com.ssafy.fint.domain.ai.entity;
 import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.global.common.entity.BaseEntity;
-import io.hypersistence.utils.hibernate.type.json.JsonType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,7 +18,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.Map;
 
@@ -59,7 +59,7 @@ public class AiSuggestion extends BaseEntity {
     @Column(name = "is_read", nullable = false)
     private boolean isRead;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "reason", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> reason;
 

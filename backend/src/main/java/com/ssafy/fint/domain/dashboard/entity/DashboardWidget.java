@@ -1,7 +1,6 @@
 package com.ssafy.fint.domain.dashboard.entity;
 
 import com.ssafy.fint.global.common.entity.BaseUpdatableEntity;
-import io.hypersistence.utils.hibernate.type.json.JsonType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,7 +16,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.Map;
 
@@ -51,11 +51,11 @@ public class DashboardWidget extends BaseUpdatableEntity {
     @Column(name = "title", length = 100)
     private String title;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "config", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> config;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "position", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> position;
 

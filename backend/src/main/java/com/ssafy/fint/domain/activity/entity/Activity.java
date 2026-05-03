@@ -3,7 +3,6 @@ package com.ssafy.fint.domain.activity.entity;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.global.common.entity.BaseUpdatableEntity;
-import io.hypersistence.utils.hibernate.type.json.JsonType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,7 +18,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -64,15 +64,15 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "end_at", nullable = false)
     private OffsetDateTime endAt;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "attendees", columnDefinition = "jsonb")
     private List<Map<String, Object>> attendees;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "transcript", columnDefinition = "jsonb")
     private Map<String, Object> transcript;
 
-    @Type(JsonType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "summary", columnDefinition = "jsonb")
     private Map<String, Object> summary;
 
