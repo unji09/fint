@@ -38,6 +38,14 @@ dependencies {
     runtimeOnly 'org.postgresql:postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // ---------- QueryDSL ----------
+    // Spring Boot 4 / Hibernate 7 호환을 위해 community fork(openfeign) 사용.
+    // 공식 com.querydsl 5.1.0은 Hibernate 6까지만 검증됨.
+    implementation 'io.github.openfeign.querydsl:querydsl-jpa:6.11'
+    annotationProcessor 'io.github.openfeign.querydsl:querydsl-apt:6.11:jakarta'
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+
     // ---------- Database Migration (Flyway) ----------
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.flywaydb:flyway-database-postgresql'
@@ -89,3 +97,9 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// Windows 기본 인코딩(cp949) 회피 — 한글 소스를 UTF-8로 컴파일
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
