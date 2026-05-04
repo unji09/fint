@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 
+from app.core.errors import register_exception_handlers
 from app.routers import health
 
 
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    register_exception_handlers(app)
     app.include_router(health.router)
 
     return app
