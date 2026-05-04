@@ -26,7 +26,7 @@ public record LoginResponse(
                 user.getUserId(),
                 user.getName(),
                 user.getEmpNo(),
-                user.getRole(),
+                user.getRole().name(),
                 user.getTenant().getTenantId(),
                 user.getTeam() != null ? user.getTeam().getTeamId() : null
             )
