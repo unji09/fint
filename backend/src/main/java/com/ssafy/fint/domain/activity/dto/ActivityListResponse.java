@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.activity.dto;
 
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
+import com.ssafy.fint.domain.deal.dto.PipelineStageResponse;
 import org.springframework.data.domain.Page;
 
 import java.time.OffsetDateTime;
@@ -37,19 +38,6 @@ public record ActivityListResponse(
                     PipelineStageResponse.from(activity.getPipelineStage()),
                     activity.getDeal() == null ? null : activity.getDeal().getDealId()
             );
-        }
-    }
-
-    public record PipelineStageResponse(
-            Long stageId,
-            String stageName
-    ) {
-
-        public static PipelineStageResponse from(com.ssafy.fint.domain.deal.entity.PipelineStage stage) {
-            if (stage == null) {
-                return null;
-            }
-            return new PipelineStageResponse(stage.getPipelineStageId(), stage.getName());
         }
     }
 }
