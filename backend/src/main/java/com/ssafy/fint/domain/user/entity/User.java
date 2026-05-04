@@ -1,7 +1,7 @@
 package com.ssafy.fint.domain.user.entity;
 
 import com.ssafy.fint.domain.tenant.entity.Tenant;
-import com.ssafy.fint.global.common.entity.BaseSoftDeletableEntity;
+import com.ssafy.fint.global.common.entity.BaseUpdatableEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -9,9 +9,10 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "users")
+@AttributeOverride(name = "id", column = @Column(name = "user_id"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class User extends BaseSoftDeletableEntity {
+public class User extends BaseUpdatableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id", nullable = false)
@@ -39,4 +40,7 @@ public class User extends BaseSoftDeletableEntity {
 
     @Column(nullable = false)
     private int loginFailCount;
+
+    @Column(nullable = false)
+    private boolean isDeleted;
 }

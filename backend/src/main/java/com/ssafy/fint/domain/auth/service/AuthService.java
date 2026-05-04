@@ -38,12 +38,12 @@ public class AuthService {
 
         // 1. 회사 코드 → 테넌트 조회
         Tenant tenant = tenantRepository
-            .findByCompanyCode(request.companyCode())
+            .findByCompanyCodeAndIsDeletedFalse(request.companyCode())
             .orElseThrow(() -> new BusinessException(AuthErrorCode.COMPANY_NOT_FOUND));
 
         // 2. 테넌트 범위 내 사번 → 사용자 조회 (테넌트 격리)
         User user = userRepository
-            .findByTenant_IdAndEmpNo(tenant.getId(), request.empNo())
+            .findByTenant_IdAndEmpNoAndIsDeletedFalse(tenant.getId(), request.empNo())
             .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_CREDENTIALS));
 
         // 3. 비밀번호 검증
