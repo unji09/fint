@@ -9,14 +9,6 @@ public class StringToActivityTypeConverter implements Converter<String, Activity
 
     @Override
     public ActivityType convert(@NonNull String source) {
-        if (source.isBlank()) {
-            return null;
-        }
-        for (ActivityType type : ActivityType.values()) {
-            if (type.name().equalsIgnoreCase(source) || type.getDisplayName().equals(source)) {
-                return type;
-            }
-        }
-        throw new IllegalArgumentException("Invalid ActivityType: " + source);
+        return ActivityType.from(source);
     }
 }
