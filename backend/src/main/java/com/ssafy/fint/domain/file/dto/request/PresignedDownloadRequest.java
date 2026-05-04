@@ -8,6 +8,6 @@ import jakarta.validation.constraints.NotBlank;
  * 명세: POST /api/v1/files/presigned-download
  */
 public record PresignedDownloadRequest(
-        @NotBlank String fileKey,
-        @Min(1) Integer expiresIn
+        @NotBlank(message = "fileKey 는 비어 있을 수 없습니다.") String fileKey,
+        @Min(value = 1, message = "expiresIn 은 1 이상이어야 합니다.") Integer expiresIn
 ) {}

@@ -21,6 +21,7 @@ public enum FileErrorCode implements ErrorCode {
     MISSING_MEETING_ID(HttpStatus.BAD_REQUEST, "FL007", "MEETING_RECORD 업로드에는 meetingId 가 필요합니다."),
     MISSING_CONTACT_ID(HttpStatus.BAD_REQUEST, "FL008", "OCR 업로드에는 contactId 가 필요합니다."),
     INVALID_PURPOSE_FOR_TYPE(HttpStatus.BAD_REQUEST, "FL009", "fileType 과 purpose 조합이 올바르지 않습니다."),
+    INVALID_FILE_KEY(HttpStatus.BAD_REQUEST, "FL010", "유효하지 않은 fileKey 입니다."),
 
     S3_PRESIGN_FAILED(HttpStatus.BAD_GATEWAY, "FL501", "Presigned URL 발급에 실패했습니다."),
     MULTIPART_INIT_FAILED(HttpStatus.BAD_GATEWAY, "FL502", "Multipart 업로드 초기화에 실패했습니다."),

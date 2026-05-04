@@ -1,12 +1,18 @@
 package com.ssafy.fint.domain.activity.entity;
 
-/**
- * 활동 유형.
- * DB 에는 문자열(이름) 그대로 저장된다.
- */
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
 public enum ActivityType {
-    MEETING,
-    CALL,
-    TASK,
-    EMAIL
+
+    MEETING("미팅"),
+    CALL("통화"),
+    TASK("업무"),
+    EMAIL("이메일");
+
+    @JsonValue
+    private final String displayName;
 }

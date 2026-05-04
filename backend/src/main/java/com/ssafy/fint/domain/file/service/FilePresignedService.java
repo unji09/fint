@@ -66,14 +66,15 @@ public class FilePresignedService {
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
     private final AwsS3Properties props;
+    private final FileUploadValidator validator;
 
     // ---------------------------------------------------------------------
     // 1) 단일 업로드 presigned URL  (PUT, SSE-KMS)
     // ---------------------------------------------------------------------
     public PresignedUrlResponse issueSingleUploadUrl(PresignedUrlRequest req) {
-        validateTypePurpose(req.fileType(), req.purpose());
-        validateContentType(req.fileType(), req.contentType());
-        validateSize(req.purpose(), req.fileSize());
+        validator.validateTypePurpose(req.fileType(), req.purpose());
+        validator.validateContentType(req.fileType(), req.contentType());
+        validator.validateSize(req.purpose(), req.fileSize());
 
         String fileKey = buildFileKey(req.purpose(), req.fileName(), req.meetingId(), req.contactId());
         long expiresIn = (req.purpose() == FilePurpose.OCR)
@@ -107,6 +108,9 @@ public class FilePresignedService {
     // 2) 다운로드 presigned URL  (GET)
     // ---------------------------------------------------------------------
     public PresignedDownloadResponse issueDownloadUrl(PresignedDownloadRequest req) {
+        // 클라이언트가 임의의 S3 Key 를 다운로드 URL 로 발급받지 못하도록 prefix 화이트리스트 검증
+        validator.validateFileKey(req.fileKey());
+
         long expiresIn = (req.expiresIn() != null && req.expiresIn() > 0)
                 ? req.expiresIn()
                 : props.presign().downloadExpirationSeconds();
@@ -138,7 +142,7 @@ public class FilePresignedService {
         if (req.fileType() != FileType.AUDIO || req.purpose() != FilePurpose.MEETING_RECORD) {
             throw new BusinessException(FileErrorCode.MULTIPART_AUDIO_ONLY);
         }
-        validateContentType(req.fileType(), req.contentType());
+        validator.validateContentType(req.fileType(), req.contentType());
 
         String fileKey = buildFileKey(FilePurpose.MEETING_RECORD, req.fileName(), req.meetingId(), null);
         long expiresIn = props.presign().multipartExpirationSeconds();
@@ -234,43 +238,8 @@ public class FilePresignedService {
     }
 
     // ---------------------------------------------------------------------
-    // helpers
+    // helpers (S3 Key 생성 — 검증 책임은 FileUploadValidator 로 분리됨)
     // ---------------------------------------------------------------------
-
-    /** 규칙 §3, §4: fileType ↔ purpose 조합 검증. */
-    private void validateTypePurpose(FileType type, FilePurpose purpose) {
-        boolean ok = switch (purpose) {
-            case MEETING_RECORD -> type == FileType.AUDIO;
-            case OCR            -> type == FileType.IMAGE;
-        };
-        if (!ok) {
-            throw new BusinessException(FileErrorCode.INVALID_PURPOSE_FOR_TYPE,
-                    "fileType=" + type + ", purpose=" + purpose);
-        }
-    }
-
-    private void validateContentType(FileType type, String contentType) {
-        String lc = contentType.toLowerCase();
-        boolean ok = switch (type) {
-            case IMAGE -> lc.startsWith("image/");
-            case AUDIO -> lc.startsWith("audio/");
-        };
-        if (!ok) {
-            throw new BusinessException(FileErrorCode.INVALID_CONTENT_TYPE,
-                    "fileType=" + type + ", contentType=" + contentType);
-        }
-    }
-
-    private void validateSize(FilePurpose purpose, Long fileSize) {
-        if (fileSize == null) return;
-        long max = (purpose == FilePurpose.OCR)
-                ? props.upload().maxOcrSize()
-                : props.upload().maxSingleSize();
-        if (fileSize > max) {
-            throw new BusinessException(FileErrorCode.FILE_TOO_LARGE,
-                    "fileSize=" + fileSize + " > max=" + max + " (purpose=" + purpose + ")");
-        }
-    }
 
     /**
      * 규칙 §3, §4: purpose 기반 S3 Key 생성 (서버에서만 결정 — 클라 위조 차단).

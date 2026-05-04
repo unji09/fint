@@ -60,6 +60,14 @@ public class OpenApiConfig {
     }
 
     @Bean
+    public GroupedOpenApi activityApi() {
+        return GroupedOpenApi.builder()
+                .group("2. ACTIVITY API")
+                .pathsToMatch(ApiPath.V1 + "/activities/**")
+                .build();
+    }
+
+    @Bean
     public GroupedOpenApi fileApi() {
         return GroupedOpenApi.builder()
                 .group("2. FILE API")

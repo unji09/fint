@@ -38,7 +38,7 @@ public class User extends BaseUpdatableEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String role;
+    private UserRole role;
 
     @Column(length = 200)
     private String email;
@@ -68,7 +68,7 @@ public class User extends BaseUpdatableEntity {
     private User(
             Tenant tenant,
             Team team,
-            String role,
+            UserRole role,
             String email,
             String empNo,
             String name,
@@ -92,7 +92,7 @@ public class User extends BaseUpdatableEntity {
     }
 
     public void changeRole(UserRole role) {
-        this.role = role.name();
+        this.role = role;
     }
 
     public void changeName(String name) {

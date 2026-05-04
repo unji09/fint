@@ -13,12 +13,14 @@ import java.util.List;
  * 명세: POST /api/v1/files/multipart/complete
  */
 public record MultipartCompleteRequest(
-        @NotBlank String uploadId,
-        @NotBlank String fileKey,
-        @NotEmpty @Valid List<PartDto> parts
+        @NotBlank(message = "uploadId 는 비어 있을 수 없습니다.") String uploadId,
+        @NotBlank(message = "fileKey 는 비어 있을 수 없습니다.") String fileKey,
+        @NotEmpty(message = "parts 는 비어 있을 수 없습니다.")
+        @Valid List<PartDto> parts
 ) {
     public record PartDto(
-            @NotNull @Min(1) Integer partNumber,
-            @NotBlank String etag
+            @NotNull(message = "partNumber 는 필수입니다.")
+            @Min(value = 1, message = "partNumber 는 1 이상이어야 합니다.") Integer partNumber,
+            @NotBlank(message = "etag 는 비어 있을 수 없습니다.") String etag
     ) {}
 }
