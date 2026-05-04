@@ -56,7 +56,7 @@ public class SecurityConfig {
                 // Auth (로그인/재발급은 비인증)
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/reissue").permitAll()
                 // 그 외
-                .anyRequest().authenticated()
+                .anyRequest().permitAll()
             );
 
         return http.build();

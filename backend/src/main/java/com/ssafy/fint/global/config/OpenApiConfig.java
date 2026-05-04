@@ -43,12 +43,27 @@ public class OpenApiConfig {
     }
 
     // 도메인별 API 그룹. 도메인 추가될 때마다 여기에 Bean 하나씩 늘린다.
-    // 예시로 auth 그룹만 뼈대로 남겨둠.
+    @Bean
+    public GroupedOpenApi allApi() {
+        return GroupedOpenApi.builder()
+                .group("0. ALL API")
+                .pathsToMatch(ApiPath.V1 + "/**")
+                .build();
+    }
+
     @Bean
     public GroupedOpenApi authApi() {
         return GroupedOpenApi.builder()
                 .group("1. AUTH API")
                 .pathsToMatch(ApiPath.V1 + "/auth/**")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi fileApi() {
+        return GroupedOpenApi.builder()
+                .group("2. FILE API")
+                .pathsToMatch(ApiPath.V1 + "/files/**")
                 .build();
     }
 }
