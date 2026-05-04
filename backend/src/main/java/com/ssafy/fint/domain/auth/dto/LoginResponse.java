@@ -23,12 +23,12 @@ public record LoginResponse(
             refreshToken,
             "Bearer",
             new UserInfo(
-                user.getId(),
+                user.getUserId(),
                 user.getName(),
                 user.getEmpNo(),
                 user.getRole(),
-                user.getTenant().getId(),
-                user.getTeamId()
+                user.getTenant().getTenantId(),
+                user.getTeam() != null ? user.getTeam().getTeamId() : null
             )
         );
     }

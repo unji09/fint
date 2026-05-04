@@ -43,7 +43,7 @@ public class AuthService {
 
         // 2. 테넌트 범위 내 사번 → 사용자 조회 (테넌트 격리)
         User user = userRepository
-            .findByTenant_IdAndEmpNoAndIsDeletedFalse(tenant.getId(), request.empNo())
+            .findByTenant_TenantIdAndEmpNoAndIsDeletedFalse(tenant.getTenantId(), request.empNo())
             .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_CREDENTIALS));
 
         // 3. 비밀번호 검증
@@ -53,17 +53,17 @@ public class AuthService {
 
         // 4. 토큰 발급
         String accessToken  = jwtTokenProvider.createAccessToken(
-            user.getId(), user.getRole(), tenant.getId());
-        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId());
+            user.getUserId(), user.getRole(), tenant.getTenantId());
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getUserId());
 
         // 5. Redis 에 refreshToken 저장
         redisTemplate.opsForValue().set(
-            REFRESH_PREFIX + user.getId(),
+            REFRESH_PREFIX + user.getUserId(),
             refreshToken,
             7, TimeUnit.DAYS
         );
 
-        log.info("[Login] userId={} tenantId={}", user.getId(), tenant.getId());
+        log.info("[Login] userId={} tenantId={}", user.getUserId(), tenant.getTenantId());
 
         return LoginResponse.of(accessToken, refreshToken, user);
     }
@@ -115,7 +115,7 @@ public class AuthService {
 
         // 4. 새 accessToken 발급
         String newAccessToken = jwtTokenProvider.createAccessToken(
-            user.getId(), user.getRole(), user.getTenant().getId());
+            user.getUserId(), user.getRole(), user.getTenant().getTenantId());
 
         log.info("[Reissue] userId={}", userId);
 

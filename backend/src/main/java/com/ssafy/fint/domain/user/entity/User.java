@@ -19,10 +19,14 @@ import java.util.Map;
  */
 @Entity
 @Table(name = "users")
-@AttributeOverride(name = "id", column = @Column(name = "user_id"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User extends BaseUpdatableEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "user_id")
+    private Long userId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id", nullable = false)
@@ -50,7 +54,6 @@ public class User extends BaseUpdatableEntity {
     @Column(nullable = false)
     private boolean emailVerified;
 
-    @Column(nullable = false)
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "notification_prefs", columnDefinition = "jsonb")
     private Map<String, Object> notificationPrefs;
