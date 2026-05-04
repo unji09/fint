@@ -2,16 +2,8 @@ package com.ssafy.fint.domain.user.entity;
 
 import com.ssafy.fint.domain.tenant.entity.Team;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
-import com.ssafy.fint.global.common.entity.BaseSoftDeletableEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import com.ssafy.fint.global.common.entity.BaseUpdatableEntity;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -29,14 +21,14 @@ import java.util.Map;
 @Table(name = "users")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class User extends BaseSoftDeletableEntity {
+public class User extends BaseUpdatableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
     private Long userId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
@@ -44,22 +36,23 @@ public class User extends BaseSoftDeletableEntity {
     @JoinColumn(name = "team_id")
     private Team team;
 
-    @Column(name = "role", nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private String role;
 
-    @Column(name = "email", length = 200)
+    @Column(length = 200)
     private String email;
 
-    @Column(name = "emp_no", length = 30)
+    @Column(length = 30)
     private String empNo;
 
-    @Column(name = "name", nullable = false, length = 50)
+    @Column(nullable = false, length = 50)
     private String name;
 
-    @Column(name = "password_hash", nullable = false, length = 200)
+    @Column(nullable = false, length = 200)
     private String passwordHash;
 
-    @Column(name = "email_verified", nullable = false)
+    @Column(nullable = false)
     private boolean emailVerified;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -69,6 +62,8 @@ public class User extends BaseSoftDeletableEntity {
     @Column(name = "login_fail_count", nullable = false)
     private int loginFailCount;
 
+    @Column(nullable = false)
+    private boolean isDeleted;
     @Builder
     private User(
             Tenant tenant,
@@ -96,8 +91,8 @@ public class User extends BaseSoftDeletableEntity {
         this.team = team;
     }
 
-    public void changeRole(String role) {
-        this.role = role;
+    public void changeRole(UserRole role) {
+        this.role = role.name();
     }
 
     public void changeName(String name) {
