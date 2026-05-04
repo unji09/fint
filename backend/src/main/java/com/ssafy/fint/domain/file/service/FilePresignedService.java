@@ -77,7 +77,7 @@ public class FilePresignedService {
 
         String fileKey = buildFileKey(req.purpose(), req.fileName(), req.meetingId(), req.contactId());
         long expiresIn = (req.purpose() == FilePurpose.OCR)
-                ? props.presign().downloadExpirationSeconds() // 규칙 §4: 5분
+                ? props.presign().ocrUploadExpirationSeconds() // 규칙 §4: OCR 업로드 5분
                 : props.presign().singleExpirationSeconds();
 
         try {

@@ -22,7 +22,8 @@ public record AwsS3Properties(
     public record Presign(
             long singleExpirationSeconds,
             long multipartExpirationSeconds,
-            long downloadExpirationSeconds
+            long downloadExpirationSeconds,
+            long ocrUploadExpirationSeconds
     ) {}
 
     /** SSE-KMS 키 설정. (S3 업로드 규칙 §1) */
