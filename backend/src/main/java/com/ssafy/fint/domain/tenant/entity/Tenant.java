@@ -1,27 +1,17 @@
 package com.ssafy.fint.domain.tenant.entity;
 
-import com.ssafy.fint.global.common.entity.BaseSoftDeletableEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.ssafy.fint.global.common.entity.BaseUpdatableEntity;
+import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * 테넌트(서비스 계약 단위 - 회사).
- * 모든 도메인의 최상위 격리 단위.
- */
 @Entity
 @Table(name = "tenants")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Tenant extends BaseSoftDeletableEntity {
-
+public class Tenant extends BaseUpdatableEntity {
     private static final String DEFAULT_PLAN = "BASIC";
 
     @Id
@@ -29,17 +19,20 @@ public class Tenant extends BaseSoftDeletableEntity {
     @Column(name = "tenant_id")
     private Long tenantId;
 
-    @Column(name = "name", nullable = false, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "company_code", nullable = false, length = 20, unique = true)
+    @Column(nullable = false, unique = true, length = 20)
     private String companyCode;
 
-    @Column(name = "biz_no", length = 20)
+    @Column(length = 20)
     private String bizNo;
 
-    @Column(name = "plan", length = 20)
+    @Column(length = 20)
     private String plan;
+
+    @Column(nullable = false)
+    private boolean isDeleted = false;
 
     @Builder
     private Tenant(String name, String companyCode, String bizNo, String plan) {
@@ -47,6 +40,7 @@ public class Tenant extends BaseSoftDeletableEntity {
         this.companyCode = companyCode;
         this.bizNo = bizNo;
         this.plan = (plan == null) ? DEFAULT_PLAN : plan;
+        this.isDeleted = false;
     }
 
     public void changeName(String name) {
