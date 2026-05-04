@@ -25,10 +25,6 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 활동(미팅/전화/업무/이메일).
- * 영업건(Deal) 또는 파이프라인 단계와 연결되며, STT 전사본/AI 요약 정보를 보유할 수 있다.
- */
 @Entity
 @Table(name = "activities")
 @Getter
@@ -76,6 +72,9 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "summary", columnDefinition = "jsonb")
     private Map<String, Object> summary;
 
+    @Column(name = "memo", columnDefinition = "TEXT")
+    private String memo;
+
     @Builder
     private Activity(
             Deal deal,
@@ -85,7 +84,8 @@ public class Activity extends BaseUpdatableEntity {
             String title,
             OffsetDateTime startAt,
             OffsetDateTime endAt,
-            List<Map<String, Object>> attendees
+            List<Map<String, Object>> attendees,
+            String memo
     ) {
         this.deal = deal;
         this.pipelineStage = pipelineStage;
@@ -95,6 +95,7 @@ public class Activity extends BaseUpdatableEntity {
         this.startAt = startAt;
         this.endAt = endAt;
         this.attendees = attendees;
+        this.memo = memo;
     }
 
     public void changeTitle(String title) {
@@ -132,5 +133,9 @@ public class Activity extends BaseUpdatableEntity {
 
     public void updateSummary(Map<String, Object> summary) {
         this.summary = summary;
+    }
+
+    public void changeMemo(String memo) {
+        this.memo = memo;
     }
 }
