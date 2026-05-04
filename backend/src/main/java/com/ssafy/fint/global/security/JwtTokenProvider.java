@@ -8,6 +8,7 @@ import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
@@ -52,6 +53,13 @@ public class JwtTokenProvider {
             .expiration(new Date(now.getTime() + refreshTokenValidMs))
             .signWith(key)
             .compact();
+    }
+
+    public String extractFromHeader(String authHeader) {
+        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+            throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
+        }
+        return authHeader.substring(7);
     }
 
     // ── 토큰 파싱 ─────────────────────────────────────────────────

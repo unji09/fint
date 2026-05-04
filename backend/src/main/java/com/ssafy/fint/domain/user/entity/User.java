@@ -36,6 +36,7 @@ public class User extends BaseUpdatableEntity {
     @JoinColumn(name = "team_id")
     private Team team;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private String role;
 
@@ -90,8 +91,8 @@ public class User extends BaseUpdatableEntity {
         this.team = team;
     }
 
-    public void changeRole(String role) {
-        this.role = role;
+    public void changeRole(UserRole role) {
+        this.role = role.name();
     }
 
     public void changeName(String name) {
