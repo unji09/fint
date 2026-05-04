@@ -53,7 +53,7 @@ public class AuthService {
 
         // 4. 토큰 발급
         String accessToken  = jwtTokenProvider.createAccessToken(
-            user.getUserId(), user.getRole(), tenant.getTenantId());
+            user.getUserId(), user.getRole().name(), tenant.getTenantId());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getUserId());
 
         // 5. Redis 에 refreshToken 저장
@@ -115,7 +115,7 @@ public class AuthService {
 
         // 4. 새 accessToken 발급
         String newAccessToken = jwtTokenProvider.createAccessToken(
-            user.getUserId(), user.getRole(), user.getTenant().getTenantId());
+            user.getUserId(), user.getRole().name(), user.getTenant().getTenantId());
 
         log.info("[Reissue] userId={}", userId);
 
