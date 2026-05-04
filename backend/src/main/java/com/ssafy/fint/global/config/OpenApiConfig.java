@@ -58,4 +58,12 @@ public class OpenApiConfig {
                 .pathsToMatch(ApiPath.V1 + "/activities/**")
                 .build();
     }
+
+    @Bean
+    public GroupedOpenApi customerApi() {
+        return GroupedOpenApi.builder()
+                .group("3. CUSTOMER API")
+                .pathsToMatch(ApiPath.V1 + "/accounts/**")
+                .build();
+    }
 }
