@@ -10,6 +10,7 @@ import java.util.Map;
 
 public record ActivityCreateResponse(
         Long activityId,
+        Long userId,
         ActivityType type,
         String title,
         OffsetDateTime startAt,
@@ -23,6 +24,7 @@ public record ActivityCreateResponse(
     public static ActivityCreateResponse from(Activity activity) {
         return new ActivityCreateResponse(
                 activity.getActivityId(),
+                activity.getUser().getUserId(),
                 activity.getType(),
                 activity.getTitle(),
                 activity.getStartAt(),
