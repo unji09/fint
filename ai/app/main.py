@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.core.db import close_db, init_db
 from app.core.errors import register_exception_handlers
 from app.core.redis import close_redis, init_redis
-from app.routers import health
+from app.routers import health, stt
 
 
 @asynccontextmanager
@@ -29,5 +29,6 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(health.router)
+    app.include_router(stt.router)
 
     return app
