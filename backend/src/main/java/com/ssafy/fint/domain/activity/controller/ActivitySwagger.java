@@ -1,5 +1,7 @@
 package com.ssafy.fint.domain.activity.controller;
 
+import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
+import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.global.ApiResponse;
@@ -20,4 +22,10 @@ public interface ActivitySwagger {
             ActivityType type,
             Pageable pageable
     );
+
+    @Operation(
+            summary = "영업 활동 등록",
+            description = "현재 테넌트의 활동을 등록한다. dealId·pipelineStageId 가 주어지면 동일 테넌트 소유 여부를 검증한다."
+    )
+    ApiResponse<ActivityCreateResponse> create(ActivityCreateRequest request);
 }
