@@ -14,6 +14,11 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
     clean-disabled: true
+  jpa:
+    properties:
+      hibernate:
+        # N+1 완화: @ManyToOne/@OneToMany lazy 로딩 시 IN 절로 묶어서 fetch
+        default_batch_fetch_size: 100
   jackson:
     use-jackson2-defaults: true
     time-zone: Asia/Seoul
