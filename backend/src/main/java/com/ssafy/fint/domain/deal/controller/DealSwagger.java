@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.deal.controller;
 
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
+import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,4 +18,10 @@ public interface DealSwagger {
             + "contactId 가 없으면 더미 담당자를 임시 등록 후 연결한다 (담당자 등록 명세 확정 시 정식 입력으로 교체 예정)."
     )
     ApiResponse<DealCreateResponse> create(DealCreateRequest request);
+
+    @Operation(
+        summary = "딜 상세 조회",
+        description = "현재 테넌트의 영업건 상세 정보를 조회한다. 연결된 고객사 담당자(contacts) 목록을 함께 반환한다."
+    )
+    ApiResponse<DealDetailResponse> findDetail(Long dealId);
 }

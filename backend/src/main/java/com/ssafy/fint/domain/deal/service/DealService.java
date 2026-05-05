@@ -6,6 +6,7 @@ import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.service.ContactService;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
+import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.DealContact;
 import com.ssafy.fint.domain.deal.repository.DealContactRepository;
@@ -77,6 +78,22 @@ public class DealService {
                 savedDeal.getDealId(), tenantId, request.accountId(), request.teamId(),
                 contactDetails.size());
         return DealCreateResponse.from(savedDeal, contactDetails);
+    }
+
+    public DealDetailResponse findDetail(Long dealId) {
+        Long tenantId = currentUser().getTenantId();
+
+        Deal deal = dealRepository.findByIdAndTenantId(dealId, tenantId)
+                .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
+
+        List<DealDetailResponse.ContactDetail> contacts = dealContactRepository
+                .findAllByDealId(deal.getDealId())
+                .stream()
+                .map(DealContact::getContact)
+                .map(DealDetailResponse.ContactDetail::from)
+                .toList();
+
+        return DealDetailResponse.of(deal, contacts);
     }
 
     private List<DealCreateResponse.ContactDetail> linkContacts(
