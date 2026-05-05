@@ -36,4 +36,11 @@ public interface ActivitySwagger {
                     + "dealId 쿼리 파라미터가 주어지면 활동의 dealId 와 일치하는지 검증하고 불일치 시 404 를 반환한다. "
     )
     ApiResponse<ActivityDetailResponse> detail(Long activityId, Long dealId);
+
+    @Operation(
+            summary = "영업 활동 삭제",
+            description = "본인이 만든 활동 단건을 삭제한다. 성공 시 204 No Content 를 반환하며, "
+                    + "같은 테넌트의 다른 사용자가 만든 활동이거나 미존재 ID 인 경우 404 를 반환한다."
+    )
+    void delete(Long activityId);
 }
