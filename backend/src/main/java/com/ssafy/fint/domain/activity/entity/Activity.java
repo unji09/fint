@@ -80,6 +80,10 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stt_status", nullable = false, length = 20)
+    private SttStatus sttStatus;
+
     @Builder
     private Activity(
             User user,
@@ -103,6 +107,11 @@ public class Activity extends BaseUpdatableEntity {
         this.endAt = endAt;
         this.attendees = attendees;
         this.memo = memo;
+        this.sttStatus = SttStatus.PENDING;
+    }
+
+    public void changeSttStatus(SttStatus sttStatus) {
+        this.sttStatus = sttStatus;
     }
 
     public void changeTitle(String title) {
