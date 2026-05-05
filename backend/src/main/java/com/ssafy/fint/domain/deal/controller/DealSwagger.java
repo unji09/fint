@@ -12,7 +12,9 @@ public interface DealSwagger {
     @Operation(
         summary = "딜 등록",
         description = "현재 테넌트의 영업건을 등록한다. accountId 는 필수이며 동일 테넌트 소유인지 검증한다. "
-            + "teamId 가 주어지면 동일 테넌트 소유 여부를 검증한다."
+            + "teamId 가 주어지면 동일 테넌트 소유 여부를 검증한다. "
+            + "contacts 배열로 담당자를 함께 연결한다. contactId 가 있으면 기존 담당자(딜의 고객사 소속만 허용)를 조회해 연결하고, "
+            + "contactId 가 없으면 더미 담당자를 임시 등록 후 연결한다 (담당자 등록 명세 확정 시 정식 입력으로 교체 예정)."
     )
     ApiResponse<DealCreateResponse> create(DealCreateRequest request);
 }
