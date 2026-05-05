@@ -29,7 +29,6 @@ public class DealService {
     private static final short DUMMY_PROBABILITY = 70;
 
     private final DealRepository dealRepository;
-    private final DealContactRepository dealContactRepository;
     private final AccountRepository accountRepository;
     private final TeamRepository teamRepository;
 
