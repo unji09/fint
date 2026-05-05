@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,5 +35,12 @@ public class DealController implements DealSwagger {
     @GetMapping("/{dealId}")
     public ApiResponse<DealDetailResponse> findDetail(@PathVariable Long dealId) {
         return ApiResponse.ok(dealService.findDetail(dealId));
+    }
+
+    @Override
+    @PatchMapping("/{dealId}/delete")
+    public ApiResponse<Void> softDelete(@PathVariable Long dealId) {
+        dealService.softDelete(dealId);
+        return ApiResponse.ok();
     }
 }

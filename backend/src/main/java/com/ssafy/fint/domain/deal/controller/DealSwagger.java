@@ -24,4 +24,11 @@ public interface DealSwagger {
         description = "현재 테넌트의 영업건 상세 정보를 조회한다. 연결된 고객사 담당자(contacts) 목록을 함께 반환한다."
     )
     ApiResponse<DealDetailResponse> findDetail(Long dealId);
+
+    @Operation(
+        summary = "딜 소프트 삭제",
+        description = "현재 테넌트의 영업건을 소프트 삭제한다 (deals.is_deleted = true). "
+            + "URL 충돌 회피를 위해 PATCH /deals/{dealId}/delete 로 라우팅한다."
+    )
+    ApiResponse<Void> softDelete(Long dealId);
 }

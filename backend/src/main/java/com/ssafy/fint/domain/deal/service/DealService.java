@@ -96,6 +96,17 @@ public class DealService {
         return DealDetailResponse.of(deal, contacts);
     }
 
+    @Transactional
+    public void softDelete(Long dealId) {
+        Long tenantId = currentUser().getTenantId();
+
+        Deal deal = dealRepository.findByIdAndTenantId(dealId, tenantId)
+                .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
+
+        deal.softDelete();
+        log.debug("[DealSoftDelete] dealId={} tenantId={}", dealId, tenantId);
+    }
+
     private List<DealCreateResponse.ContactDetail> linkContacts(
             Deal deal,
             Account account,
