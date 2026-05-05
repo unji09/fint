@@ -4,6 +4,8 @@ import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
 import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.domain.activity.service.ActivityListFilter;
 import com.ssafy.fint.domain.activity.service.ActivityService;
@@ -15,6 +17,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -56,6 +59,15 @@ public class ActivityController implements ActivitySwagger {
             @RequestParam(required = false) Long dealId
     ) {
         return ApiResponse.ok(activityService.findDetail(activityId, dealId));
+    }
+
+    @Override
+    @PatchMapping("/{activityId}")
+    public ApiResponse<ActivityUpdateResponse> update(
+            @PathVariable Long activityId,
+            @Valid @RequestBody ActivityUpdateRequest request
+    ) {
+        return ApiResponse.ok(activityService.update(activityId, request));
     }
 
     @Override

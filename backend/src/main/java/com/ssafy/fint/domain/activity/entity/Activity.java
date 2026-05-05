@@ -114,6 +114,10 @@ public class Activity extends BaseUpdatableEntity {
         this.sttStatus = sttStatus;
     }
 
+    public void changeType(ActivityType type) {
+        this.type = type;
+    }
+
     public void changeTitle(String title) {
         this.title = title;
     }
