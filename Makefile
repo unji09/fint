@@ -1,4 +1,4 @@
-.PHONY: doctor up down backend logs clean status monitoring-up monitoring-down
+.PHONY: doctor up down backend logs clean status monitoring-up monitoring-down ai ai-test ai-lint ai-format ai-docker
 
 SHELL := /usr/bin/env bash
 ROOT_DIR := $(shell pwd)
@@ -38,6 +38,7 @@ status:
 	@cd infra && docker compose ps
 	@echo ""
 	@curl -sf http://localhost:8080/actuator/health 2>/dev/null && echo "" || echo "Spring Boot: not running"
+	@curl -sf http://localhost:8000/health 2>/dev/null && echo "" || echo "FastAPI AI:  not running"
 
 # --- Monitoring ---
 
@@ -47,3 +48,20 @@ monitoring-up:
 
 monitoring-down:
 	@cd infra/monitoring && docker compose down
+
+# --- AI Service ---
+
+ai:
+	cd ai && uv run uvicorn app.main:create_app --factory --reload --port 8000
+
+ai-test:
+	cd ai && uv run pytest -v
+
+ai-lint:
+	cd ai && uv run ruff check . && uv run ruff format --check .
+
+ai-format:
+	cd ai && uv run ruff format .
+
+ai-docker:
+	docker build -t fint-ai:local ./ai
