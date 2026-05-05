@@ -58,6 +58,9 @@ public class SecurityConfig {
                     "/api/v1/auth/login",
                     "/api/v1/auth/reissue"
                 ).permitAll()
+                .requestMatchers(
+                    "/api/v1/files/**"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(

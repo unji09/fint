@@ -69,6 +69,7 @@ pipeline {
                         exit 1
                     fi
                     docker compose -f infra/docker-compose.dev.yml --env-file "$ENV_FILE" up -d
+                    docker restart fint-nginx
                 '''
             }
         }

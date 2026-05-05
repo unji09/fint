@@ -1,5 +1,8 @@
 package com.ssafy.fint.domain.activity.controller;
 
+import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
+import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.global.ApiResponse;
@@ -20,4 +23,24 @@ public interface ActivitySwagger {
             ActivityType type,
             Pageable pageable
     );
+
+    @Operation(
+            summary = "영업 활동 등록",
+            description = "현재 테넌트의 활동을 등록한다. dealId·pipelineStageId 가 주어지면 동일 테넌트 소유 여부를 검증한다."
+    )
+    ApiResponse<ActivityCreateResponse> create(ActivityCreateRequest request);
+
+    @Operation(
+            summary = "영업 활동 상세 조회",
+            description = "현재 테넌트의 활동 단건을 STT 전사본·AI 요약·attendees 와 함께 반환한다. "
+                    + "dealId 쿼리 파라미터가 주어지면 활동의 dealId 와 일치하는지 검증하고 불일치 시 404 를 반환한다. "
+    )
+    ApiResponse<ActivityDetailResponse> detail(Long activityId, Long dealId);
+
+    @Operation(
+            summary = "영업 활동 삭제",
+            description = "본인이 만든 활동 단건을 삭제한다. 성공 시 204 No Content 를 반환하며, "
+                    + "같은 테넌트의 다른 사용자가 만든 활동이거나 미존재 ID 인 경우 404 를 반환한다."
+    )
+    void delete(Long activityId);
 }

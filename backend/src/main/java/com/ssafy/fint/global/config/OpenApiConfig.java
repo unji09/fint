@@ -44,6 +44,14 @@ public class OpenApiConfig {
 
     // 도메인별 API 그룹. 도메인 추가될 때마다 여기에 Bean 하나씩 늘린다.
     @Bean
+    public GroupedOpenApi allApi() {
+        return GroupedOpenApi.builder()
+                .group("0. ALL API")
+                .pathsToMatch(ApiPath.V1 + "/**")
+                .build();
+    }
+
+    @Bean
     public GroupedOpenApi authApi() {
         return GroupedOpenApi.builder()
                 .group("1. AUTH API")
@@ -60,9 +68,17 @@ public class OpenApiConfig {
     }
 
     @Bean
+    public GroupedOpenApi fileApi() {
+        return GroupedOpenApi.builder()
+                .group("3. FILE API")
+                .pathsToMatch(ApiPath.V1 + "/files/**")
+                .build();
+    }
+
+    @Bean
     public GroupedOpenApi customerApi() {
         return GroupedOpenApi.builder()
-                .group("3. CUSTOMER API")
+                .group("4. CUSTOMER API")
                 .pathsToMatch(ApiPath.V1 + "/accounts/**")
                 .build();
     }
