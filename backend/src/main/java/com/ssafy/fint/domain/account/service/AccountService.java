@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.account.service;
 
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.user.entity.User;
@@ -45,6 +46,37 @@ public class AccountService {
         log.info("[AccountRegister] accountId={} userId={}", saved.getAccountId(), owner.getUserId());
 
         return AccountRegisterResponse.of(saved.getAccountId());
+    }
+
+    /**
+     * 고객사 부분 수정.
+     * 본인 소유 + 같은 tenant 인 account 만 수정 가능하다.
+     * null 인 필드는 변경되지 않으며, 모든 필드가 null 이면 no-op 이다.
+     */
+    @Transactional
+    public void update(Long accountId, AccountUpdateRequest request) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        Account account = accountRepository
+                .findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> {
+                    log.debug("[AccountUpdate] not found. accountId={} userId={} tenantId={}",
+                            accountId, userId, tenantId);
+                    return new BusinessException(CommonErrorCode.NOT_FOUND);
+                });
+
+        if (request.name() != null) {
+            account.changeName(request.name());
+        }
+        if (request.industry() != null) {
+            account.changeIndustry(request.industry());
+        }
+        if (request.bizNo() != null) {
+            account.changeBizNo(request.bizNo());
+        }
+
+        log.info("[AccountUpdate] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
     }
 
     /**

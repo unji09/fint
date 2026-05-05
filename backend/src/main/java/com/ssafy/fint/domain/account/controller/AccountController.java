@@ -2,11 +2,13 @@ package com.ssafy.fint.domain.account.controller;
 
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.service.AccountService;
 import com.ssafy.fint.global.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +28,16 @@ public class AccountController implements AccountSwagger {
             @Valid @RequestBody AccountRegisterRequest request
     ) {
         return ApiResponse.created(accountService.register(request));
+    }
+
+    @Override
+    @PatchMapping("/{accountId}")
+    public ApiResponse<Void> update(
+            @PathVariable Long accountId,
+            @Valid @RequestBody AccountUpdateRequest request
+    ) {
+        accountService.update(accountId, request);
+        return ApiResponse.ok();
     }
 
     @Override
