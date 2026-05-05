@@ -10,6 +10,8 @@ import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.deal.repository.DealRepository;
 import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
+import com.ssafy.fint.domain.user.entity.User;
+import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.ActivityErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -49,6 +52,7 @@ class ActivityServiceCreateTest {
 
     private static final Long CURRENT_TENANT_ID = 1L;
     private static final Long OTHER_TENANT_ID = 2L;
+    private static final Long CURRENT_USER_ID = 10L;
 
     @Mock
     private ActivityRepository activityRepository;
@@ -59,12 +63,15 @@ class ActivityServiceCreateTest {
     @Mock
     private PipelineStageRepository pipelineStageRepository;
 
+    @Mock
+    private UserRepository userRepository;
+
     @InjectMocks
     private ActivityService activityService;
 
     @BeforeEach
     void setAuthentication() {
-        CustomUserDetails principal = new CustomUserDetails(10L, CURRENT_TENANT_ID, "MEMBER");
+        CustomUserDetails principal = new CustomUserDetails(CURRENT_USER_ID, CURRENT_TENANT_ID, "MEMBER");
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
         );
@@ -88,6 +95,8 @@ class ActivityServiceCreateTest {
                 .thenReturn(Optional.of(deal));
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(5L, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(stage));
+        when(userRepository.getReferenceById(CURRENT_USER_ID))
+                .thenReturn(stubUser(CURRENT_USER_ID, CURRENT_TENANT_ID));
         when(activityRepository.save(any(Activity.class)))
                 .thenAnswer(invocation -> {
                     Activity a = invocation.getArgument(0);
@@ -109,6 +118,7 @@ class ActivityServiceCreateTest {
         ActivityCreateResponse res = activityService.create(req);
 
         assertThat(res.activityId()).isEqualTo(100L);
+        assertThat(res.userId()).isEqualTo(CURRENT_USER_ID);
         assertThat(res.type()).isEqualTo(ActivityType.MEETING);
         assertThat(res.title()).isEqualTo("Q2 미팅");
         assertThat(res.startAt()).isEqualTo(start);
@@ -118,6 +128,10 @@ class ActivityServiceCreateTest {
         assertThat(res.pipelineStage().stageId()).isEqualTo(5L);
         assertThat(res.pipelineStage().stageName()).isEqualTo("제안");
         assertThat(res.attendees()).hasSize(1);
+
+        ArgumentCaptor<Activity> captor = ArgumentCaptor.forClass(Activity.class);
+        verify(activityRepository).save(captor.capture());
+        assertThat(captor.getValue().getUser().getUserId()).isEqualTo(CURRENT_USER_ID);
     }
 
     @Test
@@ -126,6 +140,8 @@ class ActivityServiceCreateTest {
         OffsetDateTime start = OffsetDateTime.now();
         OffsetDateTime end = start.plusMinutes(30);
 
+        when(userRepository.getReferenceById(CURRENT_USER_ID))
+                .thenReturn(stubUser(CURRENT_USER_ID, CURRENT_TENANT_ID));
         when(activityRepository.save(any(Activity.class)))
                 .thenAnswer(invocation -> {
                     Activity a = invocation.getArgument(0);
@@ -147,12 +163,17 @@ class ActivityServiceCreateTest {
         ActivityCreateResponse res = activityService.create(req);
 
         assertThat(res.activityId()).isEqualTo(101L);
+        assertThat(res.userId()).isEqualTo(CURRENT_USER_ID);
         assertThat(res.dealId()).isNull();
         assertThat(res.pipelineStage()).isNull();
         assertThat(res.attendees()).isNull();
         assertThat(res.memo()).isNull();
         verify(dealRepository, never()).findByIdAndTenantId(any(), any());
         verify(pipelineStageRepository, never()).findByPipelineStageIdAndTenant_TenantId(any(), any());
+
+        ArgumentCaptor<Activity> captor = ArgumentCaptor.forClass(Activity.class);
+        verify(activityRepository).save(captor.capture());
+        assertThat(captor.getValue().getUser().getUserId()).isEqualTo(CURRENT_USER_ID);
     }
 
     @Test
@@ -242,5 +263,17 @@ class ActivityServiceCreateTest {
         PipelineStage stage = PipelineStage.builder().tenant(tenant).name(name).sortOrder(1).build();
         ReflectionTestUtils.setField(stage, "pipelineStageId", stageId);
         return stage;
+    }
+
+    private User stubUser(long userId, long tenantId) {
+        Tenant tenant = Tenant.builder().name("t").companyCode("C" + tenantId).build();
+        ReflectionTestUtils.setField(tenant, "tenantId", tenantId);
+        User user = User.builder()
+                .tenant(tenant)
+                .name("tester")
+                .passwordHash("x")
+                .build();
+        ReflectionTestUtils.setField(user, "userId", userId);
+        return user;
     }
 }

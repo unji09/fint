@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.activity.controller;
 
 import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
 import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.domain.activity.service.ActivityListFilter;
@@ -13,6 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,5 +46,14 @@ public class ActivityController implements ActivitySwagger {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<ActivityCreateResponse> create(@Valid @RequestBody ActivityCreateRequest request) {
         return ApiResponse.created(activityService.create(request));
+    }
+
+    @Override
+    @GetMapping("/{activityId}")
+    public ApiResponse<ActivityDetailResponse> detail(
+            @PathVariable Long activityId,
+            @RequestParam(required = false) Long dealId
+    ) {
+        return ApiResponse.ok(activityService.findDetail(activityId, dealId));
     }
 }

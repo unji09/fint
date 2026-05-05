@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.activity.entity;
 
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
+import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.global.common.entity.BaseUpdatableEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -35,6 +36,10 @@ public class Activity extends BaseUpdatableEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "activity_id")
     private Long activityId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "deal_id")
@@ -75,8 +80,13 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stt_status", nullable = false, length = 20)
+    private SttStatus sttStatus;
+
     @Builder
     private Activity(
+            User user,
             Deal deal,
             PipelineStage pipelineStage,
             ActivityType type,
@@ -87,6 +97,7 @@ public class Activity extends BaseUpdatableEntity {
             List<Map<String, Object>> attendees,
             String memo
     ) {
+        this.user = user;
         this.deal = deal;
         this.pipelineStage = pipelineStage;
         this.type = type;
@@ -96,6 +107,11 @@ public class Activity extends BaseUpdatableEntity {
         this.endAt = endAt;
         this.attendees = attendees;
         this.memo = memo;
+        this.sttStatus = SttStatus.PENDING;
+    }
+
+    public void changeSttStatus(SttStatus sttStatus) {
+        this.sttStatus = sttStatus;
     }
 
     public void changeTitle(String title) {
