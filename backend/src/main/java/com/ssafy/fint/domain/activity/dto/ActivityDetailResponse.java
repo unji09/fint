@@ -33,7 +33,7 @@ public record ActivityDetailResponse(
                 activity.getEndAt(),
                 Attendees.from(activity.getAttendees()),
                 activity.getMemo(),
-                null,
+                activity.getSttStatus() == null ? null : activity.getSttStatus().name(),
                 activity.getTranscript(),
                 activity.getSummary(),
                 PipelineStageResponse.from(activity.getPipelineStage()),

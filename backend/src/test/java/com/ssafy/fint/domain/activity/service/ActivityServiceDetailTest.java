@@ -3,11 +3,10 @@ package com.ssafy.fint.domain.activity.service;
 import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
+import com.ssafy.fint.domain.activity.entity.SttStatus;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
-import com.ssafy.fint.domain.deal.repository.DealRepository;
-import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.global.exception.ActivityErrorCode;
@@ -37,7 +36,6 @@ import static org.mockito.Mockito.when;
 
 /**
  * REQ-ACT 도메인 — 활동 상세 조회(GET /activities/{activityId}) 단위 테스트.
- *
  * tenant 격리는 Repository 레이어 책임이라 mock 으로 빈 결과를 흘리는 것으로 검증을 대체한다.
  * 본 테스트는 service 레이어의 dealId 검증과 attendees 변환에 집중한다.
  */
@@ -51,12 +49,6 @@ class ActivityServiceDetailTest {
 
     @Mock
     private ActivityRepository activityRepository;
-
-    @Mock
-    private DealRepository dealRepository;
-
-    @Mock
-    private PipelineStageRepository pipelineStageRepository;
 
     @InjectMocks
     private ActivityService activityService;
@@ -75,7 +67,7 @@ class ActivityServiceDetailTest {
     }
 
     @Test
-    @DisplayName("정상 조회 시 모든 필드를 변환해서 반환하고 sttStatus 는 null 이다.")
+    @DisplayName("정상 조회 시 모든 필드를 변환해서 반환하고 sttStatus 는 PENDING(기본값)으로 매핑된다.")
     void detailReturnsAllFields() {
         OffsetDateTime start = OffsetDateTime.of(2026, 4, 20, 10, 0, 0, 0, ZoneOffset.ofHours(9));
         OffsetDateTime end = start.plusHours(1);
@@ -99,7 +91,7 @@ class ActivityServiceDetailTest {
         assertThat(res.startAt()).isEqualTo(start);
         assertThat(res.endAt()).isEqualTo(end);
         assertThat(res.memo()).isEqualTo("고객이 예산 확인 필요");
-        assertThat(res.sttStatus()).isNull();
+        assertThat(res.sttStatus()).isEqualTo("PENDING");
         assertThat(res.transcript()).isNull();
         assertThat(res.summary()).isNull();
         assertThat(res.dealId()).isEqualTo(DEAL_ID);
@@ -107,6 +99,18 @@ class ActivityServiceDetailTest {
         assertThat(res.pipelineStage().stageName()).isEqualTo("제안");
         assertThat(res.attendees().internal()).containsExactly("홍길동");
         assertThat(res.attendees().external()).containsExactly("김철수");
+    }
+
+    @Test
+    @DisplayName("STT 가 완료된 활동은 sttStatus 가 'COMPLETED' 로 매핑된다.")
+    void detailMapsCompletedSttStatus() {
+        Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
+        activity.changeSttStatus(SttStatus.COMPLETED);
+        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+
+        ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
+
+        assertThat(res.sttStatus()).isEqualTo("COMPLETED");
     }
 
     @Test
