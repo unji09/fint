@@ -51,7 +51,7 @@ public class ActivityService {
                 .orElseThrow(() -> {
                     log.debug("[ActivityDetail] not found. activityId={} tenantId={} dealIdFilter={}",
                             activityId, tenantId, dealIdFilter);
-                    return new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND);
+                    return activityNotFound();
                 });
 
         if (dealIdFilter != null) {
@@ -59,7 +59,7 @@ public class ActivityService {
             if (!dealIdFilter.equals(activityDealId)) {
                 log.debug("[ActivityDetail] dealId mismatch. activityId={} tenantId={} dealIdFilter={} actualDealId={}",
                         activityId, tenantId, dealIdFilter, activityDealId);
-                throw new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND);
+                throw activityNotFound();
             }
         }
 
@@ -105,6 +105,27 @@ public class ActivityService {
         log.debug("[ActivityCreate] activityId={} tenantId={} userId={} dealId={} pipelineStageId={}",
                 saved.getActivityId(), tenantId, userId, request.dealId(), request.pipelineStageId());
         return ActivityCreateResponse.from(saved);
+    }
+
+    @Transactional
+    public void delete(Long activityId) {
+        Long tenantId = currentTenantId();
+        Long userId = currentUserId();
+
+        Activity activity = activityRepository
+                .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(activityId, userId, tenantId)
+                .orElseThrow(() -> {
+                    log.debug("[ActivityDelete] not found. activityId={} userId={} tenantId={}",
+                            activityId, userId, tenantId);
+                    return activityNotFound();
+                });
+
+        activityRepository.delete(activity);
+        log.info("[ActivityDelete] activityId={} userId={} tenantId={}", activityId, userId, tenantId);
+    }
+
+    private BusinessException activityNotFound() {
+        return new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND);
     }
 
     @Transactional
