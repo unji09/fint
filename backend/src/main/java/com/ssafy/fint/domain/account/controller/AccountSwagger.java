@@ -20,5 +20,5 @@ public interface AccountSwagger {
             description = "본인이 소유한 고객사를 소프트 삭제한다(is_deleted=true). " +
                     "타 사용자 / 타 테넌트 소유 또는 미존재는 모두 NOT_FOUND 로 응답한다."
     )
-    void delete(Long accountId);
+    ApiResponse<Void> delete(Long accountId);
 }
