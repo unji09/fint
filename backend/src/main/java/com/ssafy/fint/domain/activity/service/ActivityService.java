@@ -3,6 +3,8 @@ package com.ssafy.fint.domain.activity.service;
 import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
 import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.entity.Deal;
@@ -14,8 +16,11 @@ import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.ActivityErrorCode;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
+import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+
+import java.time.OffsetDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -100,6 +105,48 @@ public class ActivityService {
         log.debug("[ActivityCreate] activityId={} tenantId={} userId={} dealId={} pipelineStageId={}",
                 saved.getActivityId(), tenantId, userId, request.dealId(), request.pipelineStageId());
         return ActivityCreateResponse.from(saved);
+    }
+
+    @Transactional
+    public ActivityUpdateResponse update(Long activityId, ActivityUpdateRequest request) {
+        Long tenantId = currentTenantId();
+        Long userId = currentUserId();
+
+        Activity activity = activityRepository.findDetail(activityId)
+                .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
+        if (!activity.getUser().getUserId().equals(userId)) {
+            throw new BusinessException(CommonErrorCode.FORBIDDEN);
+        }
+
+        if (request.title() != null && request.title().isBlank()) {
+            throw new BusinessException(ActivityErrorCode.BLANK_TITLE);
+        }
+        OffsetDateTime start = request.startAt() != null ? request.startAt() : activity.getStartAt();
+        OffsetDateTime end = request.endAt() != null ? request.endAt() : activity.getEndAt();
+        if (end.isBefore(start)) {
+            throw new BusinessException(ActivityErrorCode.INVALID_TIME_RANGE);
+        }
+
+        if (request.dealId() != null) {
+            activity.changeDeal(dealRepository.findByIdAndTenantId(request.dealId(), tenantId)
+                    .orElseThrow(() -> new BusinessException(ActivityErrorCode.DEAL_NOT_FOUND)));
+        }
+        if (request.pipelineStageId() != null) {
+            activity.changePipelineStage(pipelineStageRepository
+                    .findByPipelineStageIdAndTenant_TenantId(request.pipelineStageId(), tenantId)
+                    .orElseThrow(() -> new BusinessException(ActivityErrorCode.PIPELINE_STAGE_NOT_FOUND)));
+        }
+        if (request.type() != null) activity.changeType(request.type());
+        if (request.title() != null) activity.changeTitle(request.title());
+        if (request.startAt() != null || request.endAt() != null) {
+            activity.changeSchedule(start, end);
+        }
+        if (request.attendees() != null) activity.changeAttendees(request.attendees());
+        if (request.memo() != null) activity.changeMemo(request.memo());
+
+        Activity saved = activityRepository.saveAndFlush(activity);
+        log.debug("[ActivityUpdate] activityId={} tenantId={} userId={}", saved.getActivityId(), tenantId, userId);
+        return ActivityUpdateResponse.from(saved);
     }
 
     private Long currentTenantId() {
