@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-
 @RestController
 @RequestMapping("/deals")
 @RequiredArgsConstructor
@@ -27,6 +26,4 @@ public class DealController implements DealSwagger {
     public ApiResponse<DealCreateResponse> create(@Valid @RequestBody DealCreateRequest request) {
         return ApiResponse.created(dealService.create(request));
     }
-
-
 }

@@ -5,7 +5,6 @@ import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.entity.Deal;
-import com.ssafy.fint.domain.deal.repository.DealContactRepository;
 import com.ssafy.fint.domain.deal.repository.DealRepository;
 import com.ssafy.fint.domain.tenant.entity.Team;
 import com.ssafy.fint.domain.tenant.repository.TeamRepository;

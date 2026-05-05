@@ -6,7 +6,6 @@ import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-
 @Tag(name = "Deal", description = "영업건(Deal) 관리 API")
 public interface DealSwagger {
 
@@ -16,6 +15,4 @@ public interface DealSwagger {
             + "teamId 가 주어지면 동일 테넌트 소유 여부를 검증한다."
     )
     ApiResponse<DealCreateResponse> create(DealCreateRequest request);
-
-
 }
