@@ -7,10 +7,14 @@ import com.ssafy.fint.domain.account.service.ContactService;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
+import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
+import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.DealContact;
+import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.deal.repository.DealContactRepository;
 import com.ssafy.fint.domain.deal.repository.DealRepository;
+import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
 import com.ssafy.fint.domain.tenant.entity.Team;
 import com.ssafy.fint.domain.tenant.repository.TeamRepository;
 import com.ssafy.fint.domain.user.entity.User;
@@ -45,6 +49,7 @@ public class DealService {
     private final ContactService contactService;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
+    private final PipelineStageRepository pipelineStageRepository;
 
     @Transactional
     public DealCreateResponse create(DealCreateRequest request) {
@@ -80,8 +85,51 @@ public class DealService {
         return DealCreateResponse.from(savedDeal, contactDetails);
     }
 
-    public DealDetailResponse findDetail(Long dealId) {
-        Long tenantId = currentUser().getTenantId();
+    /**
+     * 딜 부분 수정. null 이 아닌 필드만 반영한다.
+     * pipelineStageId 가 주어지면 단계 변경까지 동일 트랜잭션에서 처리한다.
+     *
+     * won/lost 처리 규칙:
+     * - lostReason 만 단독으로 들어오면 deal 의 기존 lostAt 을 유지한 채 reason 만 갱신
+     */
+    @Transactional
+    public DealUpdateResponse update(CustomUserDetails me, Long dealId, DealUpdateRequest request) {
+        Long tenantId = me.getTenantId();
+
+        Deal deal = dealRepository.findByIdAndTenantId(dealId, tenantId)
+                .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
+
+        if (request.title() != null) {
+            deal.changeTitle(request.title());
+        }
+        if (request.amount() != null) {
+            deal.changeAmount(request.amount());
+        }
+        if (request.expectedClose() != null) {
+            deal.changeExpectedClose(request.expectedClose());
+        }
+        if (request.wonAt() != null) {
+            deal.markWon(request.wonAt());
+        }
+        if (request.lostAt() != null) {
+            deal.markLost(request.lostAt(), request.lostReason());
+        } else if (request.lostReason() != null && deal.getLostAt() != null) {
+            deal.markLost(deal.getLostAt(), request.lostReason());
+        }
+        if (request.pipelineStageId() != null) {
+            PipelineStage stage = pipelineStageRepository
+                    .findByPipelineStageIdAndTenant_TenantId(request.pipelineStageId(), tenantId)
+                    .orElseThrow(() -> new BusinessException(DealErrorCode.PIPELINE_STAGE_NOT_FOUND));
+            deal.moveToStage(stage.getName());
+        }
+
+        log.debug("[DealUpdate] dealId={} tenantId={} pipelineStageId={}",
+                dealId, tenantId, request.pipelineStageId());
+        return DealUpdateResponse.from(deal);
+    }
+
+    public DealDetailResponse findDetail(CustomUserDetails me, Long dealId) {
+        Long tenantId = me.getTenantId();
 
         Deal deal = dealRepository.findByIdAndTenantId(dealId, tenantId)
                 .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));

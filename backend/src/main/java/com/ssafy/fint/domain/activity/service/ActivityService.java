@@ -5,10 +5,12 @@ import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
+import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.deal.repository.DealRepository;
 import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
+import com.ssafy.fint.domain.deal.service.DealService;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.ActivityErrorCode;
@@ -34,6 +36,7 @@ public class ActivityService {
     private final DealRepository dealRepository;
     private final PipelineStageRepository pipelineStageRepository;
     private final UserRepository userRepository;
+    private final DealService dealService;
 
     public Page<Activity> findAll(ActivityListFilter filter, Pageable pageable) {
         return activityRepository.search(filter, pageable);
@@ -67,8 +70,9 @@ public class ActivityService {
             throw new BusinessException(ActivityErrorCode.INVALID_TIME_RANGE);
         }
 
-        Long tenantId = currentTenantId();
-        Long userId = currentUserId();
+        CustomUserDetails me = currentPrincipal();
+        Long tenantId = me.getTenantId();
+        Long userId = me.getUserId();
 
         Deal deal = null;
         if (request.dealId() != null) {
@@ -97,6 +101,14 @@ public class ActivityService {
                 .build();
 
         Activity saved = activityRepository.save(activity);
+
+        // 활동에 딜과 단계가 모두 지정된 경우, 딜의 currentPipeline 을 최신 활동 기준으로 갱신.
+        // (Deal 의 단계는 가장 최근 활동의 stage 를 따른다는 도메인 규칙)
+        if (request.dealId() != null && request.pipelineStageId() != null) {
+            dealService.update(me, request.dealId(),
+                    DealUpdateRequest.pipelineStageOnly(request.pipelineStageId()));
+        }
+
         log.debug("[ActivityCreate] activityId={} tenantId={} userId={} dealId={} pipelineStageId={}",
                 saved.getActivityId(), tenantId, userId, request.dealId(), request.pipelineStageId());
         return ActivityCreateResponse.from(saved);

@@ -3,7 +3,10 @@ package com.ssafy.fint.domain.deal.controller;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
+import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
+import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.global.ApiResponse;
+import com.ssafy.fint.global.security.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -24,6 +27,13 @@ public interface DealSwagger {
         description = "현재 테넌트의 영업건 상세 정보를 조회한다. 연결된 고객사 담당자(contacts) 목록을 함께 반환한다."
     )
     ApiResponse<DealDetailResponse> findDetail(Long dealId);
+    @Operation(
+        summary = "딜 수정",
+        description = "현재 테넌트의 영업건을 부분 수정한다. null 이 아닌 필드만 반영된다. "
+            + "pipelineStageId 는 활동 등록 시 단계 자동 추적 용도로 통합된 필드이며, "
+            + "본 PATCH 호출에서도 직접 단계 변경 용도로 사용 가능하다."
+    )
+    ApiResponse<DealUpdateResponse> update(CustomUserDetails me, Long dealId, DealUpdateRequest request);
 
     @Operation(
         summary = "딜 소프트 삭제",

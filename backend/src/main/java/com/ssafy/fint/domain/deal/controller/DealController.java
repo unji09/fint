@@ -3,11 +3,15 @@ package com.ssafy.fint.domain.deal.controller;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
+import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
+import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.domain.deal.service.DealService;
 import com.ssafy.fint.global.ApiResponse;
+import com.ssafy.fint.global.security.CustomUserDetails;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,6 +39,14 @@ public class DealController implements DealSwagger {
     @GetMapping("/{dealId}")
     public ApiResponse<DealDetailResponse> findDetail(@PathVariable Long dealId) {
         return ApiResponse.ok(dealService.findDetail(dealId));
+    @Override
+    @PatchMapping("/{dealId}")
+    public ApiResponse<DealUpdateResponse> update(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dealId,
+            @RequestBody DealUpdateRequest request
+    ) {
+        return ApiResponse.ok(dealService.update(me, dealId, request));
     }
 
     @Override
