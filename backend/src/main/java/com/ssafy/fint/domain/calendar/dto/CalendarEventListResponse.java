@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.calendar.dto;
 
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
+import com.ssafy.fint.domain.calendar.CalendarEventConstants;
 import com.ssafy.fint.domain.deal.dto.PipelineStageResponse;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import org.springframework.data.domain.Page;
@@ -32,14 +33,11 @@ public record CalendarEventListResponse(
             Long linkedActivityId
     ) {
 
-        private static final String SOURCE_FINT = "FINT";
-        private static final String EVENT_ID_PREFIX_FINT = "act-";
-
         public static Item fromActivity(Activity activity) {
             Deal deal = activity.getDeal();
             return new Item(
-                    EVENT_ID_PREFIX_FINT + activity.getActivityId(),
-                    SOURCE_FINT,
+                    CalendarEventConstants.EVENT_ID_PREFIX_FINT + activity.getActivityId(),
+                    CalendarEventConstants.SOURCE_FINT,
                     activity.getTitle(),
                     activity.getStartAt(),
                     activity.getEndAt(),
