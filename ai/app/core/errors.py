@@ -83,7 +83,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         if matched:
             body = ApiResponse.fail(matched.status, matched.code, str(exc.detail))
         else:
-            body = ApiResponse.fail(exc.status_code, None, str(exc.detail))  # type: ignore[arg-type]
+            body = ApiResponse.fail(exc.status_code, None, str(exc.detail))
         return JSONResponse(status_code=exc.status_code, content=body.model_dump())
 
     @app.exception_handler(Exception)

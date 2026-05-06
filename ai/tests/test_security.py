@@ -107,7 +107,7 @@ async def test_jwt_takes_priority_over_header(mock_settings, client):
 
 @pytest.mark.asyncio
 @patch("app.core.security.get_settings")
-async def test_jwt_without_tenant_id_claim_falls_back_to_header(mock_settings, client):
+async def test_jwt_without_tenant_id_claim_returns_401(mock_settings, client):
     mock_settings.return_value.JWT_SECRET = JWT_SECRET
     token = _make_token({"user_id": 1})
 
@@ -116,8 +116,8 @@ async def test_jwt_without_tenant_id_claim_falls_back_to_header(mock_settings, c
         headers={"Authorization": f"Bearer {token}", "X-Tenant-Id": "5"},
     )
 
-    assert resp.status_code == 200
-    assert resp.json()["tenant_id"] == 5
+    assert resp.status_code == 401
+    assert resp.json()["message"] == "Missing tenant_id in token"
 
 
 @pytest.mark.asyncio
