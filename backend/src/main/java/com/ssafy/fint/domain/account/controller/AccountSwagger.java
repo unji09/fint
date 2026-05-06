@@ -2,10 +2,13 @@ package com.ssafy.fint.domain.account.controller;
 
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
+import java.util.List;
 
 @Tag(name = "Customer", description = "고객사(Account) 정보 관리 API")
 public interface AccountSwagger {
@@ -29,4 +32,12 @@ public interface AccountSwagger {
                     "타 사용자 / 타 테넌트 소유 또는 미존재는 모두 NOT_FOUND 로 응답한다."
     )
     ApiResponse<Void> delete(Long accountId);
+
+    @Operation(
+            summary = "고객사 시그널 조회",
+            description = "고객사 관련 외부 시그널(NEWS/DART)을 occurred_at 내림차순으로 조회한다. " +
+                    "source 미지정 시 모든 출처 통합, 지정 시 해당 출처만. size 미지정 시 기본 20 건. " +
+                    "타 사용자 / 타 테넌트 소유 또는 미존재는 NOT_FOUND 로 응답한다."
+    )
+    ApiResponse<List<AccountSignalResponse>> findSignals(Long accountId, String source, Integer size);
 }

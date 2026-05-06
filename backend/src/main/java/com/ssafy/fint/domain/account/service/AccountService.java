@@ -2,8 +2,10 @@ package com.ssafy.fint.domain.account.service;
 
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
+import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
@@ -13,10 +15,13 @@ import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -24,7 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class AccountService {
 
+    private static final int DEFAULT_SIGNAL_SIZE = 20;
+
     private final AccountRepository accountRepository;
+    private final AccountExternalInfoRepository accountExternalInfoRepository;
     private final UserRepository userRepository;
 
     /**
@@ -99,6 +107,31 @@ public class AccountService {
 
         account.softDelete();
         log.info("[AccountDelete] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
+    }
+
+    /**
+     * 고객사 외부 시그널(NEWS/DART) 조회.
+     * 본인 소유 + 같은 tenant 검증 후 occurred_at 내림차순으로 size 만큼 반환한다.
+     * source 미지정 시 모든 출처 통합, 지정 시 해당 출처만. size 미지정 시 기본 20 건.
+     */
+    public List<AccountSignalResponse> findSignals(Long accountId, String source, Integer size) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        accountRepository
+                .findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> {
+                    log.debug("[AccountFindSignals] not found. accountId={} userId={} tenantId={}",
+                            accountId, userId, tenantId);
+                    return new BusinessException(CommonErrorCode.NOT_FOUND);
+                });
+
+        int limit = size != null ? size : DEFAULT_SIGNAL_SIZE;
+        return accountExternalInfoRepository
+                .findRecentByAccountAndOptionalSource(accountId, source, PageRequest.of(0, limit))
+                .stream()
+                .map(AccountSignalResponse::from)
+                .toList();
     }
 
     private Long currentUserId() {
