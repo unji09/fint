@@ -33,5 +33,5 @@ class ApiResponse(BaseModel, Generic[T]):
         return cls(status=201, message="success", data=data)
 
     @classmethod
-    def fail(cls, status: int, code: str, message: str) -> "ApiResponse[None]":
+    def fail(cls, status: int, code: str | None, message: str) -> "ApiResponse[None]":
         return cls(status=status, code=code, message=message)

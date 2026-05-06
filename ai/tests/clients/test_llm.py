@@ -1,14 +1,12 @@
-import pytest
-from unittest.mock import patch
 
-from app.clients import get_llm_client, get_openai_client, get_anthropic_client, get_whisper_client, get_s3_client
-from app.clients.openai import OpenAIClient
+import pytest
+
+from app.clients import get_anthropic_client, get_llm_client, get_openai_client, get_s3_client, get_whisper_client
 from app.clients.anthropic import AnthropicClient
-from app.clients.whisper import OpenAIWhisperClient
-from app.clients.s3 import BotoS3Client
 from app.clients.llm import LLMClient
-from app.clients.whisper import WhisperClient
-from app.clients.s3 import S3Client
+from app.clients.openai import OpenAIClient
+from app.clients.s3 import BotoS3Client, S3Client
+from app.clients.whisper import OpenAIWhisperClient, WhisperClient
 from app.core.config import Settings
 from app.core.errors import BusinessException
 

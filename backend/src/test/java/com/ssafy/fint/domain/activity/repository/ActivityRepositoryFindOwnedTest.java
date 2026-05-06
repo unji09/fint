@@ -20,15 +20,15 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * REQ-ACT 도메인 — 활동 상세 조회(findDetail) 의 tenant 격리 검증.
- * Service 단위 테스트는 mock 으로 우회되어 실제 격리 동작을 검증할 수 없으므로,
- * Testcontainers PostgreSQL 위에서 QueryDSL 쿼리가 다른 테넌트 활동을 차단하는지를 직접 확인한다.
- * 격리는 activity.user.tenant.tenantId 단일 경로로 수행된다.
+ * REQ-ACT 도메인 — 활동 단건 삭제 시 사용하는
+ * findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId 의 격리 검증.
+ * Spring Data 메서드 네이밍이 실제 JPA 매핑과 일치하는지(=부팅 시 PropertyReferenceException 미발생),
+ * Testcontainers PostgreSQL 위에서 user_id + tenant_id 두 조건이 모두 강제되는지를 확인한다.
  */
 @SpringBootTest
 @Import(TestcontainersConfig.class)
 @Transactional
-class ActivityRepositoryFindDetailTest {
+class ActivityRepositoryFindOwnedTest {
 
     @Autowired
     private ActivityRepository activityRepository;
@@ -37,27 +37,46 @@ class ActivityRepositoryFindDetailTest {
     private EntityManager em;
 
     @Test
-    @DisplayName("같은 테넌트 사용자가 만든 활동은 findDetail 로 조회된다.")
-    void findsActivityWhenOwnerBelongsToCurrentTenant() {
+    @DisplayName("본인 + 같은 테넌트 활동은 조회된다.")
+    void findsWhenOwnerAndTenantMatch() {
         Tenant tenant = persistTenant("tenant-A", "TA");
         User owner = persistUser(tenant, "owner-A");
         Activity activity = persistActivity(owner);
 
-        Optional<Activity> result = activityRepository.findDetail(tenant.getTenantId(), activity.getActivityId());
+        Optional<Activity> result = activityRepository
+                .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(
+                        activity.getActivityId(), owner.getUserId(), tenant.getTenantId());
 
         assertThat(result).isPresent();
         assertThat(result.get().getActivityId()).isEqualTo(activity.getActivityId());
     }
 
     @Test
-    @DisplayName("다른 테넌트 사용자가 만든 활동은 findDetail 로 조회되지 않는다.")
-    void rejectsActivityOfAnotherTenant() {
+    @DisplayName("같은 테넌트 다른 사용자가 만든 활동은 조회되지 않는다.")
+    void rejectsWhenOwnerDiffers() {
+        Tenant tenant = persistTenant("tenant-A", "TA");
+        User ownerOfActivity = persistUser(tenant, "owner-A");
+        User caller = persistUser(tenant, "caller-A");
+        Activity activity = persistActivity(ownerOfActivity);
+
+        Optional<Activity> result = activityRepository
+                .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(
+                        activity.getActivityId(), caller.getUserId(), tenant.getTenantId());
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("activity 의 소유자가 다른 테넌트 소속이면 조회되지 않는다.")
+    void rejectsWhenTenantDiffers() {
         Tenant tenantA = persistTenant("tenant-A", "TA");
         Tenant tenantB = persistTenant("tenant-B", "TB");
         User ownerOfA = persistUser(tenantA, "owner-A");
         Activity activity = persistActivity(ownerOfA);
 
-        Optional<Activity> result = activityRepository.findDetail(tenantB.getTenantId(), activity.getActivityId());
+        Optional<Activity> result = activityRepository
+                .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(
+                        activity.getActivityId(), ownerOfA.getUserId(), tenantB.getTenantId());
 
         assertThat(result).isEmpty();
     }

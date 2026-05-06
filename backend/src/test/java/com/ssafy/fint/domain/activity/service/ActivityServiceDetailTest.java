@@ -81,7 +81,7 @@ class ActivityServiceDetailTest {
                 ),
                 "고객이 예산 확인 필요"
         );
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
 
@@ -106,7 +106,7 @@ class ActivityServiceDetailTest {
     void detailMapsCompletedSttStatus() {
         Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
         activity.changeSttStatus(SttStatus.COMPLETED);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
 
@@ -116,7 +116,7 @@ class ActivityServiceDetailTest {
     @Test
     @DisplayName("Repository 에서 비어있게 반환되면 ACTIVITY_NOT_FOUND 로 차단된다.")
     void notFoundWhenRepositoryReturnsEmpty() {
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.empty());
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> activityService.findDetail(ACTIVITY_ID, null))
                 .isInstanceOf(BusinessException.class)
@@ -128,7 +128,7 @@ class ActivityServiceDetailTest {
     @DisplayName("dealId 쿼리 파라미터가 활동의 dealId 와 일치하면 정상 반환된다.")
     void detailPassesWhenDealIdMatches() {
         Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, DEAL_ID);
 
@@ -139,7 +139,7 @@ class ActivityServiceDetailTest {
     @DisplayName("dealId 쿼리 파라미터가 활동의 dealId 와 다르면 ACTIVITY_NOT_FOUND 로 차단된다.")
     void detailRejectsWhenDealIdMismatches() {
         Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         assertThatThrownBy(() -> activityService.findDetail(ACTIVITY_ID, 999L))
                 .isInstanceOf(BusinessException.class)
@@ -151,7 +151,7 @@ class ActivityServiceDetailTest {
     @DisplayName("dealId 쿼리 파라미터가 주어졌지만 활동이 딜에 연결되어 있지 않으면 ACTIVITY_NOT_FOUND 로 차단된다.")
     void detailRejectsWhenActivityHasNoDeal() {
         Activity activity = newActivityWithoutDeal();
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         assertThatThrownBy(() -> activityService.findDetail(ACTIVITY_ID, DEAL_ID))
                 .isInstanceOf(BusinessException.class)
@@ -163,7 +163,7 @@ class ActivityServiceDetailTest {
     @DisplayName("attendees 가 null 이면 internal·external 모두 빈 리스트로 응답된다.")
     void detailReturnsEmptyAttendeesWhenNull() {
         Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
 
@@ -180,7 +180,7 @@ class ActivityServiceDetailTest {
                 List.of(Map.of("name", "김영업")),
                 null
         );
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
 

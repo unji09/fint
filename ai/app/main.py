@@ -1,5 +1,5 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -12,7 +12,10 @@ from app.routers import health, stt
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    import logging
+
     settings = get_settings()
+    logging.basicConfig(level=settings.LOG_LEVEL, force=True)
     init_db(settings.database_url)
     init_redis(settings.redis_url)
     yield
