@@ -9,16 +9,12 @@ import com.ssafy.fint.domain.activity.entity.QActivity;
 import com.ssafy.fint.domain.activity.service.ActivityListFilter;
 import com.ssafy.fint.domain.deal.entity.QDeal;
 import com.ssafy.fint.domain.deal.entity.QPipelineStage;
-import com.ssafy.fint.global.exception.AuthErrorCode;
-import com.ssafy.fint.global.exception.BusinessException;
-import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,9 +24,7 @@ public class ActivityRepositoryImpl implements ActivityRepositoryCustom {
     private final JPAQueryFactory queryFactory;
 
     @Override
-    public Page<Activity> search(ActivityListFilter filter, Pageable pageable) {
-        Long tenantId = currentTenantId();
-
+    public Page<Activity> search(Long tenantId, ActivityListFilter filter, Pageable pageable) {
         QActivity activity = QActivity.activity;
         QDeal deal = new QDeal("deal");
         QAccount account = new QAccount("account");
@@ -87,9 +81,46 @@ public class ActivityRepositoryImpl implements ActivityRepositoryCustom {
     }
 
     @Override
-    public Optional<Activity> findDetail(Long activityId) {
-        Long tenantId = currentTenantId();
+    public Page<Activity> searchByDateRange(
+            Long userId,
+            Long tenantId,
+            OffsetDateTime startInclusive,
+            OffsetDateTime endExclusive,
+            Pageable pageable
+    ) {
+        QActivity activity = QActivity.activity;
+        QDeal deal = new QDeal("deal");
+        QAccount account = new QAccount("account");
+        QPipelineStage stage = new QPipelineStage("stage");
 
+        BooleanBuilder where = new BooleanBuilder()
+                .and(activity.user.userId.eq(userId))
+                .and(activity.user.tenant.tenantId.eq(tenantId))
+                .and(activity.startAt.lt(endExclusive))
+                .and(activity.endAt.gt(startInclusive));
+
+        List<Activity> content = queryFactory
+                .selectFrom(activity)
+                .leftJoin(activity.deal, deal).fetchJoin()
+                .leftJoin(deal.account, account).fetchJoin()
+                .leftJoin(activity.pipelineStage, stage).fetchJoin()
+                .where(where)
+                .orderBy(activity.startAt.asc(), activity.activityId.asc())
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .fetch();
+
+        Long total = queryFactory
+                .select(activity.count())
+                .from(activity)
+                .where(where)
+                .fetchOne();
+
+        return new PageImpl<>(content, pageable, total == null ? 0L : total);
+    }
+
+    @Override
+    public Optional<Activity> findDetail(Long tenantId, Long activityId) {
         QActivity activity = QActivity.activity;
         QDeal deal = new QDeal("deal");
         QPipelineStage stage = new QPipelineStage("stage");
@@ -103,13 +134,5 @@ public class ActivityRepositoryImpl implements ActivityRepositoryCustom {
                 .fetchOne();
 
         return Optional.ofNullable(result);
-    }
-
-    private Long currentTenantId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof CustomUserDetails me)) {
-            throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
-        }
-        return me.getTenantId();
     }
 }
