@@ -90,7 +90,7 @@ class ActivityServiceUpdateTest {
         OffsetDateTime origStart = OffsetDateTime.of(2026, 4, 20, 9, 0, 0, 0, ZoneOffset.ofHours(9));
         OffsetDateTime origEnd = origStart.plusHours(1);
         Activity activity = newActivityOwnedByCurrentUser(origStart, origEnd);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         OffsetDateTime newStart = origStart.plusHours(1);
         OffsetDateTime newEnd = newStart.plusMinutes(90);
@@ -131,7 +131,7 @@ class ActivityServiceUpdateTest {
         OffsetDateTime origStart = OffsetDateTime.of(2026, 4, 20, 9, 0, 0, 0, ZoneOffset.ofHours(9));
         OffsetDateTime origEnd = origStart.plusHours(1);
         Activity activity = newActivityOwnedByCurrentUser(origStart, origEnd);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityUpdateRequest req = new ActivityUpdateRequest(
                 null, null, null, null, null, null, null, "memo only");
@@ -149,7 +149,7 @@ class ActivityServiceUpdateTest {
     @DisplayName("endAt 이 startAt 보다 이른 경우 INVALID_TIME_RANGE 로 차단된다.")
     void rejectEndBeforeStartFromBothFields() {
         Activity activity = newActivityOwnedByCurrentUser();
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         OffsetDateTime newStart = OffsetDateTime.now();
         ActivityUpdateRequest req = new ActivityUpdateRequest(
@@ -167,7 +167,7 @@ class ActivityServiceUpdateTest {
         OffsetDateTime origStart = OffsetDateTime.of(2026, 4, 20, 9, 0, 0, 0, ZoneOffset.ofHours(9));
         OffsetDateTime origEnd = origStart.plusHours(1);
         Activity activity = newActivityOwnedByCurrentUser(origStart, origEnd);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityUpdateRequest req = new ActivityUpdateRequest(
                 null, null, origEnd.plusMinutes(1), null, null, null, null, null);
@@ -182,7 +182,7 @@ class ActivityServiceUpdateTest {
     @DisplayName("title 이 공백 문자열이면 BLANK_TITLE 로 차단된다.")
     void rejectBlankTitle() {
         Activity activity = newActivityOwnedByCurrentUser();
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityUpdateRequest req = new ActivityUpdateRequest(
                 null, "   ", null, null, null, null, null, null);
@@ -197,7 +197,7 @@ class ActivityServiceUpdateTest {
     @DisplayName("다른 테넌트 소유 dealId 는 DEAL_NOT_FOUND 로 차단된다.")
     void rejectDealOfAnotherTenant() {
         Activity activity = newActivityOwnedByCurrentUser();
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
         when(dealRepository.findByIdAndTenantId(99L, CURRENT_TENANT_ID)).thenReturn(Optional.empty());
 
         ActivityUpdateRequest req = new ActivityUpdateRequest(
@@ -213,7 +213,7 @@ class ActivityServiceUpdateTest {
     @DisplayName("다른 테넌트 소유 pipelineStageId 는 PIPELINE_STAGE_NOT_FOUND 로 차단된다.")
     void rejectPipelineStageOfAnotherTenant() {
         Activity activity = newActivityOwnedByCurrentUser();
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(77L, CURRENT_TENANT_ID))
                 .thenReturn(Optional.empty());
 
@@ -229,7 +229,7 @@ class ActivityServiceUpdateTest {
     @Test
     @DisplayName("활동을 찾을 수 없으면 ACTIVITY_NOT_FOUND 로 차단된다 (다른 테넌트 포함).")
     void rejectActivityNotFound() {
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.empty());
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.empty());
 
         ActivityUpdateRequest req = new ActivityUpdateRequest(
                 null, null, null, null, null, null, null, "hi");
@@ -244,7 +244,7 @@ class ActivityServiceUpdateTest {
     @DisplayName("같은 테넌트의 다른 사용자 소유 활동은 FORBIDDEN 으로 차단된다.")
     void rejectAnotherUsersActivity() {
         Activity activity = newActivity(OTHER_USER_ID, CURRENT_TENANT_ID);
-        when(activityRepository.findDetail(ACTIVITY_ID)).thenReturn(Optional.of(activity));
+        when(activityRepository.findDetail(CURRENT_TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
 
         ActivityUpdateRequest req = new ActivityUpdateRequest(
                 null, null, null, null, null, null, null, "not mine");

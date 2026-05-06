@@ -14,18 +14,15 @@ import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.ActivityErrorCode;
-import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.CommonErrorCode;
-import com.ssafy.fint.global.security.CustomUserDetails;
+import com.ssafy.fint.global.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 
 import java.time.OffsetDateTime;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,13 +38,13 @@ public class ActivityService {
     private final UserRepository userRepository;
 
     public Page<Activity> findAll(ActivityListFilter filter, Pageable pageable) {
-        return activityRepository.search(filter, pageable);
+        return activityRepository.search(SecurityUtils.currentTenantId(), filter, pageable);
     }
 
     public ActivityDetailResponse findDetail(Long activityId, Long dealIdFilter) {
-        Long tenantId = currentTenantId();
+        Long tenantId = SecurityUtils.currentTenantId();
 
-        Activity activity = activityRepository.findDetail(activityId)
+        Activity activity = activityRepository.findDetail(tenantId, activityId)
                 .orElseThrow(() -> {
                     log.debug("[ActivityDetail] not found. activityId={} tenantId={} dealIdFilter={}",
                             activityId, tenantId, dealIdFilter);
@@ -72,8 +69,8 @@ public class ActivityService {
             throw new BusinessException(ActivityErrorCode.INVALID_TIME_RANGE);
         }
 
-        Long tenantId = currentTenantId();
-        Long userId = currentUserId();
+        Long tenantId = SecurityUtils.currentTenantId();
+        Long userId = SecurityUtils.currentUserId();
 
         Deal deal = null;
         if (request.dealId() != null) {
@@ -109,8 +106,8 @@ public class ActivityService {
 
     @Transactional
     public void delete(Long activityId) {
-        Long tenantId = currentTenantId();
-        Long userId = currentUserId();
+        Long tenantId = SecurityUtils.currentTenantId();
+        Long userId = SecurityUtils.currentUserId();
 
         Activity activity = activityRepository
                 .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(activityId, userId, tenantId)
@@ -130,10 +127,10 @@ public class ActivityService {
 
     @Transactional
     public ActivityUpdateResponse update(Long activityId, ActivityUpdateRequest request) {
-        Long tenantId = currentTenantId();
-        Long userId = currentUserId();
+        Long tenantId = SecurityUtils.currentTenantId();
+        Long userId = SecurityUtils.currentUserId();
 
-        Activity activity = activityRepository.findDetail(activityId)
+        Activity activity = activityRepository.findDetail(tenantId, activityId)
                 .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
         if (!activity.getUser().getUserId().equals(userId)) {
             throw new BusinessException(CommonErrorCode.FORBIDDEN);
@@ -168,21 +165,5 @@ public class ActivityService {
         Activity saved = activityRepository.saveAndFlush(activity);
         log.debug("[ActivityUpdate] activityId={} tenantId={} userId={}", saved.getActivityId(), tenantId, userId);
         return ActivityUpdateResponse.from(saved);
-    }
-
-    private Long currentTenantId() {
-        return currentPrincipal().getTenantId();
-    }
-
-    private Long currentUserId() {
-        return currentPrincipal().getUserId();
-    }
-
-    private CustomUserDetails currentPrincipal() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof CustomUserDetails me)) {
-            throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
-        }
-        return me;
     }
 }
