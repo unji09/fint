@@ -19,19 +19,19 @@ import com.ssafy.fint.domain.tenant.entity.Team;
 import com.ssafy.fint.domain.tenant.repository.TeamRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
-import com.ssafy.fint.global.exception.AuthErrorCode;
+import com.ssafy.fint.global.exception.AccountErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.DealErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -40,7 +40,7 @@ import java.util.List;
 public class DealService {
 
     // TODO(수정 : DEAL-LLM): LLM 기반 수주 확률 계산 도입 시 이 상수를 LLM 호출 결과로 교체.
-    // TODO(수정 : DEAL-새 담당자): 화면 맟 진행흐름 결정될 경우, 기존 담당자 아닐 경우 새 담당자로 추가 로직 완성.
+    // TODO(수정 : DEAL-새 담당자): 화면 및 진행흐름 결정될 경우, 기존 담당자 아닐 경우 새 담당자로 추가 로직 완성.
     private static final short DUMMY_PROBABILITY = 70;
 
     private final DealRepository dealRepository;
@@ -52,12 +52,11 @@ public class DealService {
     private final PipelineStageRepository pipelineStageRepository;
 
     @Transactional
-    public DealCreateResponse create(DealCreateRequest request) {
-        CustomUserDetails me = currentUser();
+    public DealCreateResponse create(CustomUserDetails me, DealCreateRequest request) {
         Long tenantId = me.getTenantId();
 
         Account account = accountRepository.findByIdAndTenantId(request.accountId(), tenantId)
-                .orElseThrow(() -> new BusinessException(DealErrorCode.ACCOUNT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
 
         Team team = null;
         if (request.teamId() != null) {
@@ -145,8 +144,8 @@ public class DealService {
     }
 
     @Transactional
-    public void softDelete(Long dealId) {
-        Long tenantId = currentUser().getTenantId();
+    public void softDelete(CustomUserDetails me, Long dealId) {
+        Long tenantId = me.getTenantId();
 
         Deal deal = dealRepository.findByIdAndTenantId(dealId, tenantId)
                 .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
@@ -166,9 +165,15 @@ public class DealService {
         }
 
         User user = userRepository.getReferenceById(currentUserId);
+
+        Set<Long> linkedContactIds = new HashSet<>();
         List<DealCreateResponse.ContactDetail> result = new ArrayList<>(inputs.size());
 
         for (DealCreateRequest.ContactInput input : inputs) {
+            if (input.isExisting() && !linkedContactIds.add(input.contactId())) {
+                continue;
+            }
+
             Contact contact = input.isExisting()
                     ? contactService.getByIdAndAccount(input.contactId(), account.getAccountId())
                     : contactService.createDummy(account);
@@ -182,13 +187,5 @@ public class DealService {
             result.add(DealCreateResponse.ContactDetail.from(contact));
         }
         return result;
-    }
-
-    private CustomUserDetails currentUser() {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth == null || !(auth.getPrincipal() instanceof CustomUserDetails me)) {
-                throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
-            }
-            return me;
     }
 }

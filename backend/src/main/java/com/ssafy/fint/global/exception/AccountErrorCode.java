@@ -8,7 +8,8 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum AccountErrorCode implements ErrorCode {
 
-    CONTACT_NOT_FOUND(HttpStatus.NOT_FOUND, "AN301", "존재하지 않거나 해당 고객사 소속이 아닌 담당자입니다.");
+    CONTACT_NOT_FOUND(HttpStatus.NOT_FOUND, "AN301", "존재하지 않거나 해당 고객사 소속이 아닌 담당자입니다."),
+    ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "AN302", "존재하지 않는 고객사입니다.");
 
     private final HttpStatus status;
     private final String code;

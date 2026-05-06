@@ -31,14 +31,22 @@ public class DealController implements DealSwagger {
     @Override
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<DealCreateResponse> create(@Valid @RequestBody DealCreateRequest request) {
-        return ApiResponse.created(dealService.create(request));
+    public ApiResponse<DealCreateResponse> create(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @Valid @RequestBody DealCreateRequest request
+    ) {
+        return ApiResponse.created(dealService.create(me, request));
     }
 
     @Override
     @GetMapping("/{dealId}")
-    public ApiResponse<DealDetailResponse> findDetail(@PathVariable Long dealId) {
-        return ApiResponse.ok(dealService.findDetail(dealId));
+    public ApiResponse<DealDetailResponse> findDetail(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dealId
+    ) {
+        return ApiResponse.ok(dealService.findDetail(me, dealId));
+    }
+
     @Override
     @PatchMapping("/{dealId}")
     public ApiResponse<DealUpdateResponse> update(
@@ -51,8 +59,11 @@ public class DealController implements DealSwagger {
 
     @Override
     @PatchMapping("/{dealId}/delete")
-    public ApiResponse<Void> softDelete(@PathVariable Long dealId) {
-        dealService.softDelete(dealId);
+    public ApiResponse<Void> softDelete(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dealId
+    ) {
+        dealService.softDelete(me, dealId);
         return ApiResponse.ok();
     }
 }

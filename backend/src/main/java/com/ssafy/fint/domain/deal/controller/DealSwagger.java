@@ -20,13 +20,14 @@ public interface DealSwagger {
             + "contacts 배열로 담당자를 함께 연결한다. contactId 가 있으면 기존 담당자(딜의 고객사 소속만 허용)를 조회해 연결하고, "
             + "contactId 가 없으면 더미 담당자를 임시 등록 후 연결한다 (담당자 등록 명세 확정 시 정식 입력으로 교체 예정)."
     )
-    ApiResponse<DealCreateResponse> create(DealCreateRequest request);
+    ApiResponse<DealCreateResponse> create(CustomUserDetails me, DealCreateRequest request);
 
     @Operation(
         summary = "딜 상세 조회",
         description = "현재 테넌트의 영업건 상세 정보를 조회한다. 연결된 고객사 담당자(contacts) 목록을 함께 반환한다."
     )
-    ApiResponse<DealDetailResponse> findDetail(Long dealId);
+    ApiResponse<DealDetailResponse> findDetail(CustomUserDetails me, Long dealId);
+
     @Operation(
         summary = "딜 수정",
         description = "현재 테넌트의 영업건을 부분 수정한다. null 이 아닌 필드만 반영된다. "
@@ -40,5 +41,5 @@ public interface DealSwagger {
         description = "현재 테넌트의 영업건을 소프트 삭제한다 (deals.is_deleted = true). "
             + "URL 충돌 회피를 위해 PATCH /deals/{dealId}/delete 로 라우팅한다."
     )
-    ApiResponse<Void> softDelete(Long dealId);
+    ApiResponse<Void> softDelete(CustomUserDetails me, Long dealId);
 }
