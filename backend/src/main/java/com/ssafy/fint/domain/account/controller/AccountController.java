@@ -3,6 +3,7 @@ package com.ssafy.fint.domain.account.controller;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
+import com.ssafy.fint.domain.account.dto.AccountTemperatureResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.service.AccountService;
 import com.ssafy.fint.global.ApiResponse;
@@ -62,5 +63,13 @@ public class AccountController implements AccountSwagger {
             @RequestParam(required = false) Integer size
     ) {
         return ApiResponse.ok(accountService.findSignals(accountId, source, size));
+    }
+
+    @Override
+    @GetMapping("/{accountId}/temperature")
+    public ApiResponse<List<AccountTemperatureResponse>> findTemperatureHistory(
+            @PathVariable Long accountId
+    ) {
+        return ApiResponse.ok(accountService.findTemperatureHistory(accountId));
     }
 }

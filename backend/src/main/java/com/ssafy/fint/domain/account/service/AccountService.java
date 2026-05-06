@@ -3,10 +3,12 @@ package com.ssafy.fint.domain.account.service;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
+import com.ssafy.fint.domain.account.dto.AccountTemperatureResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
+import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
@@ -33,6 +35,7 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final AccountExternalInfoRepository accountExternalInfoRepository;
+    private final TemperatureHistoryRepository temperatureHistoryRepository;
     private final UserRepository userRepository;
 
     /**
@@ -131,6 +134,29 @@ public class AccountService {
                 .findRecentByAccountAndOptionalSource(accountId, source, PageRequest.of(0, limit))
                 .stream()
                 .map(AccountSignalResponse::from)
+                .toList();
+    }
+
+    /**
+     * 고객 온도 추이 조회.
+     * 본인 소유 + 같은 tenant 검증 후 created_at 내림차순(최신순)으로 전체 이력을 반환한다.
+     */
+    public List<AccountTemperatureResponse> findTemperatureHistory(Long accountId) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        accountRepository
+                .findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> {
+                    log.debug("[AccountFindTemperature] not found. accountId={} userId={} tenantId={}",
+                            accountId, userId, tenantId);
+                    return new BusinessException(CommonErrorCode.NOT_FOUND);
+                });
+
+        return temperatureHistoryRepository
+                .findByAccount_AccountIdOrderByCreatedAtDesc(accountId)
+                .stream()
+                .map(AccountTemperatureResponse::from)
                 .toList();
     }
 

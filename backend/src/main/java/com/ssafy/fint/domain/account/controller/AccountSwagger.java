@@ -3,6 +3,7 @@ package com.ssafy.fint.domain.account.controller;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
+import com.ssafy.fint.domain.account.dto.AccountTemperatureResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,4 +41,11 @@ public interface AccountSwagger {
                     "타 사용자 / 타 테넌트 소유 또는 미존재는 NOT_FOUND 로 응답한다."
     )
     ApiResponse<List<AccountSignalResponse>> findSignals(Long accountId, String source, Integer size);
+
+    @Operation(
+            summary = "고객 온도 추이 조회",
+            description = "고객사 온도 변화 이력을 측정 시점(created_at) 내림차순으로 조회한다. " +
+                    "타 사용자 / 타 테넌트 소유 또는 미존재는 NOT_FOUND 로 응답한다."
+    )
+    ApiResponse<List<AccountTemperatureResponse>> findTemperatureHistory(Long accountId);
 }
