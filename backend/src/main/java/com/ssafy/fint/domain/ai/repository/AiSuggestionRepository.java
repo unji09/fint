@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.ai.repository;
 
 import com.ssafy.fint.domain.ai.entity.AiSuggestion;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -37,5 +38,19 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
             @Param("suggestionId") Long suggestionId,
             @Param("accountId") Long accountId,
             @Param("tenantId") Long tenantId
+    );
+
+    @Query("""
+            select s from AiSuggestion s
+            join s.account a
+            join a.user u
+            where u.userId = :userId
+              and u.isDeleted = false
+              and s.isRead = false
+            order by s.createdAt desc
+            """)
+    List<AiSuggestion> findUnreadByUserId(
+            @Param("userId") Long userId,
+            Pageable pageable
     );
 }
