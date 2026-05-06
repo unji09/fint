@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.calendar.controller;
 
+import com.ssafy.fint.domain.calendar.dto.CalendarEventDetailResponse;
 import com.ssafy.fint.domain.calendar.dto.CalendarEventListResponse;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,7 +15,12 @@ public interface CalendarSwagger {
     @Operation(
             summary = "캘린더 일정 조회",
             description = "현재 사용자의 활동을 startDate~endDate 구간으로 조회한다. "
-                    + "현재는 F!NT 직접 등록 활동만 반환하며 source=\"FINT\", eventId=\"act-{activityId}\" 형식이다. "
     )
     ApiResponse<CalendarEventListResponse> events(LocalDate startDate, LocalDate endDate, Pageable pageable);
+
+    @Operation(
+            summary = "캘린더 일정 상세 조회",
+            description = "단일 일정의 상세 정보를 조회한다. eventId 는 \"act-{activityId}\" 형식이며 "
+    )
+    ApiResponse<CalendarEventDetailResponse> eventDetail(String eventId);
 }
