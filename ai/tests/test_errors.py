@@ -35,6 +35,13 @@ async def _unhandled():
     raise RuntimeError("something broke")
 
 
+@_test_router.get("/test/http-unmapped")
+async def _http_unmapped():
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    raise StarletteHTTPException(status_code=429, detail="Too many requests")
+
+
 @pytest.fixture
 def app():
     from app.main import create_app
@@ -98,6 +105,16 @@ async def test_unhandled_exception_returns_500(client_no_raise):
     body = resp.json()
     assert body["code"] == "C500"
     assert body["data"] is None
+
+
+@pytest.mark.asyncio
+async def test_http_exception_unmapped_code_excludes_code_field(client):
+    resp = await client.get("/test/http-unmapped")
+
+    assert resp.status_code == 429
+    body = resp.json()
+    assert "code" not in body
+    assert body["message"] == "Too many requests"
 
 
 @pytest.mark.asyncio

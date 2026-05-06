@@ -1,5 +1,4 @@
 from fastapi import Request
-
 from jose import JWTError, jwt
 
 from app.core.config import get_settings
@@ -22,8 +21,9 @@ async def get_tenant_id(request: Request) -> int:
         try:
             payload = jwt.decode(token, secret, algorithms=["HS256"])
             tenant_id = payload.get("tenant_id")
-            if tenant_id is not None:
-                return _validate_tenant_id(int(tenant_id))
+            if tenant_id is None:
+                raise BusinessException(CommonErrorCode.UNAUTHORIZED, "Missing tenant_id in token")
+            return _validate_tenant_id(int(tenant_id))
         except (JWTError, ValueError, KeyError):
             raise BusinessException(CommonErrorCode.UNAUTHORIZED, "Invalid token")
 

@@ -2,13 +2,12 @@ from functools import lru_cache
 
 from fastapi import Depends
 
-from app.core.config import Settings, get_settings
-
+from app.clients.anthropic import AnthropicClient
 from app.clients.llm import LLMClient
 from app.clients.openai import OpenAIClient
-from app.clients.anthropic import AnthropicClient
-from app.clients.whisper import WhisperClient, OpenAIWhisperClient
-from app.clients.s3 import S3Client, BotoS3Client
+from app.clients.s3 import BotoS3Client, S3Client
+from app.clients.whisper import OpenAIWhisperClient, WhisperClient
+from app.core.config import Settings, get_settings
 
 
 @lru_cache

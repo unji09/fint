@@ -21,7 +21,10 @@ class AnthropicClient:
             max_tokens=DEFAULT_MAX_TOKENS,
             messages=messages,
         )
-        return resp.content[0].text
+        block = next((b for b in resp.content if b.type == "text"), None)
+        if block is None:
+            raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, "No text content in response")
+        return block.text
 
     async def chat_structured(
         self, messages: list[dict], response_model: type[BaseModel], *, model: str | None = None
