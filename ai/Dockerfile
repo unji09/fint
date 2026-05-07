@@ -23,6 +23,8 @@ COPY --from=builder /build/app /app/app
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+RUN python -c "from rapidocr import RapidOCR, LangDet, LangRec, OCRVersion, ModelType; RapidOCR(params={'Det.lang_type': LangDet.CH, 'Det.ocr_version': OCRVersion.PPOCRV5, 'Det.model_type': ModelType.MOBILE, 'Rec.lang_type': LangRec.KOREAN, 'Rec.ocr_version': OCRVersion.PPOCRV5, 'Rec.model_type': ModelType.MOBILE})"
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
