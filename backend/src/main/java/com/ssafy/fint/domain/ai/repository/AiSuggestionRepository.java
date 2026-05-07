@@ -42,7 +42,8 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
 
     @Query("""
             select s from AiSuggestion s
-            join s.account a
+            join fetch s.account a
+            join fetch s.pipelineStage
             join a.user u
             where u.userId = :userId
               and u.isDeleted = false
