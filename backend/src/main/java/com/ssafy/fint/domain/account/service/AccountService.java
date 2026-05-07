@@ -42,30 +42,62 @@ public class AccountService {
     private final UserRepository userRepository;
 
     /**
-     * 고객사 등록 (case2: 새 고객사 신규 생성).
-     * 새 account 를 만들고 호출자를 책임자로 assignment row 에 즉시 매핑한다.
-     * case1 (기존 account 선택, existingAccountId) 분기는 후속 단계에서 추가 예정.
+     * 고객사 등록.
+     * - existingAccountId 있음 → case1: 기존 account 에 본인을 책임자로 매핑 (이미 책임자면 idempotent).
+     * - existingAccountId 없음 → case2: 새 account 생성 + 본인 책임자 매핑.
+     * 미존재 / 타 테넌트 account 는 NOT_FOUND. case2 시 name·industry 누락은 INVALID_INPUT.
      */
     @Transactional
     public AccountRegisterResponse register(AccountRegisterRequest request) {
         Long userId = currentUserId();
+        Long tenantId = currentTenantId();
         User owner = userRepository.getReferenceById(userId);
 
-        Account account = Account.builder()
-                .name(request.name())
-                .industry(request.industry())
-                .bizNo(request.bizNo())
-                .build();
-        Account saved = accountRepository.save(account);
+        Account account;
+        if (request.existingAccountId() != null) {
+            account = registerToExistingAccount(request.existingAccountId(), userId, tenantId, owner);
+        } else {
+            account = registerNewAccount(request, owner);
+        }
 
-        AccountUserAssignment assignment = AccountUserAssignment.builder()
-                .account(saved)
-                .user(owner)
-                .build();
-        accountUserAssignmentRepository.save(assignment);
+        log.info("[AccountRegister] accountId={} userId={} mode={}",
+                account.getAccountId(), userId,
+                request.existingAccountId() != null ? "case1" : "case2");
+        return AccountRegisterResponse.of(account.getAccountId());
+    }
 
-        log.info("[AccountRegister] accountId={} userId={}", saved.getAccountId(), userId);
-        return AccountRegisterResponse.of(saved.getAccountId());
+    private Account registerToExistingAccount(Long accountId, Long userId, Long tenantId, User owner) {
+        Account account = accountRepository
+                .findByIdAndTenantId(accountId, tenantId)
+                .orElseThrow(() -> {
+                    log.debug("[AccountRegister] case1 not found. accountId={} tenantId={}",
+                            accountId, tenantId);
+                    return new BusinessException(CommonErrorCode.NOT_FOUND);
+                });
+
+        boolean alreadyAssigned = accountUserAssignmentRepository
+                .existsByAccount_AccountIdAndUser_UserId(account.getAccountId(), userId);
+        if (!alreadyAssigned) {
+            accountUserAssignmentRepository.save(
+                    AccountUserAssignment.builder().account(account).user(owner).build());
+        }
+        return account;
+    }
+
+    private Account registerNewAccount(AccountRegisterRequest request, User owner) {
+        if (request.name() == null || request.industry() == null) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+
+        Account saved = accountRepository.save(
+                Account.builder()
+                        .name(request.name())
+                        .industry(request.industry())
+                        .bizNo(request.bizNo())
+                        .build());
+        accountUserAssignmentRepository.save(
+                AccountUserAssignment.builder().account(saved).user(owner).build());
+        return saved;
     }
 
     /**
@@ -125,8 +157,6 @@ public class AccountService {
 
     /**
      * 고객사 외부 시그널(NEWS/DART) 조회.
-     * 본인 책임 + 같은 tenant 검증 후 occurred_at 내림차순으로 size 만큼 반환.
-     * source 미지정 시 모든 출처 통합. size 미지정 시 기본 20 건.
      */
     public List<AccountSignalResponse> findSignals(Long accountId, String source, Integer size) {
         Long userId = currentUserId();
@@ -150,7 +180,6 @@ public class AccountService {
 
     /**
      * 고객 날씨(분위기) 추이 조회.
-     * 본인 책임 + 같은 tenant 검증 후 created_at 내림차순으로 mood 변화 이력 반환.
      */
     public List<AccountMoodResponse> findMoodHistory(Long accountId) {
         Long userId = currentUserId();
