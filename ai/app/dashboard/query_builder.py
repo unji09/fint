@@ -42,9 +42,9 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
         if agg_match:
             func, arg = agg_match.group(1).upper(), agg_match.group(2)
             if arg == "*":
-                select_exprs.append(f"{func}(*)")
+                select_exprs.append(f'{func}(*) AS "{col}"')
             else:
-                select_exprs.append(f"{func}({spec.table}.{arg})")
+                select_exprs.append(f'{func}({spec.table}.{arg}) AS "{col}"')
         else:
             select_exprs.append(f"{spec.table}.{col}")
 
@@ -56,6 +56,13 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
         for join_table, self_col, join_col in table_meta.tenant_path.joins:
             sql_parts.append(f"JOIN {join_table} ON {prev_table}.{self_col} = {join_table}.{join_col}")
             prev_table = join_table
+
+    # 사용자 지정 JOIN (WHERE 앞에 위치해야 유효한 SQL)
+    for join in spec.joins:
+        sql_parts.append(f"JOIN {join.table} ON {spec.table}.{join.on_self} = {join.table}.{join.on_other}")
+
+    # WHERE — tenant_id 격리
+    if table_meta.tenant_path and table_meta.tenant_path.joins:
         tenant_table = table_meta.tenant_path.joins[-1][0]
         placeholder = _next_param(tenant_id)
         sql_parts.append(f"WHERE {tenant_table}.{table_meta.tenant_path.tenant_column} = {placeholder}")
@@ -69,10 +76,6 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
     # soft delete 필터
     if table_meta.has_soft_delete:
         sql_parts.append(f"AND {spec.table}.is_deleted = FALSE")
-
-    # 사용자 지정 JOIN
-    for join in spec.joins:
-        sql_parts.append(f"JOIN {join.table} ON {spec.table}.{join.on_self} = {join.table}.{join.on_other}")
 
     # 사용자 필터
     for f in spec.filters:
