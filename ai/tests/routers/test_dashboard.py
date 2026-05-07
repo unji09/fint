@@ -170,6 +170,77 @@ class TestDashboardEndpoint:
         assert "dashboard:context:42:1:7" in fake_redis_instance._store
 
     @pytest.mark.asyncio
+    async def test_add_without_existing_widgets_returns_400(self, client):
+        resp = await client.post(
+            "/api/v1/dashboard/query",
+            json={
+                "trace_id": "add-no-widgets",
+                "action": "ADD",
+                "input_text": "매출 차트 추가해줘",
+                "dashboard_id": 1,
+                "tenant_id": 42,
+                "user_id": 7,
+                "existing_widgets": [],
+            },
+        )
+
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_modify_without_current_widget_returns_400(self, client):
+        resp = await client.post(
+            "/api/v1/dashboard/query",
+            json={
+                "trace_id": "modify-no-widget",
+                "action": "MODIFY",
+                "input_text": "이거 파이 차트로 바꿔줘",
+                "dashboard_id": 1,
+                "tenant_id": 42,
+                "user_id": 7,
+            },
+        )
+
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_add_with_existing_widgets_succeeds(self, client):
+        with patch("app.routers.dashboard.get_session_factory", return_value=FakeSessionFactory()):
+            resp = await client.post(
+                "/api/v1/dashboard/query",
+                json={
+                    "trace_id": "add-with-widgets",
+                    "action": "ADD",
+                    "input_text": "매출 차트 추가해줘",
+                    "dashboard_id": 1,
+                    "tenant_id": 42,
+                    "user_id": 7,
+                    "existing_widgets": [{"widget_type": "TABLE", "title": "기존 위젯"}],
+                },
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["data"]["trace_id"] == "add-with-widgets"
+
+    @pytest.mark.asyncio
+    async def test_modify_with_current_widget_succeeds(self, client):
+        with patch("app.routers.dashboard.get_session_factory", return_value=FakeSessionFactory()):
+            resp = await client.post(
+                "/api/v1/dashboard/query",
+                json={
+                    "trace_id": "modify-with-widget",
+                    "action": "MODIFY",
+                    "input_text": "이거 파이 차트로 바꿔줘",
+                    "dashboard_id": 1,
+                    "tenant_id": 42,
+                    "user_id": 7,
+                    "current_widget": {"widget_type": "BAR_CHART", "title": "기존 바 차트"},
+                },
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["data"]["trace_id"] == "modify-with-widget"
+
+    @pytest.mark.asyncio
     async def test_without_auth(self):
         app = create_app()
         app.dependency_overrides[get_llm_client] = FakeLLM
@@ -288,6 +359,26 @@ class TestRunQueryTask:
         raw = await redis.get("dashboard:query:task-uuid")
         data = json.loads(raw)
         assert data["status"] == "FAILED"
+
+    @pytest.mark.asyncio
+    async def test_add_action_completes_in_redis(self):
+        redis = FakeRedis()
+        request = self._make_request(
+            action="ADD",
+            existing_widgets=[{"widget_type": "TABLE", "title": "기존 테이블"}],
+        )
+
+        with patch("app.routers.dashboard.get_session_factory", return_value=FakeSessionFactory()):
+            await run_query_task(
+                request=request,
+                redis=redis,
+                llm=FakeLLM(),
+            )
+
+        raw = await redis.get("dashboard:query:task-uuid")
+        data = json.loads(raw)
+        assert data["status"] == "COMPLETED"
+        assert data["result"]["title"] == "딜 목록"
 
     @pytest.mark.asyncio
     async def test_unexpected_error_maps_to_failed(self):
