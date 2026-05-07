@@ -51,5 +51,14 @@ public class ContactController {
         contactService.updateContact(contactId, request);
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(summary = "담당자 삭제", description = "담당자를 소프트 삭제합니다.")
+    @DeleteMapping("/contacts/{contactId}")
+    public ResponseEntity<Void> deleteContact(
+        @PathVariable Long contactId
+    ) {
+        contactService.deleteContact(contactId);
+        return ResponseEntity.noContent().build();
+    }
 }
 
