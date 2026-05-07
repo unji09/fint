@@ -18,6 +18,7 @@ import AddEventModal from '@/components/calendar/AddEventModal';
 import type { CalendarEvent, ViewMode } from '@/components/calendar/types';
 import { CATEGORY_COLOR, CATEGORY_BG } from '@/components/calendar/types';
 import { MOCK_EVENTS } from '@/components/calendar/mockData';
+import { useCalendarEvents, fetchEventDetail } from '@/hooks/useCalendarEvents';
 import {
   addMonths,
   addWeeks,
@@ -384,7 +385,14 @@ export default function CalendarPage() {
   const [addDate, setAddDate] = useState<Date | undefined>();
   const [asideOpen, setAsideOpen] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
+
   const [asideWidth, setAsideWidth] = useState(300); // Figma: w-[300px]
+
+  // ── API 연동 ──────────────────────────────────────────────────
+  const { events: apiEvents } = useCalendarEvents({ currentDate, viewMode });
+
+  // API 실패 시 mock fallback
+  const events = apiEvents.length > 0 ? apiEvents : MOCK_EVENTS;
 
   const dragRef = useRef<{ on: boolean; x0: number; w0: number }>({ on: false, x0: 0, w0: 300 });
   const onDragStart = useCallback(
@@ -424,7 +432,14 @@ export default function CalendarPage() {
       ? setCurrentDate((d) => addMonths(d, 1))
       : setCurrentDate((d) => addWeeks(d, 1));
 
-  const dayEvs = getEventsForDay(MOCK_EVENTS, selectedDate);
+  const dayEvs = getEventsForDay(events, selectedDate);
+
+  // 이벤트 클릭 → 상세 조회 (추가 필드 병합)
+  const handleEventClick = async (ev: CalendarEvent) => {
+    setSelectedEvent(ev); // 즉시 표시
+    const detail = await fetchEventDetail(ev.eventId);
+    if (detail) setSelectedEvent(detail); // 상세 정보로 교체
+  };
   const miniWk = getMondayWeek(selectedDate);
 
   const openAdd = (d: Date) => {
@@ -582,7 +597,7 @@ export default function CalendarPage() {
                 })}
               </div>
             </div>
-            <DayTimeView events={dayEvs} onEventClick={(ev) => setSelectedEvent(ev)} />
+            <DayTimeView events={dayEvs} onEventClick={(ev) => handleEventClick(ev)} />
           </aside>
         </div>
 
@@ -845,11 +860,11 @@ export default function CalendarPage() {
             ) : (
               <WeekGrid
                 currentDate={currentDate}
-                events={MOCK_EVENTS}
+                events={events}
                 selectedEvent={selectedEvent}
                 onEventClick={(ev) => {
                   setSelectedDate(new Date(ev.startAt));
-                  setSelectedEvent(ev);
+                  handleEventClick(ev);
                 }}
                 onTimeClick={onTimeClick}
                 pipeline={PIPELINE}
