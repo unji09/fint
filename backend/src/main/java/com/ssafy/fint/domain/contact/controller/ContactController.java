@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.contact.controller;
 
 import com.ssafy.fint.domain.contact.dto.request.ContactCreateRequest;
+import com.ssafy.fint.domain.contact.dto.request.ContactUpdateRequest;
 import com.ssafy.fint.domain.contact.dto.response.ContactCreateResponse;
 import com.ssafy.fint.domain.contact.dto.response.ContactListResponse;
 import com.ssafy.fint.domain.contact.service.ContactService;
@@ -39,6 +40,16 @@ public class ContactController {
     ) {
         List<ContactListResponse> response = contactService.getContacts(accountId);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @Operation(summary = "담당자 수정", description = "담당자 정보를 수정합니다.")
+    @PatchMapping("/contacts/{contactId}")
+    public ResponseEntity<Void> updateContact(
+        @PathVariable Long contactId,
+        @RequestBody @Valid ContactUpdateRequest request
+    ) {
+        contactService.updateContact(contactId, request);
+        return ResponseEntity.noContent().build();
     }
 }
 
