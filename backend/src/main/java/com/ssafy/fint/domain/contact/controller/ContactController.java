@@ -1,10 +1,10 @@
 package com.ssafy.fint.domain.contact.controller;
 
+import com.ssafy.fint.domain.account.service.ContactService;
 import com.ssafy.fint.domain.contact.dto.request.ContactCreateRequest;
 import com.ssafy.fint.domain.contact.dto.request.ContactUpdateRequest;
 import com.ssafy.fint.domain.contact.dto.response.ContactCreateResponse;
 import com.ssafy.fint.domain.contact.dto.response.ContactListResponse;
-import com.ssafy.fint.domain.contact.service.ContactService;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

@@ -1,6 +1,6 @@
 package com.ssafy.fint.domain.contact.dto.response;
 
-import com.ssafy.fint.domain.contact.entity.Contact;
+import com.ssafy.fint.domain.account.entity.Contact;
 import lombok.Builder;
 import lombok.Getter;
 
