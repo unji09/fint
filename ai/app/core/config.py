@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://gms.ssafy.io/gmsapi/api.openai.com/v1"
+    OPENAI_OCR_MODEL: str = "gpt-5-nano"
 
     S3_BUCKET: str = "fint-local"
     S3_REGION: str = "ap-northeast-2"
