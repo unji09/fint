@@ -1,13 +1,15 @@
 package com.ssafy.fint.domain.account.service;
 
+import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
-import com.ssafy.fint.domain.account.dto.AccountTemperatureResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
+import com.ssafy.fint.domain.account.entity.AccountUserAssignment;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
+import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
 import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
@@ -34,35 +36,42 @@ public class AccountService {
     private static final int DEFAULT_SIGNAL_SIZE = 20;
 
     private final AccountRepository accountRepository;
+    private final AccountUserAssignmentRepository accountUserAssignmentRepository;
     private final AccountExternalInfoRepository accountExternalInfoRepository;
     private final TemperatureHistoryRepository temperatureHistoryRepository;
     private final UserRepository userRepository;
 
     /**
-     * 고객사 등록.
-     * 현재 로그인한 사원을 owner로 지정한다. 멀티테넌트 격리는 owner의 tenant를 따른다.
+     * 고객사 등록 (case2: 새 고객사 신규 생성).
+     * 새 account 를 만들고 호출자를 책임자로 assignment row 에 즉시 매핑한다.
+     * case1 (기존 account 선택, existingAccountId) 분기는 후속 단계에서 추가 예정.
      */
     @Transactional
     public AccountRegisterResponse register(AccountRegisterRequest request) {
-        User owner = userRepository.getReferenceById(currentUserId());
+        Long userId = currentUserId();
+        User owner = userRepository.getReferenceById(userId);
 
         Account account = Account.builder()
-                .user(owner)
                 .name(request.name())
                 .industry(request.industry())
                 .bizNo(request.bizNo())
                 .build();
-
         Account saved = accountRepository.save(account);
-        log.info("[AccountRegister] accountId={} userId={}", saved.getAccountId(), owner.getUserId());
 
+        AccountUserAssignment assignment = AccountUserAssignment.builder()
+                .account(saved)
+                .user(owner)
+                .build();
+        accountUserAssignmentRepository.save(assignment);
+
+        log.info("[AccountRegister] accountId={} userId={}", saved.getAccountId(), userId);
         return AccountRegisterResponse.of(saved.getAccountId());
     }
 
     /**
      * 고객사 부분 수정.
-     * 본인 소유 + 같은 tenant 인 account 만 수정 가능하다.
-     * null 인 필드는 변경되지 않으며, 모든 필드가 null 이면 no-op 이다.
+     * 본인이 책임자로 매핑된 + 같은 tenant 인 account 만 수정 가능.
+     * null 인 필드는 변경되지 않으며, 모두 null 이면 no-op.
      */
     @Transactional
     public void update(Long accountId, AccountUpdateRequest request) {
@@ -70,7 +79,7 @@ public class AccountService {
         Long tenantId = currentTenantId();
 
         Account account = accountRepository
-                .findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(accountId, userId, tenantId)
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
                 .orElseThrow(() -> {
                     log.debug("[AccountUpdate] not found. accountId={} userId={} tenantId={}",
                             accountId, userId, tenantId);
@@ -91,38 +100,40 @@ public class AccountService {
     }
 
     /**
-     * 고객사 소프트 삭제.
-     * 본인 소유(owner == 현재 사용자) + 같은 tenant 인 account 만 삭제 가능하다.
-     * 미존재 / 타 사용자 / 타 테넌트 소유는 모두 NOT_FOUND 로 통일하여 존재 여부 노출을 막는다.
+     * 고객사 책임 해제 (본인 assignment row 만 제거).
+     * account 본체는 유지된다 (다른 책임자 잔존 또는 0명 상태로 보존).
+     * 미존재 / 타 사용자 / 타 테넌트 모두 NOT_FOUND 로 통일하여 존재 여부 노출 방지.
      */
     @Transactional
     public void delete(Long accountId) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
 
-        Account account = accountRepository
-                .findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(accountId, userId, tenantId)
+        accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
                 .orElseThrow(() -> {
                     log.debug("[AccountDelete] not found. accountId={} userId={} tenantId={}",
                             accountId, userId, tenantId);
                     return new BusinessException(CommonErrorCode.NOT_FOUND);
                 });
 
-        account.softDelete();
+        accountUserAssignmentRepository
+                .deleteByAccount_AccountIdAndUser_UserId(accountId, userId);
+
         log.info("[AccountDelete] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
     }
 
     /**
      * 고객사 외부 시그널(NEWS/DART) 조회.
-     * 본인 소유 + 같은 tenant 검증 후 occurred_at 내림차순으로 size 만큼 반환한다.
-     * source 미지정 시 모든 출처 통합, 지정 시 해당 출처만. size 미지정 시 기본 20 건.
+     * 본인 책임 + 같은 tenant 검증 후 occurred_at 내림차순으로 size 만큼 반환.
+     * source 미지정 시 모든 출처 통합. size 미지정 시 기본 20 건.
      */
     public List<AccountSignalResponse> findSignals(Long accountId, String source, Integer size) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
 
         accountRepository
-                .findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(accountId, userId, tenantId)
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
                 .orElseThrow(() -> {
                     log.debug("[AccountFindSignals] not found. accountId={} userId={} tenantId={}",
                             accountId, userId, tenantId);
@@ -138,17 +149,17 @@ public class AccountService {
     }
 
     /**
-     * 고객 온도 추이 조회.
-     * 본인 소유 + 같은 tenant 검증 후 created_at 내림차순(최신순)으로 전체 이력을 반환한다.
+     * 고객 날씨(분위기) 추이 조회.
+     * 본인 책임 + 같은 tenant 검증 후 created_at 내림차순으로 mood 변화 이력 반환.
      */
-    public List<AccountTemperatureResponse> findTemperatureHistory(Long accountId) {
+    public List<AccountMoodResponse> findMoodHistory(Long accountId) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
 
         accountRepository
-                .findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(accountId, userId, tenantId)
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
                 .orElseThrow(() -> {
-                    log.debug("[AccountFindTemperature] not found. accountId={} userId={} tenantId={}",
+                    log.debug("[AccountFindMood] not found. accountId={} userId={} tenantId={}",
                             accountId, userId, tenantId);
                     return new BusinessException(CommonErrorCode.NOT_FOUND);
                 });
@@ -156,7 +167,7 @@ public class AccountService {
         return temperatureHistoryRepository
                 .findByAccount_AccountIdOrderByCreatedAtDesc(accountId)
                 .stream()
-                .map(AccountTemperatureResponse::from)
+                .map(AccountMoodResponse::from)
                 .toList();
     }
 
