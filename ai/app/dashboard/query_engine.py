@@ -97,8 +97,9 @@ class QueryEngine:
 
         await _notify(QueryStatus.COMPONENT_BUILDING)
 
+        modify_context = request.current_widget if request.action == "MODIFY" else None
         try:
-            insight = await self._generate_insight(request.input_text, rows)
+            insight = await self._generate_insight(request.input_text, rows, modify_context=modify_context)
         except Exception:
             logger.exception("LLM insight generation failed")
             return {"status": "FAILED", "error": "인사이트 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
@@ -163,7 +164,15 @@ class QueryEngine:
 
         if request.action == "MODIFY" and request.current_widget:
             widget_text = json.dumps(request.current_widget, ensure_ascii=False)
-            system_content += f"\n\n## 수정 대상 위젯\n{widget_text}"
+            system_content += (
+                "\n\n## 수정 대상 위젯\n"
+                "아래는 사용자가 수정을 요청한 기존 위젯입니다. "
+                "사용자의 수정 의도에 따라 쿼리를 조정하거나, 동일 데이터를 다른 관점으로 재구성하세요.\n"
+                "- 위젯 타입 변경 요청: 기존 데이터를 새 타입에 맞게 컬럼/집계를 재구성하세요.\n"
+                "- 데이터 범위 변경 요청: 필터/정렬/집계 조건을 수정하세요.\n"
+                "- 기존 위젯의 title과 source_query를 참고하여 원래 의도를 파악하세요.\n"
+                f"{widget_text}"
+            )
 
         return [
             {"role": "system", "content": system_content},
@@ -177,10 +186,23 @@ class QueryEngine:
             return [dict(row) for row in result.mappings().all()]
         return []
 
-    async def _generate_insight(self, input_text: str, rows: list[dict]) -> InsightResult:
+    async def _generate_insight(
+        self, input_text: str, rows: list[dict], *, modify_context: dict | None = None
+    ) -> InsightResult:
         rows_preview = rows[:20]
+        system_content = _INSIGHT_PROMPT
+
+        if modify_context:
+            widget_text = json.dumps(modify_context, ensure_ascii=False)
+            system_content += (
+                "\n\n## 수정 대상 위젯\n"
+                "사용자가 아래 기존 위젯의 수정을 요청했습니다. "
+                "사용자가 명시적으로 위젯 타입을 지정했다면 데이터 특성보다 사용자 요청을 우선하세요.\n"
+                f"{widget_text}"
+            )
+
         messages = [
-            {"role": "system", "content": _INSIGHT_PROMPT},
+            {"role": "system", "content": system_content},
             {
                 "role": "user",
                 "content": (

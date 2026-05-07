@@ -381,6 +381,26 @@ class TestRunQueryTask:
         assert data["result"]["title"] == "딜 목록"
 
     @pytest.mark.asyncio
+    async def test_modify_action_completes_in_redis(self):
+        redis = FakeRedis()
+        request = self._make_request(
+            action="MODIFY",
+            current_widget={"widget_type": "BAR_CHART", "title": "기존 바 차트"},
+        )
+
+        with patch("app.routers.dashboard.get_session_factory", return_value=FakeSessionFactory()):
+            await run_query_task(
+                request=request,
+                redis=redis,
+                llm=FakeLLM(),
+            )
+
+        raw = await redis.get("dashboard:query:task-uuid")
+        data = json.loads(raw)
+        assert data["status"] == "COMPLETED"
+        assert data["result"]["title"] == "딜 목록"
+
+    @pytest.mark.asyncio
     async def test_unexpected_error_maps_to_failed(self):
         redis = FakeRedis()
 
