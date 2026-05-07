@@ -47,3 +47,18 @@ export interface CreateDashboardResponse {
   dashboardId: number;
   traceId: string | null;
 }
+
+// ── 대시보드 [id] 페이지 전용 타입 ──
+
+export type Step = {
+  label: string;
+  done: boolean;
+  active: boolean;
+};
+
+export type CanvasWidget = DashboardWidget & {
+  px: number;
+  py: number;
+  pw: number;
+  ph: number;
+};
