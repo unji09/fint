@@ -53,4 +53,12 @@ public class ContactService {
             request.getPersonality()
         );
     }
+
+    @Transactional
+    public void deleteContact(Long contactId) {
+        Contact contact = contactRepository.findByContactIdAndIsDeletedFalse(contactId)
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 담당자입니다."));
+
+        contact.softDelete();
+    }
 }
