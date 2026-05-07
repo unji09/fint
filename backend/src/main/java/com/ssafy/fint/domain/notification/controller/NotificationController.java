@@ -1,0 +1,27 @@
+package com.ssafy.fint.domain.notification.controller;
+
+import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
+import com.ssafy.fint.domain.notification.service.NotificationService;
+import com.ssafy.fint.global.ApiResponse;
+import com.ssafy.fint.global.security.CustomUserDetails;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/notifications")
+@RequiredArgsConstructor
+public class NotificationController implements NotificationSwagger {
+
+    private final NotificationService notificationService;
+
+    @Override
+    @GetMapping
+    public ApiResponse<NotificationListResponse> findUnread(
+            @AuthenticationPrincipal CustomUserDetails me
+    ) {
+        return ApiResponse.ok(notificationService.findUnreadNotifications(me));
+    }
+}
