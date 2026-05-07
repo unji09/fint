@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from sqlalchemy import text
@@ -15,8 +17,11 @@ from app.schemas.dashboard import (
     DashboardQueryRequest,
     InsightResult,
     IntentResult,
+    QueryStatus,
     WidgetType,
 )
+
+logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 사용자의 자연어 질의를 분석하여 적절한 데이터 조회 방법을 결정합니다.
@@ -51,13 +56,28 @@ class QueryEngine:
         self._db = db
         self._context_store = context_store
 
-    async def run(self, request: DashboardQueryRequest) -> dict[str, Any]:
+    async def run(
+        self,
+        request: DashboardQueryRequest,
+        *,
+        on_status: Callable[[QueryStatus], Awaitable[None]] | None = None,
+    ) -> dict[str, Any]:
+        async def _notify(status: QueryStatus) -> None:
+            if on_status:
+                await on_status(status)
+
+        await _notify(QueryStatus.INTENT_PARSING)
+
         try:
             check_input(request.input_text)
         except GuardrailError as e:
             return {"status": "FAILED", "error": str(e)}
 
-        intent = await self._classify_intent(request)
+        try:
+            intent = await self._classify_intent(request)
+        except Exception:
+            logger.exception("LLM intent classification failed")
+            return {"status": "FAILED", "error": "질의 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
 
         if intent.search_type == "REJECTED":
             return {
@@ -65,12 +85,25 @@ class QueryEngine:
                 "rejection_reason": intent.rejection_reason or "요청을 처리할 수 없습니다.",
             }
 
+        await _notify(QueryStatus.DATA_QUERYING)
+
         try:
             rows = await self._execute_query(intent, tenant_id=request.tenant_id)
         except QueryBuildError as e:
             return {"status": "FAILED", "error": str(e)}
+        except Exception:
+            logger.exception("Database query execution failed")
+            return {"status": "FAILED", "error": "데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
 
-        insight = await self._generate_insight(request.input_text, rows)
+        await _notify(QueryStatus.COMPONENT_BUILDING)
+
+        try:
+            insight = await self._generate_insight(request.input_text, rows)
+        except Exception:
+            logger.exception("LLM insight generation failed")
+            return {"status": "FAILED", "error": "인사이트 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
+
+        await _notify(QueryStatus.STYLING)
 
         chart_data = format_chart_data(
             insight.widget_type,
@@ -80,6 +113,7 @@ class QueryEngine:
         )
 
         await self._context_store.add_entry(
+            tenant_id=request.tenant_id,
             dashboard_id=request.dashboard_id,
             user_id=request.user_id,
             input_text=request.input_text,
@@ -102,6 +136,7 @@ class QueryEngine:
 
     async def _classify_intent(self, request: DashboardQueryRequest) -> IntentResult:
         context = await self._context_store.get_context(
+            tenant_id=request.tenant_id,
             dashboard_id=request.dashboard_id,
             user_id=request.user_id,
         )

@@ -65,10 +65,18 @@ class FakeContextStore:
     def __init__(self):
         self._data: list[dict] = []
 
-    async def get_context(self, *, dashboard_id: int, user_id: int) -> list[dict]:
+    async def get_context(self, *, tenant_id: int, dashboard_id: int, user_id: int) -> list[dict]:
         return self._data
 
-    async def add_entry(self, *, dashboard_id: int, user_id: int, input_text: str, search_type: str) -> None:
+    async def add_entry(
+        self,
+        *,
+        tenant_id: int,
+        dashboard_id: int,
+        user_id: int,
+        input_text: str,
+        search_type: str,
+    ) -> None:
         self._data.append({"input_text": input_text, "search_type": search_type})
 
 
@@ -231,6 +239,50 @@ class TestQueryEngine:
 
         assert result["status"] == "FAILED"
         assert "허용되지 않은 테이블" in result["error"]
+
+    async def test_llm_intent_failure_returns_friendly_error(self):
+        class FailingLLM(FakeLLM):
+            async def chat_structured(self, messages, response_model, *, model=None):
+                raise RuntimeError("connection timeout")
+
+        engine = self._make_engine(llm=FailingLLM())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "FAILED"
+        assert "질의 분석" in result["error"]
+        assert "connection timeout" not in result["error"]
+
+    async def test_llm_insight_failure_returns_friendly_error(self):
+        class InsightFailLLM(FakeLLM):
+            async def chat_structured(self, messages, response_model, *, model=None):
+                if response_model is InsightResult:
+                    raise RuntimeError("rate limit exceeded")
+                return await super().chat_structured(messages, response_model, model=model)
+
+        engine = self._make_engine(llm=InsightFailLLM())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "FAILED"
+        assert "인사이트 생성" in result["error"]
+        assert "rate limit" not in result["error"]
+
+    async def test_db_execution_failure_returns_friendly_error(self):
+        class FailingDB:
+            async def execute(self, stmt, params=None):
+                raise RuntimeError("connection refused")
+
+        engine = self._make_engine(db=FailingDB())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "FAILED"
+        assert "데이터 조회" in result["error"]
+        assert "connection refused" not in result["error"]
 
     async def test_data_included_in_result(self):
         db = FakeDB(
