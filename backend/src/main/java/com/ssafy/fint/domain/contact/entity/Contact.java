@@ -60,4 +60,8 @@ public class Contact {
         if (email != null)       this.email       = email;
         if (personality != null) this.personality = personality;
     }
+
+    public void softDelete() {
+        this.isDeleted = true;
+    }
 }
