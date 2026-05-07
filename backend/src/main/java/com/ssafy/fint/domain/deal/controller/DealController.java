@@ -60,11 +60,11 @@ public class DealController implements DealSwagger {
 
     @Override
     @DeleteMapping("/{dealId}")
-    public ApiResponse<Void> softDelete(
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void softDelete(
             @AuthenticationPrincipal CustomUserDetails me,
             @PathVariable Long dealId
     ) {
         dealService.softDelete(me, dealId);
-        return ApiResponse.ok();
     }
 }
