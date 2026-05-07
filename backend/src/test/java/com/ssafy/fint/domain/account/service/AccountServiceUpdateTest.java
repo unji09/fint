@@ -2,7 +2,10 @@ package com.ssafy.fint.domain.account.service;
 
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
+import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
+import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
+import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
@@ -29,10 +32,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/**
- * 고객사 부분 수정(PATCH /accounts/{accountId}) 단위 테스트.
- * 본인 소유 + 같은 tenant 격리, partial update 동작을 검증한다.
- */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AccountService 수정 단위 테스트")
 class AccountServiceUpdateTest {
@@ -43,6 +42,18 @@ class AccountServiceUpdateTest {
 
     @Mock
     private AccountRepository accountRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private AccountUserAssignmentRepository accountUserAssignmentRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private AccountExternalInfoRepository accountExternalInfoRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private TemperatureHistoryRepository temperatureHistoryRepository;
 
     @Mock
     @SuppressWarnings("unused")
@@ -67,10 +78,10 @@ class AccountServiceUpdateTest {
     }
 
     @Test
-    @DisplayName("모든 필드 변경 시 의도 메서드가 모두 호출된다.")
+    @DisplayName("모든 필드 변경 시 의도 메서드가 모두 호출된다")
     void updatesAllFields() {
         Account account = mock(Account.class);
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(account));
 
@@ -85,10 +96,10 @@ class AccountServiceUpdateTest {
     }
 
     @Test
-    @DisplayName("일부 필드만 전달하면 해당 필드의 의도 메서드만 호출된다.")
+    @DisplayName("일부 필드만 전달하면 해당 필드의 의도 메서드만 호출된다")
     void updatesOnlyProvidedFields() {
         Account account = mock(Account.class);
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(account));
 
@@ -102,10 +113,10 @@ class AccountServiceUpdateTest {
     }
 
     @Test
-    @DisplayName("모든 필드가 null 이면 어떤 의도 메서드도 호출되지 않는다 (no-op).")
+    @DisplayName("모든 필드가 null 이면 어떤 의도 메서드도 호출되지 않는다 (no-op)")
     void noOpWhenAllFieldsNull() {
         Account account = mock(Account.class);
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(account));
 
@@ -119,9 +130,9 @@ class AccountServiceUpdateTest {
     }
 
     @Test
-    @DisplayName("미존재 또는 타 사용자·타 테넌트 소유 account 는 NOT_FOUND 로 차단된다.")
+    @DisplayName("미존재 또는 타 사용자·타 테넌트 책임 account 는 NOT_FOUND 로 차단된다")
     void rejectMissingOrForeignAccount() {
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.empty());
 
@@ -134,7 +145,7 @@ class AccountServiceUpdateTest {
     }
 
     @Test
-    @DisplayName("인증 컨텍스트가 없으면 INVALID_TOKEN 으로 차단된다.")
+    @DisplayName("인증 컨텍스트가 없으면 INVALID_TOKEN 으로 차단된다")
     void rejectWhenUnauthenticated() {
         SecurityContextHolder.clearContext();
 

@@ -2,17 +2,14 @@ package com.ssafy.fint.domain.account.repository;
 
 import com.ssafy.fint.config.TestcontainersConfig;
 import com.ssafy.fint.domain.account.entity.Account;
+import com.ssafy.fint.domain.account.entity.Mood;
 import com.ssafy.fint.domain.account.entity.TemperatureHistory;
-import com.ssafy.fint.domain.tenant.entity.Tenant;
-import com.ssafy.fint.domain.user.entity.User;
-import com.ssafy.fint.domain.user.entity.UserRole;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -23,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * TemperatureHistoryRepository.findByAccount_AccountIdOrderByCreatedAtDesc 검증.
  * 1) created_at 내림차순 정렬, 2) 다른 account 격리.
- * Spring Data 메서드 네이밍이 BaseEntity 의 createdAt 필드까지 정상 인식하는지를 함께 확인한다.
+ * mood 컬럼이 enum(VARCHAR) 로 정상 매핑되는지 함께 확인.
  */
 @SpringBootTest
 @Import(TestcontainersConfig.class)
@@ -37,13 +34,13 @@ class TemperatureHistoryRepositoryTest {
     private EntityManager em;
 
     @Test
-    @DisplayName("created_at 내림차순(최신순)으로 정렬되어 조회된다.")
+    @DisplayName("created_at 내림차순(최신순)으로 정렬되어 조회된다")
     void ordersByCreatedAtDesc() {
-        Account account = persistAccount("TA");
+        Account account = persistAccount("A");
         OffsetDateTime now = OffsetDateTime.now();
-        persistHistory(account, 60, "초기 온도", now.minusHours(2));
-        persistHistory(account, 75, "관심도 상승", now);
-        persistHistory(account, 70, "관심도 하락", now.minusHours(1));
+        persistHistory(account, Mood.CLOUDY, "초기", now.minusHours(2));
+        persistHistory(account, Mood.RAINBOW, "관심도 상승", now);
+        persistHistory(account, Mood.SUNNY, "유지", now.minusHours(1));
         em.flush();
         em.clear();
 
@@ -51,17 +48,17 @@ class TemperatureHistoryRepositoryTest {
                 .findByAccount_AccountIdOrderByCreatedAtDesc(account.getAccountId());
 
         assertThat(result).extracting(TemperatureHistory::getReason)
-                .containsExactly("관심도 상승", "관심도 하락", "초기 온도");
+                .containsExactly("관심도 상승", "유지", "초기");
     }
 
     @Test
-    @DisplayName("다른 account 의 온도 이력은 조회되지 않는다.")
+    @DisplayName("다른 account 의 mood 이력은 조회되지 않는다")
     void doesNotIncludeOtherAccountHistory() {
-        Account accountA = persistAccount("TA");
-        Account accountB = persistAccount("TB");
+        Account accountA = persistAccount("A");
+        Account accountB = persistAccount("B");
         OffsetDateTime now = OffsetDateTime.now();
-        persistHistory(accountA, 60, "A 온도", now);
-        persistHistory(accountB, 80, "B 온도", now);
+        persistHistory(accountA, Mood.SUNNY, "A mood", now);
+        persistHistory(accountB, Mood.RAINY, "B mood", now);
         em.flush();
         em.clear();
 
@@ -69,38 +66,35 @@ class TemperatureHistoryRepositoryTest {
                 .findByAccount_AccountIdOrderByCreatedAtDesc(accountA.getAccountId());
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getReason()).isEqualTo("A 온도");
+        assertThat(result.get(0).getReason()).isEqualTo("A mood");
+        assertThat(result.get(0).getMood()).isEqualTo(Mood.SUNNY);
     }
 
-    private Account persistAccount(String companyCode) {
-        Tenant tenant = Tenant.builder().name("tenant-" + companyCode).companyCode(companyCode).build();
-        em.persist(tenant);
-        User user = User.builder()
-                .tenant(tenant)
-                .role(UserRole.MEMBER)
-                .name("owner-" + companyCode)
-                .passwordHash("hash")
-                .build();
-        em.persist(user);
+    private Account persistAccount(String suffix) {
         Account account = Account.builder()
-                .user(user)
-                .name("(주)테스트-" + companyCode)
+                .name("(주)테스트-" + suffix)
                 .industry("IT")
                 .build();
         em.persist(account);
         return account;
     }
 
-    private TemperatureHistory persistHistory(Account account, int temp, String reason, OffsetDateTime createdAt) {
+    private TemperatureHistory persistHistory(Account account, Mood mood, String reason, OffsetDateTime createdAt) {
         TemperatureHistory h = TemperatureHistory.builder()
                 .account(account)
-                .temperature(temp)
+                .mood(mood)
                 .reason(reason)
                 .build();
-        // @CreatedDate 가 null 일 때만 채우는 Spring Data Auditing 특성상,
-        // persist 전에 미리 createdAt 을 세팅하면 그대로 유지된다.
-        ReflectionTestUtils.setField(h, "createdAt", createdAt);
         em.persist(h);
+        em.flush();
+        // BaseEntity 의 createdAt 은 updatable = false 라 JPA 더티 체킹으로 변경 불가.
+        // 정렬 검증을 위해 JPQL UPDATE 로 강제 변경한다.
+        em.createQuery(
+                        "UPDATE TemperatureHistory th SET th.createdAt = :createdAt "
+                                + "WHERE th.temperatureHistoryId = :id")
+                .setParameter("createdAt", createdAt)
+                .setParameter("id", h.getTemperatureHistoryId())
+                .executeUpdate();
         return h;
     }
 }

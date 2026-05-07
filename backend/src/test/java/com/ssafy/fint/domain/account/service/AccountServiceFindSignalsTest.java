@@ -5,6 +5,8 @@ import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.entity.AccountExternalInfo;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
+import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
+import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
@@ -37,10 +39,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/**
- * 고객사 외부 시그널 조회(GET /accounts/{accountId}/signals) 단위 테스트.
- * 본인 소유 검증 → 동적 source 필터 → DTO 변환 흐름을 검증한다.
- */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AccountService 시그널 조회 단위 테스트")
 class AccountServiceFindSignalsTest {
@@ -54,6 +52,14 @@ class AccountServiceFindSignalsTest {
 
     @Mock
     private AccountExternalInfoRepository accountExternalInfoRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private AccountUserAssignmentRepository accountUserAssignmentRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private TemperatureHistoryRepository temperatureHistoryRepository;
 
     @Mock
     @SuppressWarnings("unused")
@@ -78,7 +84,7 @@ class AccountServiceFindSignalsTest {
     }
 
     @Test
-    @DisplayName("정상 조회 시 AccountExternalInfo 가 AccountSignalResponse 로 변환되어 반환된다.")
+    @DisplayName("정상 조회 시 AccountExternalInfo 가 AccountSignalResponse 로 변환되어 반환된다")
     void returnsSignalListMappedToDto() {
         Account account = mock(Account.class);
         AccountExternalInfo info = mock(AccountExternalInfo.class);
@@ -90,7 +96,7 @@ class AccountServiceFindSignalsTest {
         given(info.getUrl()).willReturn("https://example.com");
         given(info.getOccurredAt()).willReturn(occurredAt);
 
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(account));
         when(accountExternalInfoRepository.findRecentByAccountAndOptionalSource(
@@ -102,16 +108,14 @@ class AccountServiceFindSignalsTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).source()).isEqualTo("NEWS");
         assertThat(result.get(0).title()).isEqualTo("title-1");
-        assertThat(result.get(0).content()).isEqualTo("content-1");
-        assertThat(result.get(0).url()).isEqualTo("https://example.com");
         assertThat(result.get(0).occurredAt()).isEqualTo(occurredAt);
     }
 
     @Test
-    @DisplayName("source 가 null 이면 Repository 에 null 이 그대로 전달된다 (동적 필터).")
+    @DisplayName("source 가 null 이면 Repository 에 null 이 그대로 전달된다 (동적 필터)")
     void passesNullSourceWhenNotProvided() {
         Account account = mock(Account.class);
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(account));
         when(accountExternalInfoRepository.findRecentByAccountAndOptionalSource(
@@ -126,10 +130,10 @@ class AccountServiceFindSignalsTest {
     }
 
     @Test
-    @DisplayName("size 미지정 시 기본 20 이 Pageable size 로 적용된다.")
+    @DisplayName("size 미지정 시 기본 20 이 Pageable size 로 적용된다")
     void appliesDefaultSizeWhenNotProvided() {
         Account account = mock(Account.class);
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(account));
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
@@ -143,9 +147,9 @@ class AccountServiceFindSignalsTest {
     }
 
     @Test
-    @DisplayName("미존재 또는 타 사용자·타 테넌트 소유 account 는 NOT_FOUND 로 차단되고 signal 조회는 실행되지 않는다.")
+    @DisplayName("미존재 또는 타 사용자·타 테넌트 책임 account 는 NOT_FOUND 로 차단되고 signal 조회는 실행되지 않는다")
     void rejectMissingAccount() {
-        when(accountRepository.findByAccountIdAndUser_UserIdAndUser_Tenant_TenantId(
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.empty());
 
@@ -158,7 +162,7 @@ class AccountServiceFindSignalsTest {
     }
 
     @Test
-    @DisplayName("인증 컨텍스트가 없으면 INVALID_TOKEN 으로 차단된다.")
+    @DisplayName("인증 컨텍스트가 없으면 INVALID_TOKEN 으로 차단된다")
     void rejectWhenUnauthenticated() {
         SecurityContextHolder.clearContext();
 

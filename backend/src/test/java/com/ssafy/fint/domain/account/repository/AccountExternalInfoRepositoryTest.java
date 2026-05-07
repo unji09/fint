@@ -3,9 +3,6 @@ package com.ssafy.fint.domain.account.repository;
 import com.ssafy.fint.config.TestcontainersConfig;
 import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.entity.AccountExternalInfo;
-import com.ssafy.fint.domain.tenant.entity.Tenant;
-import com.ssafy.fint.domain.user.entity.User;
-import com.ssafy.fint.domain.user.entity.UserRole;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * AccountExternalInfoRepository.findRecentByAccountAndOptionalSource 동적 source 필터 검증.
  * 1) source 지정 시 해당 출처만, 2) source = null 이면 모든 출처,
  * 3) Pageable size 가 limit 으로 적용되는지를 Testcontainers PostgreSQL 위에서 확인한다.
+ * Account.user 필드 제거로 user/tenant 없이 account 만 직접 persist 하면 충분하다.
  */
 @SpringBootTest
 @Import(TestcontainersConfig.class)
@@ -37,7 +35,7 @@ class AccountExternalInfoRepositoryTest {
     private EntityManager em;
 
     @Test
-    @DisplayName("source 지정 시 해당 source 만 occurred_at 내림차순으로 조회된다.")
+    @DisplayName("source 지정 시 해당 source 만 occurred_at 내림차순으로 조회된다")
     void filtersBySource() {
         Account account = persistAccount();
         OffsetDateTime now = OffsetDateTime.now();
@@ -57,7 +55,7 @@ class AccountExternalInfoRepositoryTest {
     }
 
     @Test
-    @DisplayName("source 가 null 이면 모든 출처가 occurred_at 내림차순으로 조회된다.")
+    @DisplayName("source 가 null 이면 모든 출처가 occurred_at 내림차순으로 조회된다")
     void returnsAllSourcesWhenNull() {
         Account account = persistAccount();
         OffsetDateTime now = OffsetDateTime.now();
@@ -77,7 +75,7 @@ class AccountExternalInfoRepositoryTest {
     }
 
     @Test
-    @DisplayName("Pageable 의 size 가 limit 으로 적용되어 N 건만 반환된다.")
+    @DisplayName("Pageable 의 size 가 limit 으로 적용되어 N 건만 반환된다")
     void appliesPageableSizeAsLimit() {
         Account account = persistAccount();
         OffsetDateTime now = OffsetDateTime.now();
@@ -95,17 +93,7 @@ class AccountExternalInfoRepositoryTest {
     }
 
     private Account persistAccount() {
-        Tenant tenant = Tenant.builder().name("t").companyCode("TA").build();
-        em.persist(tenant);
-        User user = User.builder()
-                .tenant(tenant)
-                .role(UserRole.MEMBER)
-                .name("owner")
-                .passwordHash("hash")
-                .build();
-        em.persist(user);
         Account account = Account.builder()
-                .user(user)
                 .name("(주)테스트")
                 .industry("IT")
                 .build();

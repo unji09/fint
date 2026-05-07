@@ -3,7 +3,11 @@ package com.ssafy.fint.domain.account.service;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
 import com.ssafy.fint.domain.account.entity.Account;
+import com.ssafy.fint.domain.account.entity.AccountUserAssignment;
+import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
+import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
+import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
@@ -29,11 +33,22 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("AccountService 단위 테스트")
+@DisplayName("AccountService 등록 단위 테스트")
 class AccountServiceTest {
 
     @Mock
     private AccountRepository accountRepository;
+
+    @Mock
+    private AccountUserAssignmentRepository accountUserAssignmentRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private AccountExternalInfoRepository accountExternalInfoRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private TemperatureHistoryRepository temperatureHistoryRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -47,18 +62,16 @@ class AccountServiceTest {
     }
 
     @Nested
-    @DisplayName("register - 고객사 등록")
+    @DisplayName("register - 고객사 등록 (case2: 신규)")
     class Register {
 
         @Test
-        @DisplayName("정상 요청 시 accountId 를 담은 응답을 반환한다")
-        void 정상_등록되면_accountId_반환() {
-            // given
+        @DisplayName("정상 요청 시 account + assignment 가 모두 저장되고 accountId 가 반환된다")
+        void 정상_등록되면_account_assignment_저장_후_accountId_반환() {
             Long userId = 1L;
             setAuthentication(userId);
 
             User ownerMock = mock(User.class);
-            given(ownerMock.getUserId()).willReturn(userId);
             given(userRepository.getReferenceById(userId)).willReturn(ownerMock);
 
             Account savedMock = mock(Account.class);
@@ -68,23 +81,20 @@ class AccountServiceTest {
             AccountRegisterRequest request = new AccountRegisterRequest(
                     "(주)삼성전자", "전자/반도체", "124-81-00998");
 
-            // when
             AccountRegisterResponse response = accountService.register(request);
 
-            // then
             assertThat(response.accountId()).isEqualTo(10L);
             verify(accountRepository).save(any(Account.class));
+            verify(accountUserAssignmentRepository).save(any(AccountUserAssignment.class));
         }
 
         @Test
         @DisplayName("SecurityContext 가 비어있으면 INVALID_TOKEN 예외가 발생한다")
         void SecurityContext_없으면_INVALID_TOKEN_예외() {
-            // given
             SecurityContextHolder.clearContext();
             AccountRegisterRequest request = new AccountRegisterRequest(
                     "(주)삼성전자", "전자/반도체", null);
 
-            // when, then
             assertThatThrownBy(() -> accountService.register(request))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
@@ -94,7 +104,6 @@ class AccountServiceTest {
         @Test
         @DisplayName("Principal 이 CustomUserDetails 가 아니면 INVALID_TOKEN 예외가 발생한다")
         void principal_타입_불일치하면_INVALID_TOKEN_예외() {
-            // given
             Authentication auth = new UsernamePasswordAuthenticationToken(
                     "anonymous-string-principal", null);
             SecurityContextHolder.getContext().setAuthentication(auth);
@@ -102,7 +111,6 @@ class AccountServiceTest {
             AccountRegisterRequest request = new AccountRegisterRequest(
                     "(주)삼성전자", "전자/반도체", null);
 
-            // when, then
             assertThatThrownBy(() -> accountService.register(request))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
