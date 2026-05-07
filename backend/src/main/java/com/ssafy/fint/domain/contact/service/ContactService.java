@@ -2,11 +2,14 @@ package com.ssafy.fint.domain.contact.service;
 
 import com.ssafy.fint.domain.contact.dto.request.ContactCreateRequest;
 import com.ssafy.fint.domain.contact.dto.response.ContactCreateResponse;
+import com.ssafy.fint.domain.contact.dto.response.ContactListResponse;
 import com.ssafy.fint.domain.contact.entity.Contact;
 import com.ssafy.fint.domain.contact.repository.ContactRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -27,5 +30,12 @@ public class ContactService {
             .build();
 
         return ContactCreateResponse.from(contactRepository.save(contact));
+    }
+
+    public List<ContactListResponse> getContacts(Long accountId) {
+        return contactRepository.findAllByAccountIdAndIsDeletedFalse(accountId)
+            .stream()
+            .map(ContactListResponse::from)
+            .toList();
     }
 }
