@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.service;
 
+import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
@@ -13,7 +14,6 @@ import com.ssafy.fint.domain.account.entity.Mood;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
-import com.ssafy.fint.domain.account.repository.LatestMoodProjection;
 import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
@@ -189,10 +189,6 @@ public class AccountService {
                 .toList();
     }
 
-    /**
-     * 본인 책임자 account 목록 조회.
-     * keyword(name LIKE) / industry(equals) 동적 필터 + 페이지네이션 + 각 row 의 최신 mood.
-     */
     public AccountListResponse findMine(String keyword, String industry, Pageable pageable) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
@@ -216,6 +212,39 @@ public class AccountService {
                 .toList();
 
         return new AccountListResponse(items, accountPage.getTotalElements());
+    }
+
+    /**
+     * 고객사 상세 조회.
+     * 본 task 범위: 권한 검증 + 기본 정보 + assignedUsers + latestMood.
+     * meetingCount·lastContactAt·relationDepthScore·contacts·deals 는 후속 (다른 도메인 합성).
+     */
+    public AccountDetailResponse findDetail(Long accountId) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        Account account = accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        List<AccountDetailResponse.AssignedUser> assignedUsers = accountUserAssignmentRepository
+                .findByAccountIdWithUser(accountId)
+                .stream()
+                .map(aua -> new AccountDetailResponse.AssignedUser(
+                        aua.getUser().getUserId(), aua.getUser().getName()))
+                .toList();
+
+        Mood latestMood = temperatureHistoryRepository
+                .findFirstByAccount_AccountIdOrderByCreatedAtDesc(accountId)
+                .map(th -> th.getMood())
+                .orElse(null);
+
+        return new AccountDetailResponse(
+                account.getAccountId(), account.getName(), account.getIndustry(),
+                assignedUsers, latestMood,
+                null, null, null,
+                List.of(), List.of()
+        );
     }
 
     private Long currentUserId() {

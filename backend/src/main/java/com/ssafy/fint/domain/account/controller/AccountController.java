@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.controller;
 
+import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
@@ -76,6 +77,12 @@ public class AccountController implements AccountSwagger {
             @RequestParam(required = false) Integer size
     ) {
         return ApiResponse.ok(accountService.searchInTeam(keyword, size));
+    }
+
+    @Override
+    @GetMapping("/{accountId}")
+    public ApiResponse<AccountDetailResponse> findDetail(@PathVariable Long accountId) {
+        return ApiResponse.ok(accountService.findDetail(accountId));
     }
 
     @Override

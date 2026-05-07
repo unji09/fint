@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.controller;
 
+import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
@@ -36,6 +37,11 @@ public interface AccountSwagger {
     @Operation(summary = "고객사 검색 (팀내)",
             description = "등록 화면 자동완성용. 같은 팀 사원들 등록 account. team 미지정 호출자는 tenant 전체 fallback.")
     ApiResponse<List<AccountSearchableResponse>> searchInTeam(String keyword, Integer size);
+
+    @Operation(summary = "고객사 상세 조회",
+            description = "본인 책임자 + 같은 tenant 검증 후 기본 정보 + assignedUsers + latestMood 반환. " +
+                    "meetingCount·lastContactAt·relationDepthScore·contacts·deals 는 후속 작업에서 합성 예정.")
+    ApiResponse<AccountDetailResponse> findDetail(Long accountId);
 
     @Operation(summary = "고객사 시그널 조회",
             description = "외부 시그널(NEWS/DART) occurred_at 내림차순. size 미지정 기본 20.")
