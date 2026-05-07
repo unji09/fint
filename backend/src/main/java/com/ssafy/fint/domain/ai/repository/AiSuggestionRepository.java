@@ -12,9 +12,10 @@ import java.util.Optional;
 public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long> {
 
     @Query("""
-            select s from AiSuggestion s
+            select distinct s from AiSuggestion s
             join s.account a
-            join a.user u
+            join AccountUserAssignment aua on aua.account = a
+            join aua.user u
             where a.accountId = :accountId
               and u.tenant.tenantId = :tenantId
               and u.isDeleted = false
@@ -28,7 +29,8 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
     @Query("""
             select s from AiSuggestion s
             join s.account a
-            join a.user u
+            join AccountUserAssignment aua on aua.account = a
+            join aua.user u
             where s.aiSuggestionId = :suggestionId
               and a.accountId = :accountId
               and u.tenant.tenantId = :tenantId
@@ -44,7 +46,8 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
             select s from AiSuggestion s
             join fetch s.account a
             join fetch s.pipelineStage
-            join a.user u
+            join AccountUserAssignment aua on aua.account = a
+            join aua.user u
             where u.userId = :userId
               and u.isDeleted = false
               and s.isRead = false

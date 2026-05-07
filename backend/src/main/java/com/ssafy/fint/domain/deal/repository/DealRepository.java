@@ -10,9 +10,10 @@ import java.util.Optional;
 public interface DealRepository extends JpaRepository<Deal, Long> {
 
     @Query("""
-            select d from Deal d
+            select distinct d from Deal d
             join d.account a
-            join a.user u
+            join AccountUserAssignment aua on aua.account = a
+            join aua.user u
             where d.dealId = :dealId
               and u.tenant.tenantId = :tenantId
               and u.isDeleted = false
