@@ -1,102 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import CustomerSidebar from '@/components/customer/CustomerSidebar';
 import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
 import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
-import type { Account, Signal, Deal, StrategyCard } from '@/types/customer';
+import { useAccountList, useAccountDetail } from '@/hooks/useCustomer';
+import type { ContactInfo, Deal, StrategyCard } from '@/types/customer';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-function authHeader() {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
-type ContactInfo = {
-  name: string;
-  role: string;
-  color: string;
-  phone?: string;
-  email?: string;
-  memo?: string;
-};
-
-/* ── Mock 데이터 (API 연동 전) ── */
-const MOCK_ACCOUNTS: Account[] = [
-  {
-    accountId: 1,
-    name: 'Samsung SDS',
-    industry: 'IT서비스',
-    temperature: 'HOT',
-    pipelineStage: '파이프 단계',
-  },
-  {
-    accountId: 2,
-    name: 'Hanul CNS',
-    industry: 'SI',
-    temperature: 'WARM',
-    pipelineStage: '파이프 단계',
-  },
-  {
-    accountId: 3,
-    name: 'Kakao Mobility',
-    industry: '플랫폼',
-    temperature: 'COOL',
-    pipelineStage: '파이프 단계',
-  },
-  {
-    accountId: 4,
-    name: 'Hyundai Card',
-    industry: '금융',
-    temperature: 'COLD',
-    pipelineStage: '파이프 단계',
-  },
-  {
-    accountId: 5,
-    name: 'CJ Logistics',
-    industry: '물류',
-    temperature: 'STORM',
-    pipelineStage: '파이프 단계',
-  },
-  {
-    accountId: 6,
-    name: 'NCSOFT',
-    industry: '게임',
-    temperature: 'WARM',
-    pipelineStage: '파이프 단계',
-  },
-];
-const MOCK_SIGNALS: Signal[] = [
-  { type: 'DART', time: '오늘 09:30', content: '신규 시설투자 3,000억 공시 - IT 인프라 확장 예상' },
-  {
-    type: 'NEWS',
-    time: '어제 14:15',
-    content: '데이터센터 신축으로 클라우드 전환 가속화 기사 보도',
-  },
-  { type: 'NEWS', time: '3일 전', content: '신임 CFO 박성준 부사장 선임 (비용 효율화 강조 성향)' },
-];
-const MOCK_DEALS: Deal[] = [
-  { dealId: 1, title: '제목', assignee: '담당자', expectedAmount: 0 },
-  {
-    dealId: 2,
-    title: '한번 팔기',
-    assignee: '홍길동',
-    expectedAmount: 120000000,
-    expectedCloseDate: '2024-12-12',
-  },
-  {
-    dealId: 3,
-    title: 'AI 연장',
-    assignee: '이영희',
-    expectedAmount: 850000000,
-    expectedCloseDate: '2024-06-30',
-  },
-  { dealId: 4, title: '인프라 계약', assignee: '김민준', expectedAmount: 250000000 },
-  { dealId: 5, title: '보안 솔루션', assignee: '박지수', expectedAmount: 180000000 },
-];
 const MOCK_STRATEGIES: StrategyCard[] = [
   {
     id: 1,
@@ -126,36 +39,23 @@ const MOCK_STRATEGIES: StrategyCard[] = [
     successRate: 94,
   },
 ];
+
 const SIGNAL_ACCENTS = ['#06b6d4', '#cbd5e1', '#fb923c'];
 
-/* ════════ 메인 페이지 (상태 관리 + 레이아웃만) ════════ */
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
-  const [loading, setLoading] = useState(false);
+  // ─── 훅 ──────────────────────────────────────────────────────────────────
+  const { accounts, loading: accountsLoading } = useAccountList();
+  const { signals, contacts, deals } = useAccountDetail(id ?? null);
+
+  // ─── 로컬 UI 상태 ─────────────────────────────────────────────────────────
   const [selectedContact, setSelectedContact] = useState<ContactInfo | null>(null);
-  const [showDealList, setShowDealList] = useState(false); // 더보기 → 딜 목록
+  const [showDealList, setShowDealList] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
 
   const account = accounts.find((a) => String(a.accountId) === String(id)) ?? accounts[0];
-
-  /* 고객사 이동 시 뷰 초기화 */
-  useEffect(() => {
-    setSelectedContact(null);
-    setShowDealList(false);
-    setSelectedDeal(null);
-  }, [id]);
-
-  /* API 연동 */
-  useEffect(() => {
-    fetch(`${API_BASE}/accounts`, { headers: authHeader() as HeadersInit })
-      .then((r) => r.json())
-      .then((j) => setAccounts(j.data ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
 
   const handleMoreDeals = () => {
     setShowDealList(true);
@@ -186,7 +86,8 @@ export default function CustomerDetailPage() {
         <CustomerSidebar
           accounts={accounts}
           selectedId={account?.accountId ?? null}
-          loading={loading}
+          loading={accountsLoading}
+          contacts={contacts}
           onContactSelect={handleContactSelect}
         />
 
@@ -200,9 +101,8 @@ export default function CustomerDetailPage() {
             gap: 24,
           }}
         >
-          {/* ── 브레드크럼 헤더 ── */}
+          {/* ── 브레드크럼 ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* 회사명 */}
             <h1
               onClick={() => {
                 setShowDealList(false);
@@ -219,10 +119,8 @@ export default function CustomerDetailPage() {
                 cursor: showDealList || selectedContact ? 'pointer' : 'default',
               }}
             >
-              {account?.name ?? 'Samsung SDS'}
+              {account?.name ?? '고객사'}
             </h1>
-
-            {/* → 담당자 */}
             {selectedContact && (
               <>
                 <span style={{ color: '#cbd5e1', fontSize: 20 }}>→</span>
@@ -241,12 +139,10 @@ export default function CustomerDetailPage() {
                     cursor: showDealList ? 'pointer' : 'default',
                   }}
                 >
-                  담당자
+                  {selectedContact.name}
                 </h1>
               </>
             )}
-
-            {/* → 상세 딜 */}
             {showDealList && (
               <>
                 <span style={{ color: '#cbd5e1', fontSize: 20 }}>→</span>
@@ -255,153 +151,41 @@ export default function CustomerDetailPage() {
                     fontFamily: 'Pretendard,sans-serif',
                     fontWeight: 900,
                     fontSize: 26,
-                    color: '#0f172a',
                     margin: 0,
                     lineHeight: 1,
+                    color: '#0f172a',
                   }}
                 >
-                  상세 딜
+                  딜 목록
                 </h1>
               </>
             )}
-
-            {/* 기본 뷰 subtitle */}
-            {!showDealList && !selectedContact && (
-              <span
-                style={{
-                  fontFamily: 'Pretendard,sans-serif',
-                  fontWeight: 300,
-                  fontSize: 14,
-                  color: '#64748b',
-                  alignSelf: 'flex-end',
-                  marginBottom: 2,
-                }}
-              >
-                {account?.industry} · 최신 온도
-              </span>
-            )}
           </div>
 
-          {/* ── 딜 목록 뷰 (더보기 클릭) ── */}
-          {showDealList && (
+          {/* ── 딜 목록 뷰 ── */}
+          {showDealList ? (
+            <div
+              ref={scrollRef}
+              style={{
+                display: 'flex',
+                gap: 20,
+                overflowX: 'auto',
+                paddingBottom: 8,
+                flexWrap: 'wrap',
+              }}
+            >
+              {deals.map((d) => (
+                <DealCard
+                  key={d.dealId}
+                  deal={d}
+                  selected={selectedDeal?.dealId === d.dealId}
+                  onClick={() => handleDealClick(d)}
+                />
+              ))}
+            </div>
+          ) : (
             <>
-              <div
-                style={{
-                  background: 'white',
-                  border: '1px solid #e2eaf0',
-                  borderRadius: 8,
-                  boxShadow: '0 1px 1px rgba(0,0,0,0.05)',
-                  padding: '22px 24px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-                  <span
-                    style={{
-                      fontFamily: 'Pretendard,sans-serif',
-                      fontWeight: 600,
-                      fontSize: 18,
-                      color: '#1e293b',
-                    }}
-                  >
-                    딜 목록
-                  </span>
-                  <button
-                    style={{
-                      background: '#f2fcff',
-                      border: '1px solid #dbeafe',
-                      borderRadius: 9,
-                      padding: '4px 12px',
-                      fontFamily: 'Pretendard,sans-serif',
-                      fontSize: 13,
-                      color: '#06b6d4',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    + 딜 추가
-                  </button>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button
-                    onClick={() => scrollRef.current?.scrollBy({ left: -216, behavior: 'smooth' })}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      border: '1px solid #e2e8f0',
-                      background: 'white',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                    }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M15 18l-6-6 6-6"
-                        stroke="#64748b"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
-                  <div style={{ overflow: 'hidden', flex: 1 }}>
-                    <div
-                      ref={scrollRef}
-                      style={{
-                        display: 'flex',
-                        gap: 16,
-                        overflowX: 'auto',
-                        scrollbarWidth: 'none',
-                        alignItems: 'stretch',
-                      }}
-                    >
-                      {MOCK_DEALS.map((d) => (
-                        <DealCard
-                          key={d.dealId}
-                          deal={d}
-                          selected={selectedDeal?.dealId === d.dealId}
-                          onClick={() => handleDealClick(d)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => scrollRef.current?.scrollBy({ left: 216, behavior: 'smooth' })}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      border: '1px solid #e2e8f0',
-                      background: 'white',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                    }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M9 18l6-6-6-6"
-                        stroke="#64748b"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              {selectedDeal && <DealDetailPanel />}
-            </>
-          )}
-
-          {/* ── 기본 / 담당자 뷰 ── */}
-          {!showDealList && (
-            <>
-              {/* 정보 카드 */}
+              {/* ── 정보 + 딜 카드 행 ── */}
               <div
                 style={{
                   background: 'white',
@@ -480,45 +264,32 @@ export default function CustomerDetailPage() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            fontFamily: 'Inter,sans-serif',
-                            fontSize: 14,
-                            color: '#475569',
-                          }}
+                          style={{ fontFamily: 'Inter,sans-serif', fontSize: 14, color: '#475569' }}
                         >
-                          📞 {selectedContact.phone ?? '02-1234-5678'}
+                          📞 {selectedContact.phone ?? '-'}
                         </div>
                         <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            fontFamily: 'Inter,sans-serif',
-                            fontSize: 14,
-                            color: '#475569',
-                          }}
+                          style={{ fontFamily: 'Inter,sans-serif', fontSize: 14, color: '#475569' }}
                         >
-                          ✉️ {selectedContact.email ?? 'contact@samsung.com'}
+                          ✉️ {selectedContact.email ?? '-'}
                         </div>
                       </div>
-                      <div
-                        style={{
-                          background: '#f8fafc',
-                          borderLeft: '2px solid #06b6d4',
-                          borderRadius: '0 6px 6px 0',
-                          padding: '12px 14px',
-                          fontFamily: 'Pretendard,sans-serif',
-                          fontSize: 13,
-                          color: '#334155',
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {selectedContact.memo ??
-                          '꼼꼼한 성격, 가격에 민감하며 데이터 기반 의사결정 선호. ROI 수치 제시 필수.'}
-                      </div>
+                      {selectedContact.memo && (
+                        <div
+                          style={{
+                            background: '#f8fafc',
+                            borderLeft: '2px solid #06b6d4',
+                            borderRadius: '0 6px 6px 0',
+                            padding: '12px 14px',
+                            fontFamily: 'Pretendard,sans-serif',
+                            fontSize: 13,
+                            color: '#334155',
+                            lineHeight: 1.6,
+                          }}
+                        >
+                          {selectedContact.memo}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
@@ -545,9 +316,27 @@ export default function CustomerDetailPage() {
                           더보기
                         </span>
                       </div>
-                      {MOCK_SIGNALS.map((sig, i) => (
-                        <SignalItem key={i} signal={sig} accent={SIGNAL_ACCENTS[i] ?? '#cbd5e1'} />
-                      ))}
+                      {signals.length > 0 ? (
+                        signals
+                          .slice(0, 3)
+                          .map((sig, i) => (
+                            <SignalItem
+                              key={i}
+                              signal={sig}
+                              accent={SIGNAL_ACCENTS[i] ?? '#cbd5e1'}
+                            />
+                          ))
+                      ) : (
+                        <p
+                          style={{
+                            fontFamily: 'Pretendard,sans-serif',
+                            fontSize: 13,
+                            color: '#94a3b8',
+                          }}
+                        >
+                          시그널 데이터가 없습니다.
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
@@ -599,22 +388,34 @@ export default function CustomerDetailPage() {
                       flex: 1,
                     }}
                   >
-                    {MOCK_DEALS.slice(0, 2).map((d) => (
-                      <DealCard
-                        key={d.dealId}
-                        deal={d}
-                        selected={selectedDeal?.dealId === d.dealId}
-                        onClick={() => handleDealClick(d)}
-                      />
-                    ))}
+                    {deals.length > 0 ? (
+                      deals
+                        .slice(0, 2)
+                        .map((d) => (
+                          <DealCard
+                            key={d.dealId}
+                            deal={d}
+                            selected={selectedDeal?.dealId === d.dealId}
+                            onClick={() => handleDealClick(d)}
+                          />
+                        ))
+                    ) : (
+                      <p
+                        style={{
+                          fontFamily: 'Pretendard,sans-serif',
+                          fontSize: 13,
+                          color: '#94a3b8',
+                        }}
+                      >
+                        진행 중인 딜이 없습니다.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* 딜 상세 패널 (딜 카드 클릭 시) */}
               {selectedDeal && <DealDetailPanel />}
 
-              {/* AI 추천 전략 (딜 미선택 시) */}
               {!selectedDeal && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
                   <h2

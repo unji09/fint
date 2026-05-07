@@ -2,57 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Account, TemperatureLevel } from '@/types/customer';
-
-type ContactInfo = {
-  name: string;
-  role: string;
-  color: string;
-  phone?: string;
-  email?: string;
-  memo?: string;
-};
-
-const MOCK_CONTACTS: Record<number, ContactInfo[]> = {
-  1: [
-    {
-      name: '이영희',
-      role: '구매팀장',
-      color: '#7c3aed',
-      phone: '02-1234-5678',
-      email: 'lee.yh@samsung.com',
-      memo: '꼼꼼한 성격, 가격에 민감하며 데이터 기반 의사결정 선호. ROI 수치 제시 필수.',
-    },
-    {
-      name: '김민준',
-      role: 'IT인프라담당',
-      color: '#0891b2',
-      phone: '02-2345-6789',
-      email: 'kim.mj@samsung.com',
-    },
-    {
-      name: '박지수',
-      role: 'CFO실',
-      color: '#059669',
-      phone: '02-3456-7890',
-      email: 'park.js@samsung.com',
-    },
-  ],
-  2: [
-    { name: '최현우', role: '기술이사', color: '#dc2626' },
-    { name: '윤서연', role: '프로젝트PM', color: '#d97706' },
-  ],
-  3: [{ name: '강도현', role: '플랫폼운영팀', color: '#7c3aed' }],
-  4: [
-    { name: '임채원', role: '전략기획팀', color: '#0891b2' },
-    { name: '송민아', role: '디지털혁신팀', color: '#059669' },
-  ],
-  5: [{ name: '정태양', role: '물류IT팀장', color: '#dc2626' }],
-  6: [
-    { name: '한승우', role: '인프라팀', color: '#7c3aed' },
-    { name: '오지현', role: '게임개발팀', color: '#0891b2' },
-  ],
-};
+import type { Account, ContactInfo, TemperatureLevel } from '@/types/customer';
 
 function TempIcon({ level }: { level: TemperatureLevel }) {
   const icons: Record<TemperatureLevel, string> = {
@@ -83,6 +33,8 @@ interface CustomerSidebarProps {
   accounts: Account[];
   selectedId: number | null;
   loading?: boolean;
+  /** 현재 선택된 고객사의 담당자 목록 (API에서 fetch) */
+  contacts?: ContactInfo[];
   onContactSelect?: (contact: ContactInfo | null) => void;
 }
 
@@ -90,6 +42,7 @@ export default function CustomerSidebar({
   accounts,
   selectedId,
   loading,
+  contacts = [],
   onContactSelect,
 }: CustomerSidebarProps) {
   const router = useRouter();
@@ -174,7 +127,9 @@ export default function CustomerSidebar({
           : accounts.map((acc) => {
               const isSelected = acc.accountId === selectedId;
               const isExpanded = acc.accountId === expandedId;
-              const contacts = MOCK_CONTACTS[acc.accountId] ?? [];
+              // 선택된 고객사만 API 담당자 데이터 사용, 나머지는 빈 배열
+              const accountContacts = isSelected ? contacts : [];
+
               return (
                 <div key={acc.accountId} style={{ marginBottom: 7 }}>
                   <button
@@ -214,20 +169,22 @@ export default function CustomerSidebar({
                         >
                           {acc.name}
                         </span>
-                        <span
-                          style={{
-                            background: '#fee2e2',
-                            borderRadius: 4,
-                            padding: '1px 5px',
-                            fontFamily: 'Pretendard,sans-serif',
-                            fontSize: 10,
-                            color: '#dc2626',
-                            flexShrink: 0,
-                            marginLeft: 4,
-                          }}
-                        >
-                          {acc.pipelineStage}
-                        </span>
+                        {acc.pipelineStage && (
+                          <span
+                            style={{
+                              background: '#fee2e2',
+                              borderRadius: 4,
+                              padding: '1px 5px',
+                              fontFamily: 'Pretendard,sans-serif',
+                              fontSize: 10,
+                              color: '#dc2626',
+                              flexShrink: 0,
+                              marginLeft: 4,
+                            }}
+                          >
+                            {acc.pipelineStage}
+                          </span>
+                        )}
                       </div>
                       <span
                         style={{
@@ -237,7 +194,7 @@ export default function CustomerSidebar({
                           color: '#64748b',
                         }}
                       >
-                        {acc.industry} · 최신 온도
+                        {acc.industry}
                       </span>
                     </div>
                     <svg
@@ -261,8 +218,8 @@ export default function CustomerSidebar({
                     </svg>
                   </button>
 
-                  {/* 담당자 목록 */}
-                  {isExpanded && contacts.length > 0 && (
+                  {/* 담당자 목록 — 선택된 고객사만 표시 */}
+                  {isExpanded && accountContacts.length > 0 && (
                     <div
                       style={{
                         background: isSelected ? '#f2fcff' : '#f8fafc',
@@ -271,11 +228,11 @@ export default function CustomerSidebar({
                         padding: '4px 12px 10px 13px',
                       }}
                     >
-                      {contacts.map((c, i) => {
+                      {accountContacts.map((c, i) => {
                         const isActive = activeContact === c.name;
                         return (
                           <button
-                            key={i}
+                            key={c.contactId ?? i}
                             onClick={(e) => handleContactClick(e, c)}
                             style={{
                               width: '100%',
@@ -287,7 +244,7 @@ export default function CustomerSidebar({
                               border: 'none',
                               cursor: 'pointer',
                               borderBottom:
-                                i < contacts.length - 1
+                                i < accountContacts.length - 1
                                   ? '1px solid rgba(226,232,240,0.5)'
                                   : 'none',
                               borderLeft: isActive ? '2px solid #06b6d4' : '2px solid transparent',
