@@ -3,6 +3,7 @@ package com.ssafy.fint.domain.account.controller;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountSearchableResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.service.AccountService;
@@ -71,5 +72,14 @@ public class AccountController implements AccountSwagger {
             @PathVariable Long accountId
     ) {
         return ApiResponse.ok(accountService.findMoodHistory(accountId));
+    }
+
+    @Override
+    @GetMapping("/searchable")
+    public ApiResponse<List<AccountSearchableResponse>> searchInTeam(
+            @RequestParam String keyword,
+            @RequestParam(required = false) Integer size
+    ) {
+        return ApiResponse.ok(accountService.searchInTeam(keyword, size));
     }
 }

@@ -3,6 +3,7 @@ package com.ssafy.fint.domain.account.service;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountSearchableResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
@@ -25,7 +26,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -34,6 +37,7 @@ import java.util.List;
 public class AccountService {
 
     private static final int DEFAULT_SIGNAL_SIZE = 20;
+    private static final int DEFAULT_SEARCHABLE_SIZE = 10;
 
     private final AccountRepository accountRepository;
     private final AccountUserAssignmentRepository accountUserAssignmentRepository;
@@ -41,12 +45,6 @@ public class AccountService {
     private final TemperatureHistoryRepository temperatureHistoryRepository;
     private final UserRepository userRepository;
 
-    /**
-     * 고객사 등록.
-     * - existingAccountId 있음 → case1: 기존 account 에 본인을 책임자로 매핑 (이미 책임자면 idempotent).
-     * - existingAccountId 없음 → case2: 새 account 생성 + 본인 책임자 매핑.
-     * 미존재 / 타 테넌트 account 는 NOT_FOUND. case2 시 name·industry 누락은 INVALID_INPUT.
-     */
     @Transactional
     public AccountRegisterResponse register(AccountRegisterRequest request) {
         Long userId = currentUserId();
@@ -100,11 +98,6 @@ public class AccountService {
         return saved;
     }
 
-    /**
-     * 고객사 부분 수정.
-     * 본인이 책임자로 매핑된 + 같은 tenant 인 account 만 수정 가능.
-     * null 인 필드는 변경되지 않으며, 모두 null 이면 no-op.
-     */
     @Transactional
     public void update(Long accountId, AccountUpdateRequest request) {
         Long userId = currentUserId();
@@ -118,24 +111,13 @@ public class AccountService {
                     return new BusinessException(CommonErrorCode.NOT_FOUND);
                 });
 
-        if (request.name() != null) {
-            account.changeName(request.name());
-        }
-        if (request.industry() != null) {
-            account.changeIndustry(request.industry());
-        }
-        if (request.bizNo() != null) {
-            account.changeBizNo(request.bizNo());
-        }
+        if (request.name() != null) account.changeName(request.name());
+        if (request.industry() != null) account.changeIndustry(request.industry());
+        if (request.bizNo() != null) account.changeBizNo(request.bizNo());
 
         log.info("[AccountUpdate] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
     }
 
-    /**
-     * 고객사 책임 해제 (본인 assignment row 만 제거).
-     * account 본체는 유지된다 (다른 책임자 잔존 또는 0명 상태로 보존).
-     * 미존재 / 타 사용자 / 타 테넌트 모두 NOT_FOUND 로 통일하여 존재 여부 노출 방지.
-     */
     @Transactional
     public void delete(Long accountId) {
         Long userId = currentUserId();
@@ -155,20 +137,13 @@ public class AccountService {
         log.info("[AccountDelete] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
     }
 
-    /**
-     * 고객사 외부 시그널(NEWS/DART) 조회.
-     */
     public List<AccountSignalResponse> findSignals(Long accountId, String source, Integer size) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
 
         accountRepository
                 .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
-                .orElseThrow(() -> {
-                    log.debug("[AccountFindSignals] not found. accountId={} userId={} tenantId={}",
-                            accountId, userId, tenantId);
-                    return new BusinessException(CommonErrorCode.NOT_FOUND);
-                });
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
 
         int limit = size != null ? size : DEFAULT_SIGNAL_SIZE;
         return accountExternalInfoRepository
@@ -178,25 +153,50 @@ public class AccountService {
                 .toList();
     }
 
-    /**
-     * 고객 날씨(분위기) 추이 조회.
-     */
     public List<AccountMoodResponse> findMoodHistory(Long accountId) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
 
         accountRepository
                 .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
-                .orElseThrow(() -> {
-                    log.debug("[AccountFindMood] not found. accountId={} userId={} tenantId={}",
-                            accountId, userId, tenantId);
-                    return new BusinessException(CommonErrorCode.NOT_FOUND);
-                });
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
 
         return temperatureHistoryRepository
                 .findByAccount_AccountIdOrderByCreatedAtDesc(accountId)
                 .stream()
                 .map(AccountMoodResponse::from)
+                .toList();
+    }
+
+    /**
+     * 고객사 팀내 검색 (등록 화면 자동완성용).
+     * 같은 tenant + 같은 team(team 미지정 호출자는 tenant 전체 fallback)의 사원들이 등록한 account 중
+     * name LIKE keyword 매칭. assignedToMe 로 본인 책임 여부 표시 (UI 라벨 분기용).
+     */
+    public List<AccountSearchableResponse> searchInTeam(String keyword, Integer size) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        User caller = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_TOKEN));
+        Long callerTeamId = caller.getTeam() != null ? caller.getTeam().getTeamId() : null;
+
+        int limit = size != null ? size : DEFAULT_SEARCHABLE_SIZE;
+        List<Account> accounts = accountRepository.searchInTeam(
+                keyword, callerTeamId, tenantId, PageRequest.of(0, limit));
+
+        if (accounts.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> accountIds = accounts.stream().map(Account::getAccountId).toList();
+        Set<Long> myAssignedIds = new HashSet<>(
+                accountUserAssignmentRepository.findAccountIdsByUserIdAndAccountIdIn(userId, accountIds));
+
+        return accounts.stream()
+                .map(a -> new AccountSearchableResponse(
+                        a.getAccountId(), a.getName(), a.getIndustry(), a.getBizNo(),
+                        myAssignedIds.contains(a.getAccountId())))
                 .toList();
     }
 
