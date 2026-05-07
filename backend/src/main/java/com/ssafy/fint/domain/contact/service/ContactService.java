@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.contact.service;
 
 import com.ssafy.fint.domain.contact.dto.request.ContactCreateRequest;
+import com.ssafy.fint.domain.contact.dto.request.ContactUpdateRequest;
 import com.ssafy.fint.domain.contact.dto.response.ContactCreateResponse;
 import com.ssafy.fint.domain.contact.dto.response.ContactListResponse;
 import com.ssafy.fint.domain.contact.entity.Contact;
@@ -37,5 +38,19 @@ public class ContactService {
             .stream()
             .map(ContactListResponse::from)
             .toList();
+    }
+
+    @Transactional
+    public void updateContact(Long contactId, ContactUpdateRequest request) {
+        Contact contact = contactRepository.findByContactIdAndIsDeletedFalse(contactId)
+            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 담당자입니다."));
+
+        contact.update(
+            request.getName(),
+            request.getTitle(),
+            request.getPhone(),
+            request.getEmail(),
+            request.getPersonality()
+        );
     }
 }
