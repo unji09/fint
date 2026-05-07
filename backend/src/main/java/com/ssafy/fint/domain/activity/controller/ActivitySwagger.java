@@ -4,6 +4,8 @@ import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
 import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,4 +45,11 @@ public interface ActivitySwagger {
                     + "같은 테넌트의 다른 사용자가 만든 활동이거나 미존재 ID 인 경우 404 를 반환한다."
     )
     void delete(Long activityId);
+
+    @Operation(
+            summary = "영업 활동 부분 수정",
+            description = "현재 사용자가 작성한 활동을 부분 수정한다. "
+                    + "JSON 키를 생략하면 해당 필드는 변경되지 않고, 명시적 null 로 보내면 해당 필드가 비워진다 "
+    )
+    ApiResponse<ActivityUpdateResponse> update(Long activityId, ActivityUpdateRequest request);
 }

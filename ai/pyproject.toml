@@ -17,6 +17,9 @@ dependencies = [
     "instructor>=1.0",
     "boto3>=1.35.0",
     "python-jose[cryptography]>=3.3",
+    "rapidocr>=3.8",
+    "onnxruntime>=1.18",
+    "opencv-python-headless>=4.8",
 ]
 
 [dependency-groups]
@@ -25,6 +28,8 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.5.0",
     "mypy>=1.10",
+    "types-python-jose>=3.3",
+    "boto3-stubs>=1.35",
 ]
 
 [build-system]
@@ -45,6 +50,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["N818", "UP046"]
 
 [tool.mypy]
 python_version = "3.12"
