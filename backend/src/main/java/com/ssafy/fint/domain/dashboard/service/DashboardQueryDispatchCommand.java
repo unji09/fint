@@ -12,8 +12,8 @@ public record DashboardQueryDispatchCommand(
         String action,
         String inputText,
         Long dashboardId,
-        Long userId,
         Long tenantId,
+        Long userId,
         List<Object> existingWidgets,
         Object currentWidget
 ) {

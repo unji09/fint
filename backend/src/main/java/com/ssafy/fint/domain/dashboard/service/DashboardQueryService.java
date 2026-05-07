@@ -86,8 +86,8 @@ public class DashboardQueryService {
                 ACTION_ADD,
                 inputText,
                 dashboardId,
-                me.getUserId(),
                 me.getTenantId(),
+                me.getUserId(),
                 Collections.emptyList(),
                 null
         );
