@@ -51,4 +51,13 @@ public class Contact {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public void update(String name, String title, String phone,
+                       String email, String personality) {
+        if (name != null)        this.name        = name;
+        if (title != null)       this.title       = title;
+        if (phone != null)       this.phone       = phone;
+        if (email != null)       this.email       = email;
+        if (personality != null) this.personality = personality;
+    }
 }
