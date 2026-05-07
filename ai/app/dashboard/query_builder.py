@@ -41,6 +41,8 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
         agg_match = _AGG_PATTERN.match(col)
         if agg_match:
             func, arg = agg_match.group(1).upper(), agg_match.group(2)
+            if arg == "*" and func != "COUNT":
+                raise QueryBuildError(f"{func}(*)는 허용되지 않습니다. *는 COUNT에서만 사용 가능합니다")
             if arg == "*":
                 select_exprs.append(f'{func}(*) AS "{col}"')
             else:
@@ -51,14 +53,18 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
     sql_parts = [f"SELECT {', '.join(select_exprs)}", f"FROM {spec.table}"]
 
     # tenant_id 격리 JOIN (무조건)
+    tenant_joined_tables: set[str] = set()
     if table_meta.tenant_path and table_meta.tenant_path.joins:
         prev_table = spec.table
         for join_table, self_col, join_col in table_meta.tenant_path.joins:
             sql_parts.append(f"JOIN {join_table} ON {prev_table}.{self_col} = {join_table}.{join_col}")
+            tenant_joined_tables.add(join_table)
             prev_table = join_table
 
-    # 사용자 지정 JOIN (WHERE 앞에 위치해야 유효한 SQL)
+    # 사용자 지정 JOIN (tenant JOIN과 중복 제거, WHERE 앞에 위치)
     for join in spec.joins:
+        if join.table in tenant_joined_tables:
+            continue
         sql_parts.append(f"JOIN {join.table} ON {spec.table}.{join.on_self} = {join.table}.{join.on_other}")
 
     # WHERE — tenant_id 격리
@@ -81,8 +87,8 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
     for f in spec.filters:
         col_ref = f"{spec.table}.{f.column}"
         if f.operator == FilterOperator.IN:
-            if not isinstance(f.value, list):
-                raise QueryBuildError("IN 연산자에는 리스트가 필요합니다")
+            if not isinstance(f.value, list) or not f.value:
+                raise QueryBuildError("IN 연산자에는 비어있지 않은 리스트가 필요합니다")
             placeholders = ", ".join(_next_param(v) for v in f.value)
             sql_parts.append(f"AND {col_ref} IN ({placeholders})")
         elif f.operator == FilterOperator.BETWEEN:
@@ -126,6 +132,8 @@ def _validate_spec(spec: QuerySpec) -> None:
             func, arg = agg_match.group(1).upper(), agg_match.group(2)
             if func not in ALLOWED_AGGREGATES:
                 raise QueryBuildError(f"허용되지 않은 집계 함수: {func}")
+            if arg == "*" and func != "COUNT":
+                raise QueryBuildError(f"{func}(*)는 허용되지 않습니다. *는 COUNT에서만 사용 가능합니다")
             if arg != "*" and arg not in allowed_cols:
                 raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{arg}")
         elif col not in allowed_cols:

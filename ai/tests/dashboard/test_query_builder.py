@@ -98,6 +98,17 @@ class TestFilters:
 
         assert "IN" in sql
 
+    def test_in_empty_list_raises(self):
+        spec = QuerySpec(
+            table="activities",
+            columns=["title"],
+            filters=[
+                FilterCondition(column="type", operator=FilterOperator.IN, value=[]),
+            ],
+        )
+        with pytest.raises(QueryBuildError, match="비어있지 않은 리스트"):
+            build_query(spec, tenant_id=1)
+
     def test_between_filter(self):
         spec = QuerySpec(
             table="deals",
@@ -209,6 +220,16 @@ class TestAggregates:
 
         assert 'AS "SUM(amount)"' in sql
 
+    def test_sum_star_raises(self):
+        spec = QuerySpec(table="deals", columns=["SUM(*)"])
+        with pytest.raises(QueryBuildError, match="SUM.*허용되지 않습니다"):
+            build_query(spec, tenant_id=1)
+
+    def test_avg_star_raises(self):
+        spec = QuerySpec(table="deals", columns=["AVG(*)"])
+        with pytest.raises(QueryBuildError, match="AVG.*허용되지 않습니다"):
+            build_query(spec, tenant_id=1)
+
     def test_disallowed_aggregate_function_raises(self):
         spec = QuerySpec(
             table="deals",
@@ -252,6 +273,28 @@ class TestJoins:
 
         assert "JOIN pipeline_stages" in sql
         assert "pipeline_stage_id" in sql
+
+    def test_activities_join_comes_before_where(self):
+        spec = QuerySpec(
+            table="activities",
+            columns=["title"],
+            joins=[JoinSpec(table="pipeline_stages", on_self="pipeline_stage_id", on_other="pipeline_stage_id")],
+        )
+        sql, params = build_query(spec, tenant_id=1)
+
+        join_pos = sql.index("JOIN pipeline_stages")
+        where_pos = sql.index("WHERE")
+        assert join_pos < where_pos
+
+    def test_tenant_path_join_dedup(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title", "amount"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+        )
+        sql, params = build_query(spec, tenant_id=1)
+
+        assert sql.count("JOIN accounts") == 1
 
     def test_disallowed_join_raises(self):
         spec = QuerySpec(
