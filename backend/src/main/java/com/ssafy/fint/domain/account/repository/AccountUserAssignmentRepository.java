@@ -17,9 +17,6 @@ public interface AccountUserAssignmentRepository extends JpaRepository<AccountUs
 
     void deleteByAccount_AccountIdAndUser_UserId(Long accountId, Long userId);
 
-    /**
-     * 호출자가 책임자로 매핑된 account 들의 ID 만 조회 (검색 응답의 assignedToMe 매핑용).
-     */
     @Query("""
             select aua.account.accountId from AccountUserAssignment aua
             where aua.user.userId = :userId
@@ -28,4 +25,14 @@ public interface AccountUserAssignmentRepository extends JpaRepository<AccountUs
     List<Long> findAccountIdsByUserIdAndAccountIdIn(
             @Param("userId") Long userId,
             @Param("accountIds") Collection<Long> accountIds);
+
+    /**
+     * account 의 책임자 매핑을 user 까지 fetch join 으로 한 번에 조회 (상세 조회의 assignedUsers 매핑용).
+     */
+    @Query("""
+            select aua from AccountUserAssignment aua
+            join fetch aua.user u
+            where aua.account.accountId = :accountId
+            """)
+    List<AccountUserAssignment> findByAccountIdWithUser(@Param("accountId") Long accountId);
 }
