@@ -36,8 +36,8 @@ public class DashboardWidget extends BaseUpdatableEntity {
     @Column(name = "dashboard_widget_id")
     private Long dashboardWidgetId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "dashboard_query_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dashboard_query_id")
     private DashboardQuery dashboardQuery;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -52,11 +52,11 @@ public class DashboardWidget extends BaseUpdatableEntity {
     private String title;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "config", nullable = false, columnDefinition = "jsonb")
+    @Column(name = "config", columnDefinition = "jsonb")
     private Map<String, Object> config;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "position", nullable = false, columnDefinition = "jsonb")
+    @Column(name = "position", columnDefinition = "jsonb")
     private Map<String, Object> position;
 
     @Column(name = "source_query", columnDefinition = "TEXT")
