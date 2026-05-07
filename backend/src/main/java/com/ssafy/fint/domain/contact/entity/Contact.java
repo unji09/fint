@@ -1,4 +1,4 @@
-package com.fint.crm.domain.contact.entity;
+package com.ssafy.fint.domain.contact.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
