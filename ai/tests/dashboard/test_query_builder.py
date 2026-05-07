@@ -200,6 +200,26 @@ class TestAggregates:
         with pytest.raises(QueryBuildError, match="허용되지 않은 컬럼"):
             build_query(spec, tenant_id=1)
 
+    def test_aggregate_alias_matches_column_spec(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["current_pipeline", "COUNT(*)"],
+            group_by=["current_pipeline"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert 'AS "COUNT(*)"' in sql
+
+    def test_sum_alias_matches_column_spec(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["current_pipeline", "SUM(amount)"],
+            group_by=["current_pipeline"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert 'AS "SUM(amount)"' in sql
+
     def test_sum_star_raises(self):
         spec = QuerySpec(table="deals", columns=["SUM(*)"])
         with pytest.raises(QueryBuildError, match="SUM.*허용되지 않습니다"):
@@ -231,6 +251,18 @@ class TestJoins:
         assert "JOIN" in sql
         assert "accounts" in sql
 
+    def test_user_join_comes_before_where(self):
+        spec = QuerySpec(
+            table="accounts",
+            columns=["name"],
+            joins=[JoinSpec(table="deals", on_self="account_id", on_other="account_id")],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        join_pos = sql.index("JOIN deals")
+        where_pos = sql.index("WHERE")
+        assert join_pos < where_pos
+
     def test_activities_join_pipeline_stages(self):
         spec = QuerySpec(
             table="activities",
@@ -242,7 +274,7 @@ class TestJoins:
         assert "JOIN pipeline_stages" in sql
         assert "pipeline_stage_id" in sql
 
-    def test_user_join_comes_before_where(self):
+    def test_activities_join_comes_before_where(self):
         spec = QuerySpec(
             table="activities",
             columns=["title"],

@@ -44,9 +44,9 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
             if arg == "*" and func != "COUNT":
                 raise QueryBuildError(f"{func}(*)는 허용되지 않습니다. *는 COUNT에서만 사용 가능합니다")
             if arg == "*":
-                select_exprs.append(f"{func}(*)")
+                select_exprs.append(f'{func}(*) AS "{col}"')
             else:
-                select_exprs.append(f"{func}({spec.table}.{arg})")
+                select_exprs.append(f'{func}({spec.table}.{arg}) AS "{col}"')
         else:
             select_exprs.append(f"{spec.table}.{col}")
 

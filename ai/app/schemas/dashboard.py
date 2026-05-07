@@ -65,10 +65,11 @@ class SemanticSearchSpec(BaseModel):
 
 
 class IntentResult(BaseModel):
-    search_type: Literal["STRUCTURED", "SEMANTIC", "HYBRID"]
+    search_type: Literal["STRUCTURED", "SEMANTIC", "HYBRID", "REJECTED"]
     query_spec: QuerySpec | None = None
     semantic_spec: SemanticSearchSpec | None = None
     suggested_title: str
+    rejection_reason: str | None = None
 
 
 class WidgetConfig(BaseModel):
