@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.controller;
 
+import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
@@ -10,6 +11,8 @@ import com.ssafy.fint.domain.account.service.AccountService;
 import com.ssafy.fint.global.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,6 +60,25 @@ public class AccountController implements AccountSwagger {
     }
 
     @Override
+    @GetMapping
+    public ApiResponse<AccountListResponse> findMine(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String industry,
+            @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return ApiResponse.ok(accountService.findMine(keyword, industry, pageable));
+    }
+
+    @Override
+    @GetMapping("/searchable")
+    public ApiResponse<List<AccountSearchableResponse>> searchInTeam(
+            @RequestParam String keyword,
+            @RequestParam(required = false) Integer size
+    ) {
+        return ApiResponse.ok(accountService.searchInTeam(keyword, size));
+    }
+
+    @Override
     @GetMapping("/{accountId}/signals")
     public ApiResponse<List<AccountSignalResponse>> findSignals(
             @PathVariable Long accountId,
@@ -72,14 +94,5 @@ public class AccountController implements AccountSwagger {
             @PathVariable Long accountId
     ) {
         return ApiResponse.ok(accountService.findMoodHistory(accountId));
-    }
-
-    @Override
-    @GetMapping("/searchable")
-    public ApiResponse<List<AccountSearchableResponse>> searchInTeam(
-            @RequestParam String keyword,
-            @RequestParam(required = false) Integer size
-    ) {
-        return ApiResponse.ok(accountService.searchInTeam(keyword, size));
     }
 }

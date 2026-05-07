@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.service;
 
+import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
@@ -8,9 +9,11 @@ import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.entity.AccountUserAssignment;
+import com.ssafy.fint.domain.account.entity.Mood;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
+import com.ssafy.fint.domain.account.repository.LatestMoodProjection;
 import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
@@ -20,14 +23,18 @@ import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -67,11 +74,7 @@ public class AccountService {
     private Account registerToExistingAccount(Long accountId, Long userId, Long tenantId, User owner) {
         Account account = accountRepository
                 .findByIdAndTenantId(accountId, tenantId)
-                .orElseThrow(() -> {
-                    log.debug("[AccountRegister] case1 not found. accountId={} tenantId={}",
-                            accountId, tenantId);
-                    return new BusinessException(CommonErrorCode.NOT_FOUND);
-                });
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
 
         boolean alreadyAssigned = accountUserAssignmentRepository
                 .existsByAccount_AccountIdAndUser_UserId(account.getAccountId(), userId);
@@ -86,7 +89,6 @@ public class AccountService {
         if (request.name() == null || request.industry() == null) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
-
         Account saved = accountRepository.save(
                 Account.builder()
                         .name(request.name())
@@ -105,11 +107,7 @@ public class AccountService {
 
         Account account = accountRepository
                 .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
-                .orElseThrow(() -> {
-                    log.debug("[AccountUpdate] not found. accountId={} userId={} tenantId={}",
-                            accountId, userId, tenantId);
-                    return new BusinessException(CommonErrorCode.NOT_FOUND);
-                });
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
 
         if (request.name() != null) account.changeName(request.name());
         if (request.industry() != null) account.changeIndustry(request.industry());
@@ -125,11 +123,7 @@ public class AccountService {
 
         accountRepository
                 .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
-                .orElseThrow(() -> {
-                    log.debug("[AccountDelete] not found. accountId={} userId={} tenantId={}",
-                            accountId, userId, tenantId);
-                    return new BusinessException(CommonErrorCode.NOT_FOUND);
-                });
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
 
         accountUserAssignmentRepository
                 .deleteByAccount_AccountIdAndUser_UserId(accountId, userId);
@@ -168,11 +162,6 @@ public class AccountService {
                 .toList();
     }
 
-    /**
-     * 고객사 팀내 검색 (등록 화면 자동완성용).
-     * 같은 tenant + 같은 team(team 미지정 호출자는 tenant 전체 fallback)의 사원들이 등록한 account 중
-     * name LIKE keyword 매칭. assignedToMe 로 본인 책임 여부 표시 (UI 라벨 분기용).
-     */
     public List<AccountSearchableResponse> searchInTeam(String keyword, Integer size) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
@@ -198,6 +187,35 @@ public class AccountService {
                         a.getAccountId(), a.getName(), a.getIndustry(), a.getBizNo(),
                         myAssignedIds.contains(a.getAccountId())))
                 .toList();
+    }
+
+    /**
+     * 본인 책임자 account 목록 조회.
+     * keyword(name LIKE) / industry(equals) 동적 필터 + 페이지네이션 + 각 row 의 최신 mood.
+     */
+    public AccountListResponse findMine(String keyword, String industry, Pageable pageable) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        Page<Account> accountPage = accountRepository.findMineByFilter(
+                userId, tenantId, keyword, industry, pageable);
+
+        if (accountPage.isEmpty()) {
+            return new AccountListResponse(List.of(), accountPage.getTotalElements());
+        }
+
+        List<Long> accountIds = accountPage.stream().map(Account::getAccountId).toList();
+        Map<Long, Mood> latestMoodMap = new HashMap<>();
+        temperatureHistoryRepository.findLatestMoodsByAccountIds(accountIds)
+                .forEach(p -> latestMoodMap.putIfAbsent(p.getAccountId(), p.getMood()));
+
+        List<AccountListResponse.Item> items = accountPage.stream()
+                .map(a -> new AccountListResponse.Item(
+                        a.getAccountId(), a.getName(), a.getIndustry(),
+                        latestMoodMap.get(a.getAccountId())))
+                .toList();
+
+        return new AccountListResponse(items, accountPage.getTotalElements());
     }
 
     private Long currentUserId() {
