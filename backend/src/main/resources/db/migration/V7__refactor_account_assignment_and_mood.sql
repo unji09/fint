@@ -1,4 +1,4 @@
--- V6: Account 도메인 스키마 재설계
+-- V7: Account 도메인 스키마 재설계
 -- 1) account_user_assignment 테이블 신설 (account ↔ user 다대다)
 -- 2) accounts.user_id 컬럼 제거 (책임자 정보를 assignment 로 이전)
 -- 3) temperature_history.temperature (INT 0~100) → mood (VARCHAR enum 5단계)
