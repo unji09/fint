@@ -6,8 +6,8 @@ package com.s14p31a301.fint.core.webview
  */
 object WebViewRoute {
     fun dashboard() = "${WebViewConfig.WEB_BASE_URL}/"
+    fun login() = "${WebViewConfig.WEB_BASE_URL}/login"
     fun contacts() = "${WebViewConfig.WEB_BASE_URL}/contacts"
     fun activity(activityId: Long) = "${WebViewConfig.WEB_BASE_URL}/activities/$activityId"
     fun signal(signalId: Long) = "${WebViewConfig.WEB_BASE_URL}/signals/$signalId"
 }
-
