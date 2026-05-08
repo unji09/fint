@@ -103,15 +103,8 @@ pipeline {
             }
             steps {
                 sh '''
-                    if [ -f "${DEPLOY_DIR}/.env.dev" ]; then
-                        ENV_FILE="${DEPLOY_DIR}/.env.dev"
-                    elif [ -f "${DEPLOY_DIR}/infra/.env.dev" ]; then
-                        ENV_FILE="${DEPLOY_DIR}/infra/.env.dev"
-                    else
-                        echo "ERROR: .env.dev not found in DEPLOY_DIR"
-                        exit 1
-                    fi
-                    docker compose -f "$WORKSPACE/infra/docker-compose.dev.yml" --env-file "$ENV_FILE" up -d
+                    cp "${DEPLOY_DIR}/.env.dev" "$WORKSPACE/.env.dev"
+                    docker compose -f "$WORKSPACE/infra/docker-compose.dev.yml" --env-file "$WORKSPACE/.env.dev" up -d
                     docker restart fint-nginx
                 '''
             }
