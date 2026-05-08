@@ -65,10 +65,18 @@ class FakeContextStore:
     def __init__(self):
         self._data: list[dict] = []
 
-    async def get_context(self, *, dashboard_id: int, user_id: int) -> list[dict]:
+    async def get_context(self, *, tenant_id: int, dashboard_id: int, user_id: int) -> list[dict]:
         return self._data
 
-    async def add_entry(self, *, dashboard_id: int, user_id: int, input_text: str, search_type: str) -> None:
+    async def add_entry(
+        self,
+        *,
+        tenant_id: int,
+        dashboard_id: int,
+        user_id: int,
+        input_text: str,
+        search_type: str,
+    ) -> None:
         self._data.append({"input_text": input_text, "search_type": search_type})
 
 
@@ -186,7 +194,7 @@ class TestQueryEngine:
         engine = self._make_engine(llm=llm)
         request = self._make_request(
             action="ADD",
-            existing_widgets=[{"widget_type": "BAR", "title": "기존 위젯"}],
+            existing_widgets=[{"widget_type": "BAR_CHART", "title": "기존 위젯"}],
         )
 
         await engine.run(request)
@@ -194,13 +202,26 @@ class TestQueryEngine:
         first_call_messages = llm.calls[0]["messages"]
         messages_text = str(first_call_messages)
         assert "기존 위젯" in messages_text
+        assert "중복 방지" in messages_text
+
+    async def test_add_action_returns_completed(self):
+        engine = self._make_engine()
+        request = self._make_request(
+            action="ADD",
+            existing_widgets=[{"widget_type": "TABLE", "title": "기존 테이블"}],
+        )
+
+        result = await engine.run(request)
+
+        assert result["status"] == "COMPLETED"
+        assert "result" in result
 
     async def test_current_widget_passed_for_modify_action(self):
         llm = FakeLLM()
         engine = self._make_engine(llm=llm)
         request = self._make_request(
             action="MODIFY",
-            current_widget={"widget_type": "BAR", "title": "수정 대상"},
+            current_widget={"widget_type": "BAR_CHART", "title": "수정 대상"},
         )
 
         await engine.run(request)
@@ -208,6 +229,64 @@ class TestQueryEngine:
         first_call_messages = llm.calls[0]["messages"]
         messages_text = str(first_call_messages)
         assert "수정 대상" in messages_text
+
+    async def test_modify_prompt_includes_modification_instructions(self):
+        llm = FakeLLM()
+        engine = self._make_engine(llm=llm)
+        request = self._make_request(
+            action="MODIFY",
+            current_widget={
+                "widget_type": "BAR_CHART",
+                "title": "월별 매출",
+                "source_query": "SELECT month, SUM(amount) FROM deals",
+                "input_text": "월별 매출 보여줘",
+            },
+        )
+
+        await engine.run(request)
+
+        first_call_messages = llm.calls[0]["messages"]
+        messages_text = str(first_call_messages)
+        assert "수정 의도" in messages_text
+        assert "source_query" in messages_text
+
+    async def test_modify_action_returns_completed(self):
+        engine = self._make_engine()
+        request = self._make_request(
+            action="MODIFY",
+            current_widget={"widget_type": "TABLE", "title": "기존 테이블"},
+        )
+
+        result = await engine.run(request)
+
+        assert result["status"] == "COMPLETED"
+        assert "result" in result
+
+    async def test_modify_insight_includes_current_widget_context(self):
+        llm = FakeLLM()
+        engine = self._make_engine(llm=llm)
+        request = self._make_request(
+            action="MODIFY",
+            current_widget={"widget_type": "BAR_CHART", "title": "월별 매출"},
+        )
+
+        await engine.run(request)
+
+        insight_call_messages = llm.calls[1]["messages"]
+        messages_text = str(insight_call_messages)
+        assert "수정 대상" in messages_text
+        assert "월별 매출" in messages_text
+
+    async def test_create_insight_excludes_widget_context(self):
+        llm = FakeLLM()
+        engine = self._make_engine(llm=llm)
+        request = self._make_request(action="CREATE")
+
+        await engine.run(request)
+
+        insight_call_messages = llm.calls[1]["messages"]
+        messages_text = str(insight_call_messages)
+        assert "수정 대상" not in messages_text
 
     async def test_guardrail_error_returns_failed(self):
         engine = self._make_engine()
@@ -231,6 +310,50 @@ class TestQueryEngine:
 
         assert result["status"] == "FAILED"
         assert "허용되지 않은 테이블" in result["error"]
+
+    async def test_llm_intent_failure_returns_friendly_error(self):
+        class FailingLLM(FakeLLM):
+            async def chat_structured(self, messages, response_model, *, model=None):
+                raise RuntimeError("connection timeout")
+
+        engine = self._make_engine(llm=FailingLLM())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "FAILED"
+        assert "질의 분석" in result["error"]
+        assert "connection timeout" not in result["error"]
+
+    async def test_llm_insight_failure_returns_friendly_error(self):
+        class InsightFailLLM(FakeLLM):
+            async def chat_structured(self, messages, response_model, *, model=None):
+                if response_model is InsightResult:
+                    raise RuntimeError("rate limit exceeded")
+                return await super().chat_structured(messages, response_model, model=model)
+
+        engine = self._make_engine(llm=InsightFailLLM())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "FAILED"
+        assert "인사이트 생성" in result["error"]
+        assert "rate limit" not in result["error"]
+
+    async def test_db_execution_failure_returns_friendly_error(self):
+        class FailingDB:
+            async def execute(self, stmt, params=None):
+                raise RuntimeError("connection refused")
+
+        engine = self._make_engine(db=FailingDB())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "FAILED"
+        assert "데이터 조회" in result["error"]
+        assert "connection refused" not in result["error"]
 
     async def test_data_included_in_result(self):
         db = FakeDB(

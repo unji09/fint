@@ -24,3 +24,8 @@ async def get_db() -> AsyncIterator[AsyncSession]:
     assert _session_factory is not None, "DB not initialized. Call init_db() in lifespan."
     async with _session_factory() as session:
         yield session
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    assert _session_factory is not None, "DB not initialized. Call init_db() in lifespan."
+    return _session_factory
