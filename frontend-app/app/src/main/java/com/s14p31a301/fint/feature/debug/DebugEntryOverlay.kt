@@ -10,9 +10,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,31 +52,12 @@ fun DebugEntryOverlay(
     Box(modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(8.dp),
+                .align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(16.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            // FAB
-            Surface(
-                color = BrandCyan,
-                shape = CircleShape,
-                shadowElevation = 6.dp,
-                modifier = Modifier.size(44.dp),
-                onClick = { expanded = !expanded },
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = if (expanded) "×" else "+",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
+            // 펼침 패널 — FAB 위에 표시
             AnimatedVisibility(visible = expanded) {
                 Surface(
                     color = Color(0xCC000000),
@@ -102,6 +83,26 @@ fun DebugEntryOverlay(
                             expanded = false; onOpenMeetingRecorder()
                         }
                     }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // FAB
+            Surface(
+                color = BrandCyan,
+                shape = CircleShape,
+                shadowElevation = 6.dp,
+                modifier = Modifier.size(44.dp),
+                onClick = { expanded = !expanded },
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = if (expanded) "×" else "+",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }
