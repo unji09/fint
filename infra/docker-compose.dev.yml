@@ -33,6 +33,8 @@ services:
     depends_on:
       spring:
         condition: service_healthy
+      frontend-web:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost/nginx-health || exit 1"]
       interval: 10s
