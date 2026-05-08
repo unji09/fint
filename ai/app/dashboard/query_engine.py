@@ -42,7 +42,7 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 ## 규칙
 - 핵심 발견을 3~5개로 요약하세요.
 - 위젯 타입은 데이터 특성에 맞게 선택하세요:
-  - BAR: 카테고리별 비교
+  - BAR_CHART: 카테고리별 비교
   - LINE: 시계열 추이
   - PIE: 비율/구성
   - KPI: 단일 핵심 지표
@@ -154,7 +154,12 @@ class QueryEngine:
 
         if request.action == "ADD" and request.existing_widgets:
             widgets_text = json.dumps(request.existing_widgets, ensure_ascii=False)
-            system_content += f"\n\n## 기존 위젯 (중복 방지)\n{widgets_text}"
+            system_content += (
+                "\n\n## 기존 위젯 (중복 방지)\n"
+                "아래 위젯이 이미 대시보드에 존재합니다. "
+                "동일한 테이블/컬럼/집계 조합을 피하고, 다른 관점의 데이터를 제안하세요.\n"
+                f"{widgets_text}"
+            )
 
         if request.action == "MODIFY" and request.current_widget:
             widget_text = json.dumps(request.current_widget, ensure_ascii=False)

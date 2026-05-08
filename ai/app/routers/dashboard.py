@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 from app.clients import get_llm_client
 from app.clients.llm import LLMClient
 from app.core.db import get_session_factory
+from app.core.errors import BusinessException, CommonErrorCode
 from app.core.redis import get_redis
 from app.core.response import ApiResponse
 from app.core.security import get_tenant_id
@@ -37,6 +38,12 @@ async def query(
     llm: LLMClient = Depends(get_llm_client),
 ) -> ApiResponse[TraceIdResponse]:
     body.tenant_id = tenant_id
+
+    if body.action == "ADD" and not body.existing_widgets:
+        raise BusinessException(CommonErrorCode.ILLEGAL_ARGUMENT, "ADD 액션에는 existing_widgets가 필요합니다")
+    if body.action == "MODIFY" and not body.current_widget:
+        raise BusinessException(CommonErrorCode.ILLEGAL_ARGUMENT, "MODIFY 액션에는 current_widget이 필요합니다")
+
     asyncio.create_task(run_query_task(request=body, redis=redis, llm=llm))
     return ApiResponse.ok(TraceIdResponse(trace_id=body.trace_id))
 

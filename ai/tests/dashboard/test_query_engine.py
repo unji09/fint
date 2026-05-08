@@ -194,7 +194,7 @@ class TestQueryEngine:
         engine = self._make_engine(llm=llm)
         request = self._make_request(
             action="ADD",
-            existing_widgets=[{"widget_type": "BAR", "title": "기존 위젯"}],
+            existing_widgets=[{"widget_type": "BAR_CHART", "title": "기존 위젯"}],
         )
 
         await engine.run(request)
@@ -202,13 +202,26 @@ class TestQueryEngine:
         first_call_messages = llm.calls[0]["messages"]
         messages_text = str(first_call_messages)
         assert "기존 위젯" in messages_text
+        assert "중복 방지" in messages_text
+
+    async def test_add_action_returns_completed(self):
+        engine = self._make_engine()
+        request = self._make_request(
+            action="ADD",
+            existing_widgets=[{"widget_type": "TABLE", "title": "기존 테이블"}],
+        )
+
+        result = await engine.run(request)
+
+        assert result["status"] == "COMPLETED"
+        assert "result" in result
 
     async def test_current_widget_passed_for_modify_action(self):
         llm = FakeLLM()
         engine = self._make_engine(llm=llm)
         request = self._make_request(
             action="MODIFY",
-            current_widget={"widget_type": "BAR", "title": "수정 대상"},
+            current_widget={"widget_type": "BAR_CHART", "title": "수정 대상"},
         )
 
         await engine.run(request)
