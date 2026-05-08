@@ -1,0 +1,19 @@
+# 의존성 / 빌드 산출물
+node_modules
+.next
+out
+dist
+.swc
+*.tsbuildinfo
+
+# VCS / IDE
+.git
+.gitignore
+.gitattributes
+.vscode
+.idea
+
+# 로그 / 캐시
+*.log
+.eslintcache
+coverage
