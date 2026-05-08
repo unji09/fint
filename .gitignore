@@ -57,6 +57,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# ===== Test fixtures with personal data (명함 등) =====
+ai/tests/resources/
+
 # ===== Misc =====
 *.tmp
 *.swp

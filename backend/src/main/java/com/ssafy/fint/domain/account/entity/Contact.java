@@ -85,4 +85,13 @@ public class Contact extends BaseSoftDeletableEntity {
     public void changePersonality(String personality) {
         this.personality = personality;
     }
+
+    public void update(String name, String title, String phone,
+                       String email, String personality) {
+        if (name != null)        changeName(name);
+        if (title != null)       changeTitle(title);
+        if (phone != null)       changePhone(phone);
+        if (email != null)       changeEmail(email);
+        if (personality != null) changePersonality(personality);
+    }
 }
