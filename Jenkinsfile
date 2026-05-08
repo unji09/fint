@@ -91,14 +91,12 @@ pipeline {
             }
             steps {
                 sh '''
-                    cd ${DEPLOY_DIR}
-
-                    if [ -f .env.dev ]; then
-                        ENV_FILE=.env.dev
-                    elif [ -f infra/.env.dev ]; then
-                        ENV_FILE=infra/.env.dev
+                    if [ -f "${DEPLOY_DIR}/.env.dev" ]; then
+                        ENV_FILE="${DEPLOY_DIR}/.env.dev"
+                    elif [ -f "${DEPLOY_DIR}/infra/.env.dev" ]; then
+                        ENV_FILE="${DEPLOY_DIR}/infra/.env.dev"
                     else
-                        echo "ERROR: .env.dev not found"
+                        echo "ERROR: .env.dev not found in DEPLOY_DIR"
                         exit 1
                     fi
                     docker compose -f "$WORKSPACE/infra/docker-compose.dev.yml" --env-file "$ENV_FILE" up -d
