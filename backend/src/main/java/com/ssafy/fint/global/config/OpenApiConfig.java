@@ -70,8 +70,16 @@ public class OpenApiConfig {
     @Bean
     public GroupedOpenApi fileApi() {
         return GroupedOpenApi.builder()
-                .group("2. FILE API")
+                .group("3. FILE API")
                 .pathsToMatch(ApiPath.V1 + "/files/**")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi customerApi() {
+        return GroupedOpenApi.builder()
+                .group("4. CUSTOMER API")
+                .pathsToMatch(ApiPath.V1 + "/accounts/**")
                 .build();
     }
 }
