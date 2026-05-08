@@ -242,7 +242,7 @@ public class AccountService {
         return new AccountDetailResponse(
                 account.getAccountId(), account.getName(), account.getIndustry(),
                 assignedUsers, latestMood,
-                null, null, null,
+                null, null,
                 List.of(), List.of()
         );
     }

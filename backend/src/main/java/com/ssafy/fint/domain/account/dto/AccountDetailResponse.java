@@ -18,7 +18,6 @@ public record AccountDetailResponse(
         Mood latestMood,
         Integer meetingCount,
         OffsetDateTime lastContactAt,
-        Integer relationDepthScore,
         List<ContactItem> contacts,
         List<DealItem> deals
 ) {
