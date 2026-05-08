@@ -3,6 +3,7 @@ from functools import lru_cache
 from fastapi import Depends
 
 from app.clients.anthropic import AnthropicClient
+from app.clients.embedder import OnnxEmbedderClient
 from app.clients.llm import LLMClient
 from app.clients.ocr import OcrClient, RapidOcrClient
 from app.clients.openai import OpenAIClient
@@ -65,6 +66,20 @@ def get_s3_client(settings: Settings = Depends(get_settings)) -> S3Client:
 
 def get_ocr_client() -> OcrClient:
     return _ocr_client()
+
+
+_embedder: OnnxEmbedderClient | None = None
+
+
+def get_embedder_client(settings: Settings = Depends(get_settings)) -> OnnxEmbedderClient | None:
+    return _embedder
+
+
+def warmup_embedder_client(model_path: str) -> OnnxEmbedderClient:
+    global _embedder
+    if _embedder is None:
+        _embedder = OnnxEmbedderClient(model_path)
+    return _embedder
 
 
 def warmup_ocr_client() -> RapidOcrClient:

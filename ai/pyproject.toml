@@ -19,6 +19,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3",
     "rapidocr>=3.8",
     "onnxruntime>=1.18",
+    "tokenizers>=0.21",
     "opencv-python-headless>=4.8",
 ]
 
@@ -30,6 +31,11 @@ dev = [
     "mypy>=1.10",
     "types-python-jose>=3.3",
     "boto3-stubs>=1.35",
+]
+batch = [
+    "torch>=2.0",
+    "transformers>=4.40",
+    "sentence-transformers>=3.0",
 ]
 
 [build-system]

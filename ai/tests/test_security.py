@@ -43,9 +43,7 @@ async def test_jwt_extracts_tenant_id(mock_settings, client):
     mock_settings.return_value.JWT_SECRET = JWT_SECRET
     token = _make_token({"tenant_id": 42})
 
-    resp = await client.get(
-        "/test/tenant", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.get("/test/tenant", headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 200
     assert resp.json()["tenant_id"] == 42
@@ -70,9 +68,7 @@ async def test_missing_auth_returns_401(client):
 
 @pytest.mark.asyncio
 async def test_invalid_jwt_returns_401(client):
-    resp = await client.get(
-        "/test/tenant", headers={"Authorization": "Bearer invalid.token.here"}
-    )
+    resp = await client.get("/test/tenant", headers={"Authorization": "Bearer invalid.token.here"})
 
     assert resp.status_code == 401
     body = resp.json()
@@ -126,9 +122,7 @@ async def test_tenant_id_zero_returns_401(mock_settings, client):
     mock_settings.return_value.JWT_SECRET = JWT_SECRET
     token = _make_token({"tenant_id": 0})
 
-    resp = await client.get(
-        "/test/tenant", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.get("/test/tenant", headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 401
 
@@ -146,8 +140,6 @@ async def test_empty_jwt_secret_returns_401(mock_settings, client):
     mock_settings.return_value.JWT_SECRET = ""
     token = _make_token({"tenant_id": 1})
 
-    resp = await client.get(
-        "/test/tenant", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.get("/test/tenant", headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 401

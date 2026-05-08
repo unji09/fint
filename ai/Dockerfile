@@ -8,6 +8,7 @@ RUN uv sync --frozen --no-install-project --no-dev
 
 COPY . .
 RUN uv sync --frozen --no-dev
+RUN mkdir -p /app/model
 
 
 FROM python:3.12-slim
@@ -20,6 +21,7 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app /app/app
+COPY --from=builder /app/model /app/model
 
 ENV PATH="/app/.venv/bin:$PATH"
 

@@ -1,4 +1,3 @@
-
 import pytest
 
 from app.clients import get_anthropic_client, get_llm_client, get_openai_client, get_s3_client, get_whisper_client
@@ -83,7 +82,5 @@ def test_whisper_client_satisfies_protocol():
 
 
 def test_s3_client_satisfies_protocol():
-    client = BotoS3Client(
-        bucket="b", region="us-east-1", access_key="ak", secret_key="sk"
-    )
+    client = BotoS3Client(bucket="b", region="us-east-1", access_key="ak", secret_key="sk")
     assert isinstance(client, S3Client)

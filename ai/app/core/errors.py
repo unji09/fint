@@ -68,10 +68,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _handle_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
-        field_errors = {
-            ".".join(str(loc) for loc in e["loc"]): e["msg"]
-            for e in exc.errors()
-        }
+        field_errors = {".".join(str(loc) for loc in e["loc"]): e["msg"] for e in exc.errors()}
         logger.warning("[ValidationError] %s", field_errors)
         ec = CommonErrorCode.INVALID_INPUT
         body = ApiResponse(status=ec.status, code=ec.code, message=ec.message, data=field_errors)

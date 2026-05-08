@@ -24,11 +24,7 @@ class BotoS3Client:
 
     async def get_object(self, key: str) -> bytes:
         try:
-            resp = await asyncio.to_thread(
-                partial(self._client.get_object, Bucket=self._bucket, Key=key)
-            )
+            resp = await asyncio.to_thread(partial(self._client.get_object, Bucket=self._bucket, Key=key))
             return await asyncio.to_thread(resp["Body"].read)
         except Exception as e:
-            raise BusinessException(
-                CommonErrorCode.EXTERNAL_API_FAILED, f"S3 get_object failed: {e}"
-            ) from e
+            raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, f"S3 get_object failed: {e}") from e

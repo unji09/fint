@@ -35,6 +35,4 @@ class OpenAIClient:
                 response_model=response_model,
             )
         except openai.OpenAIError as e:
-            raise BusinessException(
-                CommonErrorCode.EXTERNAL_API_FAILED, f"OpenAI chat_structured failed: {e}"
-            ) from e
+            raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, f"OpenAI chat_structured failed: {e}") from e
