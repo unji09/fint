@@ -93,10 +93,6 @@ pipeline {
                 sh '''
                     cd ${DEPLOY_DIR}
 
-                    git fetch origin dev
-                    git checkout dev
-                    git pull --ff-only origin dev
-
                     if [ -f .env.dev ]; then
                         ENV_FILE=.env.dev
                     elif [ -f infra/.env.dev ]; then
@@ -105,7 +101,7 @@ pipeline {
                         echo "ERROR: .env.dev not found"
                         exit 1
                     fi
-                    docker compose -f infra/docker-compose.dev.yml --env-file "$ENV_FILE" up -d
+                    docker compose -f "$WORKSPACE/infra/docker-compose.dev.yml" --env-file "$ENV_FILE" up -d
                     docker restart fint-nginx
                 '''
             }
