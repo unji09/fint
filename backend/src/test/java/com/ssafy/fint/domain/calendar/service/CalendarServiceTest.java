@@ -308,7 +308,6 @@ class CalendarServiceTest {
 
     private Deal newDealWithTitle(long accountId, String accountName, long dealId, String dealTitle) {
         Account account = Account.builder()
-                .user(newUser())
                 .name(accountName)
                 .industry("IT")
                 .build();
@@ -360,7 +359,6 @@ class CalendarServiceTest {
 
     private Deal newDeal(long accountId, String accountName) {
         Account account = Account.builder()
-                .user(newUser())
                 .name(accountName)
                 .industry("IT")
                 .build();

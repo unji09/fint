@@ -1,0 +1,269 @@
+package com.ssafy.fint.domain.account.service;
+
+import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
+import com.ssafy.fint.domain.account.dto.AccountListResponse;
+import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
+import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
+import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountSearchableResponse;
+import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
+import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
+import com.ssafy.fint.domain.account.entity.Account;
+import com.ssafy.fint.domain.account.entity.AccountUserAssignment;
+import com.ssafy.fint.domain.account.entity.Mood;
+import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
+import com.ssafy.fint.domain.account.repository.AccountRepository;
+import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
+import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
+import com.ssafy.fint.domain.user.entity.User;
+import com.ssafy.fint.domain.user.repository.UserRepository;
+import com.ssafy.fint.global.exception.AuthErrorCode;
+import com.ssafy.fint.global.exception.BusinessException;
+import com.ssafy.fint.global.exception.CommonErrorCode;
+import com.ssafy.fint.global.security.CustomUserDetails;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class AccountService {
+
+    private static final int DEFAULT_SIGNAL_SIZE = 20;
+    private static final int DEFAULT_SEARCHABLE_SIZE = 10;
+
+    private final AccountRepository accountRepository;
+    private final AccountUserAssignmentRepository accountUserAssignmentRepository;
+    private final AccountExternalInfoRepository accountExternalInfoRepository;
+    private final TemperatureHistoryRepository temperatureHistoryRepository;
+    private final UserRepository userRepository;
+
+    @Transactional
+    public AccountRegisterResponse register(AccountRegisterRequest request) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+        User owner = userRepository.getReferenceById(userId);
+
+        Account account;
+        if (request.existingAccountId() != null) {
+            account = registerToExistingAccount(request.existingAccountId(), userId, tenantId, owner);
+        } else {
+            account = registerNewAccount(request, owner);
+        }
+
+        log.info("[AccountRegister] accountId={} userId={} mode={}",
+                account.getAccountId(), userId,
+                request.existingAccountId() != null ? "case1" : "case2");
+        return AccountRegisterResponse.of(account.getAccountId());
+    }
+
+    private Account registerToExistingAccount(Long accountId, Long userId, Long tenantId, User owner) {
+        Account account = accountRepository
+                .findByIdAndTenantId(accountId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        boolean alreadyAssigned = accountUserAssignmentRepository
+                .existsByAccount_AccountIdAndUser_UserId(account.getAccountId(), userId);
+        if (!alreadyAssigned) {
+            accountUserAssignmentRepository.save(
+                    AccountUserAssignment.builder().account(account).user(owner).build());
+        }
+        return account;
+    }
+
+    private Account registerNewAccount(AccountRegisterRequest request, User owner) {
+        if (request.name() == null || request.industry() == null) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+        Account saved = accountRepository.save(
+                Account.builder()
+                        .name(request.name())
+                        .industry(request.industry())
+                        .bizNo(request.bizNo())
+                        .build());
+        accountUserAssignmentRepository.save(
+                AccountUserAssignment.builder().account(saved).user(owner).build());
+        return saved;
+    }
+
+    @Transactional
+    public void update(Long accountId, AccountUpdateRequest request) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        Account account = accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        if (request.name() != null) account.changeName(request.name());
+        if (request.industry() != null) account.changeIndustry(request.industry());
+        if (request.bizNo() != null) account.changeBizNo(request.bizNo());
+
+        log.info("[AccountUpdate] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
+    }
+
+    @Transactional
+    public void delete(Long accountId) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        accountUserAssignmentRepository
+                .deleteByAccount_AccountIdAndUser_UserId(accountId, userId);
+
+        log.info("[AccountDelete] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
+    }
+
+    public List<AccountSignalResponse> findSignals(Long accountId, String source, Integer size) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        int limit = size != null ? size : DEFAULT_SIGNAL_SIZE;
+        return accountExternalInfoRepository
+                .findRecentByAccountAndOptionalSource(accountId, source, PageRequest.of(0, limit))
+                .stream()
+                .map(AccountSignalResponse::from)
+                .toList();
+    }
+
+    public List<AccountMoodResponse> findMoodHistory(Long accountId) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        return temperatureHistoryRepository
+                .findByAccount_AccountIdOrderByCreatedAtDesc(accountId)
+                .stream()
+                .map(AccountMoodResponse::from)
+                .toList();
+    }
+
+    public List<AccountSearchableResponse> searchInTeam(String keyword, Integer size) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        User caller = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_TOKEN));
+        Long callerTeamId = caller.getTeam() != null ? caller.getTeam().getTeamId() : null;
+
+        int limit = size != null ? size : DEFAULT_SEARCHABLE_SIZE;
+        List<Account> accounts = accountRepository.searchInTeam(
+                keyword, callerTeamId, tenantId, PageRequest.of(0, limit));
+
+        if (accounts.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> accountIds = accounts.stream().map(Account::getAccountId).toList();
+        Set<Long> myAssignedIds = new HashSet<>(
+                accountUserAssignmentRepository.findAccountIdsByUserIdAndAccountIdIn(userId, accountIds));
+
+        return accounts.stream()
+                .map(a -> new AccountSearchableResponse(
+                        a.getAccountId(), a.getName(), a.getIndustry(), a.getBizNo(),
+                        myAssignedIds.contains(a.getAccountId())))
+                .toList();
+    }
+
+    public AccountListResponse findMine(String keyword, String industry, Pageable pageable) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        Page<Account> accountPage = accountRepository.findMineByFilter(
+                userId, tenantId, keyword, industry, pageable);
+
+        if (accountPage.isEmpty()) {
+            return new AccountListResponse(List.of(), accountPage.getTotalElements());
+        }
+
+        List<Long> accountIds = accountPage.stream().map(Account::getAccountId).toList();
+        Map<Long, Mood> latestMoodMap = new HashMap<>();
+        temperatureHistoryRepository.findLatestMoodsByAccountIds(accountIds)
+                .forEach(p -> latestMoodMap.putIfAbsent(p.getAccountId(), p.getMood()));
+
+        List<AccountListResponse.Item> items = accountPage.stream()
+                .map(a -> new AccountListResponse.Item(
+                        a.getAccountId(), a.getName(), a.getIndustry(),
+                        latestMoodMap.get(a.getAccountId())))
+                .toList();
+
+        return new AccountListResponse(items, accountPage.getTotalElements());
+    }
+
+    /**
+     * 고객사 상세 조회.
+     * 본 task 범위: 권한 검증 + 기본 정보 + assignedUsers + latestMood.
+     * meetingCount·lastContactAt·relationDepthScore·contacts·deals 는 후속 (다른 도메인 합성).
+     */
+    public AccountDetailResponse findDetail(Long accountId) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        Account account = accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        List<AccountDetailResponse.AssignedUser> assignedUsers = accountUserAssignmentRepository
+                .findByAccountIdWithUser(accountId)
+                .stream()
+                .map(aua -> new AccountDetailResponse.AssignedUser(
+                        aua.getUser().getUserId(), aua.getUser().getName()))
+                .toList();
+
+        Mood latestMood = temperatureHistoryRepository
+                .findFirstByAccount_AccountIdOrderByCreatedAtDesc(accountId)
+                .map(th -> th.getMood())
+                .orElse(null);
+
+        return new AccountDetailResponse(
+                account.getAccountId(), account.getName(), account.getIndustry(),
+                assignedUsers, latestMood,
+                0, null,
+                List.of(), List.of()
+        );
+    }
+
+    private Long currentUserId() {
+        return currentPrincipal().getUserId();
+    }
+
+    private Long currentTenantId() {
+        return currentPrincipal().getTenantId();
+    }
+
+    private CustomUserDetails currentPrincipal() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof CustomUserDetails me)) {
+            throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
+        }
+        return me;
+    }
+}
