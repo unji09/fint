@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.controller;
 
+import com.ssafy.fint.domain.account.dto.AccountDealsResponse;
 import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
@@ -39,9 +40,16 @@ public interface AccountSwagger {
     ApiResponse<List<AccountSearchableResponse>> searchInTeam(String keyword, Integer size);
 
     @Operation(summary = "고객사 상세 조회",
-            description = "본인 책임자 + 같은 tenant 검증 후 기본 정보 + assignedUsers + latestMood 반환. " +
-                    "meetingCount·lastContactAt·relationDepthScore·contacts·deals 는 후속 작업에서 합성 예정.")
+            description = "본인 책임자 + 같은 tenant 검증 후 기본 정보 + assignedUsers + latestMood + 미팅 집계 + " +
+                    "contacts + deals 합성 응답. deals 는 데이터 스코프 정책(팀 있음→팀 deal, 팀 없음→tenant 전체) " +
+                    "적용된 최신 3개 preview. 전체 목록은 GET /accounts/{accountId}/deals 로.")
     ApiResponse<AccountDetailResponse> findDetail(Long accountId);
+
+    @Operation(summary = "고객사별 딜 목록 조회",
+            description = "본인 책임 account 검증 후 데이터 스코프(팀 있음→팀 deal, 팀 없음→tenant 전체) 적용. " +
+                    "mineOnly=true 면 DealContact 에 본인이 매핑된 deal 만 추가 필터. " +
+                    "정렬은 updated_at desc, 페이지네이션 없음(전체 반환).")
+    ApiResponse<AccountDealsResponse> findDealsByAccount(Long accountId, boolean mineOnly);
 
     @Operation(summary = "고객사 시그널 조회",
             description = "외부 시그널(NEWS/DART) occurred_at 내림차순. size 미지정 기본 20.")
