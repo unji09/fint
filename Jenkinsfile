@@ -5,6 +5,7 @@ pipeline {
         COMPOSE_FILE        = 'infra/docker-compose.dev.yml'
         IMAGE_NAME          = 'fint-backend'
         FRONTEND_IMAGE_NAME = 'fint-frontend'
+        AI_IMAGE_NAME       = 'fint-ai'
     }
 
     stages {
@@ -50,6 +51,17 @@ pipeline {
             steps {
                 dir('backend') {
                     sh "docker build -f Dockerfile.runtime -t ${IMAGE_NAME}:${BUILD_NUMBER} -t ${IMAGE_NAME}:latest ."
+                }
+            }
+        }
+
+        stage('Build AI Image') {
+            when {
+                expression { env.gitlabMergeRequestId == null }
+            }
+            steps {
+                dir('ai') {
+                    sh "docker build -t ${AI_IMAGE_NAME}:${BUILD_NUMBER} -t ${AI_IMAGE_NAME}:latest ."
                 }
             }
         }
@@ -117,6 +129,10 @@ pipeline {
                 retry(30) {
                     sleep 5
                     sh 'curl -sk --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}\\n" https://localhost/ | grep -qE "^(200|307|308)$"'
+                }
+                retry(10) {
+                    sleep 5
+                    sh 'docker exec fint-ai curl -sf --connect-timeout 3 --max-time 5 http://localhost:8000/health'
                 }
             }
         }
