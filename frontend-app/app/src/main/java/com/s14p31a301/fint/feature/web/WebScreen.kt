@@ -1,10 +1,15 @@
 package com.s14p31a301.fint.feature.web
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import com.s14p31a301.fint.BuildConfig
 import com.s14p31a301.fint.core.webview.FintWebView
 import com.s14p31a301.fint.core.webview.WebViewBridge
 import com.s14p31a301.fint.core.webview.WebViewRoute
+import com.s14p31a301.fint.feature.debug.DebugEntryOverlay
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -38,11 +43,22 @@ fun WebScreen(
         )
     }
 
-    FintWebView(
-        url = WebViewRoute.dashboard(),
-        bridge = bridge,
-        commands = webViewModel.commands,
-        onPageStarted = webViewModel::onPageStarted,
-        onPageFinished = webViewModel::onPageFinished,
-    )
+    Box(Modifier.fillMaxSize()) {
+        FintWebView(
+            url = WebViewRoute.dashboard(),
+            bridge = bridge,
+            commands = webViewModel.commands,
+            onPageStarted = webViewModel::onPageStarted,
+            onPageFinished = webViewModel::onPageFinished,
+        )
+
+        // 디버그 빌드에서만 노출되는 Native 화면 진입 패널
+        if (BuildConfig.DEBUG) {
+            DebugEntryOverlay(
+                onOpenBusinessCardScanner = onOpenBusinessCardScanner,
+                onOpenDeviceContactPicker = onOpenDeviceContactPicker,
+                onOpenMeetingRecorder = { onOpenMeetingRecorder(null) },
+            )
+        }
+    }
 }
