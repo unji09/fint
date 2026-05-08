@@ -163,6 +163,10 @@ public class AccountService {
     }
 
     public List<AccountSearchableResponse> searchInTeam(String keyword, Integer size) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
 
