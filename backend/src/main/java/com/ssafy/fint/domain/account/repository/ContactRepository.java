@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ContactRepository extends JpaRepository<Contact, Long> {
@@ -20,4 +21,8 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
             @Param("contactId") Long contactId,
             @Param("accountId") Long accountId
     );
+
+    List<Contact> findAllByAccount_AccountId(Long accountId);
+
+    Optional<Contact> findByContactId(Long contactId);
 }

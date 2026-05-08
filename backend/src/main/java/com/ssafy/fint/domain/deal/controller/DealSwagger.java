@@ -39,7 +39,8 @@ public interface DealSwagger {
     @Operation(
         summary = "딜 소프트 삭제",
         description = "현재 테넌트의 영업건을 소프트 삭제한다 (deals.is_deleted = true). "
-            + "URL 충돌 회피를 위해 PATCH /deals/{dealId}/delete 로 라우팅한다."
+            + "DELETE /deals/{dealId} 로 라우팅하며, 실제 데이터는 보존된다. "
+            + "성공 시 204 No Content 를 반환한다."
     )
-    ApiResponse<Void> softDelete(CustomUserDetails me, Long dealId);
+    void softDelete(CustomUserDetails me, Long dealId);
 }
