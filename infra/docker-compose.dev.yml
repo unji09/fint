@@ -7,8 +7,7 @@
 #   - PostgreSQL   (메인 DB)
 #   - Redis        (캐시 / 큐)
 #
-# 아직 준비 안 된 서비스 (ai):
-#   profiles: ["full"]로 선언. 준비되면 --profile full 로 포함.
+# 전체 서비스 기본 포함 (AI 포함)
 #
 # 사용법:
 #   cp .env.dev.example .env.dev
@@ -56,6 +55,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ai:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
@@ -128,8 +129,6 @@ services:
     networks:
       - app
 
-  # --- 아직 준비 안 된 서비스 (--profile full 로 활성화) ---
-
   ai:
     image: fint-ai:latest
     container_name: fint-ai
@@ -142,11 +141,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
     mem_limit: 2g
     networks:
       - app
-    profiles:
-      - full
 
 networks:
   app:
