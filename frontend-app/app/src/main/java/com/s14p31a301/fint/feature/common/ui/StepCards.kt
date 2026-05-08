@@ -43,7 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.s14p31a301.fint.ui.theme.BrandCyan
+import com.s14p31a301.fint.ui.theme.Border
 import com.s14p31a301.fint.ui.theme.CyanLight
+import com.s14p31a301.fint.ui.theme.PageBg
 import com.s14p31a301.fint.ui.theme.Placeholder
 import com.s14p31a301.fint.ui.theme.SurfaceCard
 import com.s14p31a301.fint.ui.theme.TextMuted
@@ -80,7 +82,7 @@ fun DatabaseSearchCard(visible: Boolean) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFF8FAFC))
+                    .background(PageBg)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -109,7 +111,7 @@ fun DatabaseSearchCard(visible: Boolean) {
 
         AnimatedVisibility(visible = showContact, enter = itemEnter) {
             ResultRow(
-                iconBg = Color(0xFFF1F5F9),
+                iconBg = Border,
                 iconShape = ShapeKind.Person,
                 iconTint = Placeholder,
                 title = "김담당",
@@ -224,7 +226,7 @@ fun ContactUpdateCard(visible: Boolean) {
                     Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFF1F5F9)),
+                        .background(Border),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Default.Person, null, tint = Placeholder, modifier = Modifier.size(20.dp))
@@ -260,7 +262,7 @@ private fun StepCard(content: @Composable androidx.compose.foundation.layout.Col
         color = SurfaceCard,
         shape = RoundedCornerShape(12.dp),
         shadowElevation = 1.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF1F5F9)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Border),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(14.dp), content = content)
@@ -280,7 +282,7 @@ private fun ResultRow(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF8FAFC))
+            .background(PageBg)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

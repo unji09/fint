@@ -34,11 +34,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.s14p31a301.fint.ui.theme.BrandCyan
-import com.s14p31a301.fint.ui.theme.CardAccentRed
+import com.s14p31a301.fint.ui.theme.Danger
 import com.s14p31a301.fint.ui.theme.CardGradEnd
 import com.s14p31a301.fint.ui.theme.CardGradMid
 import com.s14p31a301.fint.ui.theme.CardGradStart
-import com.s14p31a301.fint.ui.theme.DarkHeader
+import com.s14p31a301.fint.ui.theme.DeepCyan
 
 /**
  * 시안의 상단 다크 헤더 ( ◀  타이틀  ✕ )
@@ -50,7 +50,7 @@ fun FintTopHeader(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     backTint: Color = Color.White,
-    background: Color = DarkHeader,
+    background: Color = DeepCyan,
 ) {
     Surface(color = background, modifier = modifier.fillMaxWidth()) {
         Row(
@@ -106,7 +106,7 @@ fun BusinessCardPreview(
         Column(Modifier.fillMaxSize()) {
             Text(
                 text = company ?: "Company",
-                color = CardAccentRed,
+                color = Danger,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
             )

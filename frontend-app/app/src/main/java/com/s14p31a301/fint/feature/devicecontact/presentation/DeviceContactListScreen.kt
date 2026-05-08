@@ -39,7 +39,7 @@ import com.s14p31a301.fint.feature.common.ui.FintTopHeader
 import com.s14p31a301.fint.feature.devicecontact.domain.model.DeviceContact
 import com.s14p31a301.fint.ui.theme.BrandCyan
 import com.s14p31a301.fint.ui.theme.CyanLight
-import com.s14p31a301.fint.ui.theme.DividerGray
+import com.s14p31a301.fint.ui.theme.Border
 import com.s14p31a301.fint.ui.theme.PageBg
 import com.s14p31a301.fint.ui.theme.Placeholder
 import com.s14p31a301.fint.ui.theme.SurfaceCard
@@ -97,7 +97,7 @@ private fun ListContent(
                     focusedContainerColor = SurfaceCard,
                     unfocusedContainerColor = SurfaceCard,
                     focusedBorderColor = BrandCyan,
-                    unfocusedBorderColor = DividerGray,
+                    unfocusedBorderColor = Border,
                 ),
             )
         }

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.s14p31a301.fint.ui.theme.BrandCyan
+import com.s14p31a301.fint.ui.theme.CyanLight
 import com.s14p31a301.fint.ui.theme.PageBg
 import com.s14p31a301.fint.ui.theme.TextMuted
 import com.s14p31a301.fint.ui.theme.TextPrimary
@@ -84,7 +85,7 @@ fun RegistrationCompletionContent(
                     .size(72.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
-                        Brush.linearGradient(listOf(Color(0xFF5EEAD4), BrandCyan))
+                        Brush.linearGradient(listOf(CyanLight, BrandCyan))
                     ),
                 contentAlignment = Alignment.Center,
             ) {

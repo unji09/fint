@@ -43,7 +43,8 @@ import com.s14p31a301.fint.feature.common.ui.RegisterProgressContent
 import com.s14p31a301.fint.feature.common.ui.RegistrationCompletionContent
 import com.s14p31a301.fint.ui.theme.BrandCyan
 import com.s14p31a301.fint.ui.theme.CyanLight
-import com.s14p31a301.fint.ui.theme.DarkHeader
+import com.s14p31a301.fint.ui.theme.DeepCyan
+import com.s14p31a301.fint.ui.theme.PageBg
 import com.s14p31a301.fint.ui.theme.SurfaceCard
 import com.s14p31a301.fint.ui.theme.TextMuted
 import com.s14p31a301.fint.ui.theme.TextPrimary
@@ -101,14 +102,14 @@ private fun ConfirmContent(
     Box(
         Modifier
             .fillMaxSize()
-            .background(DarkHeader),
+            .background(DeepCyan),
     ) {
         Column(Modifier.fillMaxSize()) {
             FintTopHeader(
                 title = "담당자 추가",
                 onBack = onCancel,
                 onClose = onCancel,
-                backTint = BrandCyan,
+                backTint = Color.White,
             )
 
             Surface(
@@ -200,7 +201,7 @@ private fun ConfirmContent(
                     modifier = Modifier.weight(1f).height(52.dp),
                     shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFF3F4F6),
+                        containerColor = PageBg,
                         contentColor = TextSecondary,
                     ),
                 ) { Text("취소", fontSize = 15.sp, fontWeight = FontWeight.Medium) }

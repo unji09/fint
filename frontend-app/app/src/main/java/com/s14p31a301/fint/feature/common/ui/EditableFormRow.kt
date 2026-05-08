@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.s14p31a301.fint.ui.theme.BrandCyan
-import com.s14p31a301.fint.ui.theme.DividerGray
+import com.s14p31a301.fint.ui.theme.Border
 import com.s14p31a301.fint.ui.theme.Placeholder
 import com.s14p31a301.fint.ui.theme.TextPrimary
 
@@ -122,7 +122,7 @@ fun EditableFormRow(
                 Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(DividerGray),
+                    .background(Border),
             )
         }
     }

@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.s14p31a301.fint.ui.theme.Border
 import com.s14p31a301.fint.ui.theme.BrandCyan
 import com.s14p31a301.fint.ui.theme.CyanBorder
 import com.s14p31a301.fint.ui.theme.PageBg
@@ -143,7 +144,7 @@ private fun StepRow(
                         .width(2.dp)
                         .fillMaxHeight()
                         .background(
-                            if (status == StepStatus.Pending) Color(0xFFE5E7EB) else BrandCyan
+                            if (status == StepStatus.Pending) Border else BrandCyan
                         ),
                 )
             }
@@ -218,7 +219,7 @@ private fun StepIndicator(status: StepStatus) {
                 Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFE5E7EB)),
+                    .background(Border),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

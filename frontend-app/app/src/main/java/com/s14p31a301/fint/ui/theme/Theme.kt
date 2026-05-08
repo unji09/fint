@@ -19,10 +19,10 @@ private val FintLightColors = lightColorScheme(
     onBackground = TextPrimary,
     surface = SurfaceCard,
     onSurface = TextPrimary,
-    surfaceVariant = DividerGray,
+    surfaceVariant = Border,
     onSurfaceVariant = TextSecondary,
-    outline = CyanBorder,
-    error = CardAccentRed,
+    outline = Border,
+    error = Danger,
     onError = SurfaceCard,
 )
 
