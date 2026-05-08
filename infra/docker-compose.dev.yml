@@ -1,12 +1,13 @@
 # F!NT EC2 배포용 Docker Compose
 #
 # 기동 대상:
-#   - Nginx     (리버스 프록시, 단일 진입점)
-#   - Spring    (백엔드 API)
-#   - PostgreSQL (메인 DB)
-#   - Redis     (캐시 / 큐)
+#   - Nginx        (리버스 프록시, 단일 진입점)
+#   - Spring       (백엔드 API)
+#   - frontend-web (Next.js)
+#   - PostgreSQL   (메인 DB)
+#   - Redis        (캐시 / 큐)
 #
-# 아직 준비 안 된 서비스 (frontend-web, ai):
+# 아직 준비 안 된 서비스 (ai):
 #   profiles: ["full"]로 선언. 준비되면 --profile full 로 포함.
 #
 # 사용법:
@@ -110,19 +111,24 @@ services:
     networks:
       - app
 
-  # --- 아직 준비 안 된 서비스 (--profile full 로 활성화) ---
-
   frontend-web:
     image: fint-frontend:latest
     container_name: fint-frontend
     restart: unless-stopped
     expose:
       - "3000"
+    healthcheck:
+      # alpine 의 localhost 는 IPv6 ::1 우선이라 connection refused → 127.0.0.1 명시
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     mem_limit: 512m
     networks:
       - app
-    profiles:
-      - full
+
+  # --- 아직 준비 안 된 서비스 (--profile full 로 활성화) ---
 
   ai:
     image: fint-ai:latest

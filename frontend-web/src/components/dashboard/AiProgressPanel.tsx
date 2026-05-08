@@ -1,9 +1,9 @@
 'use client';
 
-import type { QueryStep } from '@/app/dashboard/[id]/page';
+import type { Step } from '@/types/dashboard';
 
 interface AiProgressPanelProps {
-  steps: QueryStep[];
+  steps: Step[];
   userQuery: string;
 }
 

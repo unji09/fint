@@ -2,8 +2,9 @@ pipeline {
     agent any
 
     environment {
-        COMPOSE_FILE = 'infra/docker-compose.dev.yml'
-        IMAGE_NAME   = 'fint-backend'
+        COMPOSE_FILE        = 'infra/docker-compose.dev.yml'
+        IMAGE_NAME          = 'fint-backend'
+        FRONTEND_IMAGE_NAME = 'fint-frontend'
     }
 
     stages {
@@ -53,6 +54,39 @@ pipeline {
             }
         }
 
+        stage('Build Frontend Image') {
+            when {
+                expression { env.gitlabMergeRequestId == null }
+            }
+            steps {
+                // .env.dev 에서 NEXT_PUBLIC_API_URL 을 읽어 --build-arg 로 주입
+                // (NEXT_PUBLIC_* 는 빌드 시점에 번들에 박히기 때문)
+                sh '''
+                    if [ -f "${DEPLOY_DIR}/.env.dev" ]; then
+                        ENV_FILE="${DEPLOY_DIR}/.env.dev"
+                    elif [ -f "${DEPLOY_DIR}/infra/.env.dev" ]; then
+                        ENV_FILE="${DEPLOY_DIR}/infra/.env.dev"
+                    else
+                        echo "ERROR: .env.dev not found in DEPLOY_DIR"
+                        exit 1
+                    fi
+
+                    NEXT_PUBLIC_API_URL=$(grep -E '^NEXT_PUBLIC_API_URL=' "$ENV_FILE" | head -n1 | cut -d= -f2-)
+                    if [ -z "$NEXT_PUBLIC_API_URL" ]; then
+                        echo "ERROR: NEXT_PUBLIC_API_URL is empty or missing in $ENV_FILE"
+                        exit 1
+                    fi
+
+                    cd frontend-web
+                    docker build \
+                      --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" \
+                      -t ${FRONTEND_IMAGE_NAME}:${BUILD_NUMBER} \
+                      -t ${FRONTEND_IMAGE_NAME}:latest \
+                      .
+                '''
+            }
+        }
+
         stage('Deploy') {
             when {
                 expression { env.gitlabMergeRequestId == null }
@@ -82,6 +116,12 @@ pipeline {
                 retry(30) {
                     sleep 10
                     sh 'curl -sfk --connect-timeout 5 --max-time 10 https://localhost/actuator/health'
+                }
+                // 프론트(Next.js standalone) — / 는 /playground 로 307 리다이렉트되므로
+                // 200/307/308 모두 healthy 로 간주
+                retry(30) {
+                    sleep 5
+                    sh 'curl -sk --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}\\n" https://localhost/ | grep -qE "^(200|307|308)$"'
                 }
             }
         }
