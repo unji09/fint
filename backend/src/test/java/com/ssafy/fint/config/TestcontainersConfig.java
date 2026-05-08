@@ -11,7 +11,7 @@ public class TestcontainersConfig {
     @Bean
     @ServiceConnection
     static PostgreSQLContainer<?> postgresContainer() {
-        return new PostgreSQLContainer<>("postgres:16")
+        return new PostgreSQLContainer<>("pgvector/pgvector:pg16")
                 .withDatabaseName("fint_test")
                 .withUsername("fint")
                 .withPassword("fint");
