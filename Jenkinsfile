@@ -59,8 +59,6 @@ pipeline {
                 expression { env.gitlabMergeRequestId == null }
             }
             steps {
-                // .env.dev 에서 NEXT_PUBLIC_API_URL 을 읽어 --build-arg 로 주입
-                // (NEXT_PUBLIC_* 는 빌드 시점에 번들에 박히기 때문)
                 sh '''
                     if [ -f "${DEPLOY_DIR}/.env.dev" ]; then
                         ENV_FILE="${DEPLOY_DIR}/.env.dev"
@@ -94,6 +92,11 @@ pipeline {
             steps {
                 sh '''
                     cd ${DEPLOY_DIR}
+
+                    git fetch origin dev
+                    git checkout dev
+                    git pull --ff-only origin dev
+
                     if [ -f .env.dev ]; then
                         ENV_FILE=.env.dev
                     elif [ -f infra/.env.dev ]; then
@@ -117,8 +120,6 @@ pipeline {
                     sleep 10
                     sh 'curl -sfk --connect-timeout 5 --max-time 10 https://localhost/actuator/health'
                 }
-                // 프론트(Next.js standalone) — / 는 /playground 로 307 리다이렉트되므로
-                // 200/307/308 모두 healthy 로 간주
                 retry(30) {
                     sleep 5
                     sh 'curl -sk --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}\\n" https://localhost/ | grep -qE "^(200|307|308)$"'
