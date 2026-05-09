@@ -4,9 +4,13 @@ import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.entity.Contact;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.service.ContactService;
+import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
+import com.ssafy.fint.domain.deal.dto.DealListResponse;
+import com.ssafy.fint.domain.deal.dto.DealListResponse.DealAssignee;
+import com.ssafy.fint.domain.deal.dto.DealListResponse.DealSummary;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.domain.deal.entity.Deal;
@@ -18,20 +22,27 @@ import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
 import com.ssafy.fint.domain.tenant.entity.Team;
 import com.ssafy.fint.domain.tenant.repository.TeamRepository;
 import com.ssafy.fint.domain.user.entity.User;
+import com.ssafy.fint.domain.user.entity.UserRole;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AccountErrorCode;
+import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.DealErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -50,6 +61,7 @@ public class DealService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final PipelineStageRepository pipelineStageRepository;
+    private final ActivityRepository activityRepository;
 
     @Transactional
     public DealCreateResponse create(CustomUserDetails me, DealCreateRequest request) {
@@ -133,6 +145,8 @@ public class DealService {
         Deal deal = dealRepository.findByIdAndTenantId(dealId, tenantId)
                 .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
 
+        long meetingCount = activityRepository.countMeetingsByDealId(deal.getDealId());
+
         List<DealDetailResponse.ContactDetail> contacts = dealContactRepository
                 .findAllByDealId(deal.getDealId())
                 .stream()
@@ -140,7 +154,59 @@ public class DealService {
                 .map(DealDetailResponse.ContactDetail::from)
                 .toList();
 
-        return DealDetailResponse.of(deal, contacts);
+        return DealDetailResponse.of(deal, meetingCount, contacts);
+    }
+
+    @Transactional(readOnly = true)
+    public DealListResponse findList(CustomUserDetails me, Long accountId, Pageable pageable) {
+        User caller = userRepository.findById(me.getUserId())
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_TOKEN));
+
+        boolean tenantWide = UserRole.ADMIN.name().equals(me.getRole()) || caller.getTeam() == null;
+
+        Page<Deal> page = tenantWide
+                ? dealRepository.findAllByTenant(me.getTenantId(), accountId, pageable)
+                : dealRepository.findAllByTeam(caller.getTeam().getTeamId(), accountId, pageable);
+
+        List<Deal> deals = page.getContent();
+        if (deals.isEmpty()) {
+            return new DealListResponse(List.of(), page.getTotalElements());
+        }
+
+        List<Long> dealIds = deals.stream().map(Deal::getDealId).toList();
+        Map<Long, List<DealAssignee>> assigneesByDealId = dealContactRepository
+                .findAllByDealIdIn(dealIds).stream()
+                .collect(Collectors.groupingBy(
+                        dc -> dc.getDeal().getDealId(),
+                        Collectors.mapping(
+                                dc -> new DealAssignee(dc.getUser().getUserId(), dc.getUser().getName()),
+                                Collectors.collectingAndThen(Collectors.toList(),
+                                        DealService::dedupByUserId)
+                        )
+                ));
+
+        List<DealSummary> summaries = deals.stream()
+                .map(d -> new DealSummary(
+                        d.getDealId(),
+                        d.getTitle(),
+                        d.getAmount(),
+                        d.getExpectedClose(),
+                        assigneesByDealId.getOrDefault(d.getDealId(), List.of())
+                ))
+                .toList();
+
+        return new DealListResponse(summaries, page.getTotalElements());
+    }
+
+    private static List<DealAssignee> dedupByUserId(List<DealAssignee> assignees) {
+        return assignees.stream()
+                .collect(Collectors.toMap(
+                        DealAssignee::userId,
+                        a -> a,
+                        (first, duplicate) -> first,
+                        LinkedHashMap::new))
+                .values().stream()
+                .toList();
     }
 
     @Transactional

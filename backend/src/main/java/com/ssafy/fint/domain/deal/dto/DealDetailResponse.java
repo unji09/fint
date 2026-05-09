@@ -19,10 +19,11 @@ public record DealDetailResponse(
         OffsetDateTime lostAt,
         String lostReason,
         String currentPipelineStage,
+        long meetingCount,
         List<ContactDetail> contacts
 ) {
 
-    public static DealDetailResponse of(Deal deal, List<ContactDetail> contacts) {
+    public static DealDetailResponse of(Deal deal, long meetingCount, List<ContactDetail> contacts) {
         return new DealDetailResponse(
                 deal.getDealId(),
                 deal.getTitle(),
@@ -33,6 +34,7 @@ public record DealDetailResponse(
                 deal.getLostAt(),
                 deal.getLostReason(),
                 deal.getCurrentPipeline(),
+                meetingCount,
                 contacts
         );
     }
