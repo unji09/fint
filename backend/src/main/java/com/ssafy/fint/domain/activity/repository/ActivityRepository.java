@@ -33,4 +33,14 @@ public interface ActivityRepository
               and a.type = com.ssafy.fint.domain.activity.entity.ActivityType.MEETING
             """)
     Optional<OffsetDateTime> findLastMeetingStartAtByAccountId(@Param("accountId") Long accountId);
+
+    /**
+     * 특정 deal 에 속한 MEETING type Activity 의 개수.
+     */
+    @Query("""
+            select count(a) from Activity a
+            where a.deal.dealId = :dealId
+              and a.type = com.ssafy.fint.domain.activity.entity.ActivityType.MEETING
+            """)
+    long countMeetingsByDealId(@Param("dealId") Long dealId);
 }
