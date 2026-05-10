@@ -3,12 +3,14 @@ package com.ssafy.fint.domain.deal.controller;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
+import com.ssafy.fint.domain.deal.dto.DealListResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.global.ApiResponse;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.data.domain.Pageable;
 
 @Tag(name = "Deal", description = "영업건(Deal) 관리 API")
 public interface DealSwagger {
@@ -23,8 +25,17 @@ public interface DealSwagger {
     ApiResponse<DealCreateResponse> create(CustomUserDetails me, DealCreateRequest request);
 
     @Operation(
+        summary = "딜 목록 조회",
+        description = "현재 사용자의 권한 범위 내 영업건 목록을 최근 등록순(createdAt desc, dealId desc)으로 조회한다. "
+            + "정렬 기준은 서버 고정 — 클라이언트의 sort 쿼리는 무시된다. "
+            + "ADMIN 은 같은 테넌트 전체, MANAGER/MEMBER 는 본인 소속 팀(team_id 일치)의 딜만 반환한다. "
+    )
+    ApiResponse<DealListResponse> findList(CustomUserDetails me, Long accountId, Pageable pageable);
+
+    @Operation(
         summary = "딜 상세 조회",
-        description = "현재 테넌트의 영업건 상세 정보를 조회한다. 연결된 고객사 담당자(contacts) 목록을 함께 반환한다."
+        description = "현재 테넌트의 영업건 상세 정보를 조회한다. "
+            + "연결된 고객사 담당자(contacts) 목록과 해당 딜의 미팅 수(meetingCount, ActivityType=MEETING)를 함께 반환한다."
     )
     ApiResponse<DealDetailResponse> findDetail(CustomUserDetails me, Long dealId);
 

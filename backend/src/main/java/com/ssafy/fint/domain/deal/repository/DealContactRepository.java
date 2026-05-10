@@ -15,4 +15,11 @@ public interface DealContactRepository extends JpaRepository<DealContact, Long> 
             where dc.deal.dealId = :dealId
             """)
     List<DealContact> findAllByDealId(@Param("dealId") Long dealId);
+
+    @Query("""
+            select dc from DealContact dc
+            join fetch dc.user u
+            where dc.deal.dealId in :dealIds
+            """)
+    List<DealContact> findAllByDealIdIn(@Param("dealIds") List<Long> dealIds);
 }
