@@ -5,6 +5,7 @@ pipeline {
         COMPOSE_FILE        = 'infra/docker-compose.dev.yml'
         IMAGE_NAME          = 'fint-backend'
         FRONTEND_IMAGE_NAME = 'fint-frontend'
+        AI_IMAGE_NAME       = 'fint-ai'
     }
 
     stages {
@@ -54,13 +55,22 @@ pipeline {
             }
         }
 
+        stage('Build AI Image') {
+            when {
+                expression { env.gitlabMergeRequestId == null }
+            }
+            steps {
+                dir('ai') {
+                    sh "docker build -t ${AI_IMAGE_NAME}:${BUILD_NUMBER} -t ${AI_IMAGE_NAME}:latest ."
+                }
+            }
+        }
+
         stage('Build Frontend Image') {
             when {
                 expression { env.gitlabMergeRequestId == null }
             }
             steps {
-                // .env.dev 에서 NEXT_PUBLIC_API_URL 을 읽어 --build-arg 로 주입
-                // (NEXT_PUBLIC_* 는 빌드 시점에 번들에 박히기 때문)
                 sh '''
                     if [ -f "${DEPLOY_DIR}/.env.dev" ]; then
                         ENV_FILE="${DEPLOY_DIR}/.env.dev"
@@ -93,16 +103,8 @@ pipeline {
             }
             steps {
                 sh '''
-                    cd ${DEPLOY_DIR}
-                    if [ -f .env.dev ]; then
-                        ENV_FILE=.env.dev
-                    elif [ -f infra/.env.dev ]; then
-                        ENV_FILE=infra/.env.dev
-                    else
-                        echo "ERROR: .env.dev not found"
-                        exit 1
-                    fi
-                    docker compose -f infra/docker-compose.dev.yml --env-file "$ENV_FILE" up -d
+                    cp "${DEPLOY_DIR}/.env.dev" "$WORKSPACE/.env.dev"
+                    docker compose -f "$WORKSPACE/infra/docker-compose.dev.yml" --env-file "$WORKSPACE/.env.dev" up -d
                     docker restart fint-nginx
                 '''
             }
@@ -117,11 +119,13 @@ pipeline {
                     sleep 10
                     sh 'curl -sfk --connect-timeout 5 --max-time 10 https://localhost/actuator/health'
                 }
-                // 프론트(Next.js standalone) — / 는 /playground 로 307 리다이렉트되므로
-                // 200/307/308 모두 healthy 로 간주
                 retry(30) {
                     sleep 5
                     sh 'curl -sk --connect-timeout 5 --max-time 10 -o /dev/null -w "%{http_code}\\n" https://localhost/ | grep -qE "^(200|307|308)$"'
+                }
+                retry(10) {
+                    sleep 5
+                    sh 'docker exec fint-ai curl -sf --connect-timeout 3 --max-time 5 http://localhost:8000/health'
                 }
             }
         }

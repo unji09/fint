@@ -1,19 +1,19 @@
-# F!NT 앱 데이터 스택 (개발용)
+# F!NT 앱 데이터 스택 (로컬 개발용)
 #
 # 기동 대상:
 #   - PostgreSQL 16 (메인 DB)
 #   - Redis 7       (세션 / 캐시 / 비동기 큐)
+#   - FastAPI        (AI 서비스)
 #
 # 포함되지 않음:
 #   - Spring Boot (로컬에선 호스트에서 ./gradlew bootRun 으로 실행)
-#   - FastAPI (추후 서비스 도입 시 별도 compose 또는 이 파일에 서비스 추가)
 #   - 모니터링 스택 (infra/monitoring/docker-compose.yml 별도)
 #
 # 사용법은 infra/README.md 참조.
 
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: fint-postgres
     restart: unless-stopped
     environment:
@@ -53,6 +53,31 @@ services:
       timeout: 3s
       retries: 10
     mem_limit: 128m
+    networks:
+      - app
+
+  ai:
+    build: ../ai
+    container_name: fint-ai
+    restart: unless-stopped
+    env_file: ../.env.local
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    ports:
+      - "${AI_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    mem_limit: 2g
     networks:
       - app
 

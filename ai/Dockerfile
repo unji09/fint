@@ -2,7 +2,7 @@ FROM python:3.12-slim AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-WORKDIR /build
+WORKDIR /app
 COPY pyproject.toml uv.lock* ./
 RUN uv sync --frozen --no-install-project --no-dev
 
@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 ENV TZ=Asia/Seoul
 WORKDIR /app
 
-COPY --from=builder /build/.venv /app/.venv
-COPY --from=builder /build/app /app/app
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/app /app/app
 
 ENV PATH="/app/.venv/bin:$PATH"
 
