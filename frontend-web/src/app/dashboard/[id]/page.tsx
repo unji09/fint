@@ -9,6 +9,7 @@ import FintChatPanel from '@/components/dashboard/FintChatPanel';
 import type { CanvasWidget, Step } from '@/types/dashboard';
 import QueryBar from '@/components/dashboard/QueryBar';
 import { BarChartSvg } from '@/components/dashboard/ChartWidgets';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 const STEP_LABELS = ['사용자 의도 파악', '데이터 조회', '컴포넌트 조합 완료', '스타일링 중...'];
@@ -36,6 +37,8 @@ export default function DashboardDetailPage() {
   const [queryInput, setQueryInput] = useState('');
   const [widgetTitle, setWidgetTitle] = useState('');
   const [pendingType, setPendingType] = useState('BAR_CHART');
+  /* SSE complete 시 받아둔 위젯 데이터 */
+  const [pendingWidget, setPendingWidget] = useState<CanvasWidget | null>(null);
 
   /* 드래그 고스트 */
   const [dragging, setDragging] = useState(false);
@@ -102,20 +105,26 @@ export default function DashboardDetailPage() {
         ) {
           const px = ev.clientX - rect.left + canvas.scrollLeft - 180;
           const py = ev.clientY - rect.top + canvas.scrollTop - 100;
-          const newW: CanvasWidget = {
-            widgetId: Date.now(),
-            widgetType: pendingType,
-            title: widgetTitle,
-            config: {},
-            position: { x: 0, y: 0, w: 6, h: 4 },
-            queryId: null,
-            inputText: userQuery,
-            result: { data: {}, insightText: '' },
-            px: Math.max(0, px),
-            py: Math.max(0, py),
-            pw: 400,
-            ph: 260,
-          };
+          const newW: CanvasWidget = pendingWidget
+            ? {
+                ...pendingWidget,
+                px: Math.max(0, px),
+                py: Math.max(0, py),
+              }
+            : {
+                widgetId: Date.now(),
+                widgetType: pendingType,
+                title: widgetTitle,
+                config: {},
+                position: { x: 0, y: 0, w: 6, h: 4 },
+                queryId: null,
+                inputText: userQuery,
+                result: { data: {}, insightText: '' },
+                px: Math.max(0, px),
+                py: Math.max(0, py),
+                pw: 400,
+                ph: 260,
+              };
           setCanvasWidgets((prev) => [...prev, newW]);
           setChatOpen(false);
           setChatDone(false);
@@ -124,41 +133,107 @@ export default function DashboardDetailPage() {
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     },
-    [pendingType, widgetTitle, userQuery],
+    [pendingType, widgetTitle, userQuery, pendingWidget],
   );
 
   const handleQuery = useCallback(
-    (text: string) => {
+    async (text: string) => {
       if (!text.trim() || querying) return;
       setUserQuery(text);
       setQuerying(true);
       setChatOpen(true);
       setChatDone(false);
       setQueryInput('');
+      setPendingWidget(null);
+
       const autoTitle = text.replace(/어때\?*|보여줘|분석해줘|알려줘|\?\?*/g, '').trim() || text;
       setWidgetTitle(autoTitle);
-      const wType =
-        text.includes('세그먼트') || text.includes('비중')
-          ? 'SEGMENT'
-          : text.includes('추이') || text.includes('라인')
-            ? 'LINE_CHART'
-            : 'BAR_CHART';
-      setPendingType(wType);
-      let i = 0;
+
       setSteps(STEP_LABELS.map((l, idx) => ({ label: l, done: false, active: idx === 0 })));
-      const t = setInterval(() => {
-        i++;
-        setSteps(STEP_LABELS.map((l, idx) => ({ label: l, done: idx < i, active: idx === i })));
-        if (i >= STEP_LABELS.length) {
-          clearInterval(t);
-          setTimeout(() => {
+
+      try {
+        const startRes = await fetch(`${API_BASE}/dashboards/${id}/queries`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader() as Record<string, string>),
+          },
+          body: JSON.stringify({ inputText: text }),
+        });
+        if (!startRes.ok) throw new Error(`HTTP ${startRes.status}`);
+        const startJson = await startRes.json();
+        const traceId = startJson.data?.traceId ?? startJson.traceId;
+
+        const ctrl = new AbortController();
+        fetchEventSource(`${API_BASE}/dashboards/queries/${traceId}/stream`, {
+          method: 'GET',
+          headers: { ...(authHeader() as Record<string, string>) },
+          signal: ctrl.signal,
+          openWhenHidden: true,
+          onmessage(ev) {
+            try {
+              const data = JSON.parse(ev.data);
+              if (ev.event === 'progress') {
+                const stepNum = data.stepNumber ?? 0;
+                setSteps(
+                  STEP_LABELS.map((l, idx) => ({
+                    label: l,
+                    done: idx < stepNum,
+                    active: idx === stepNum,
+                  })),
+                );
+                return;
+              }
+              if (ev.event === 'complete') {
+                setWidgetTitle(data.title ?? autoTitle);
+                setPendingType(data.widgetType ?? 'BAR_CHART');
+                setPendingWidget({
+                  widgetId: data.widgetId ?? Date.now(),
+                  widgetType: data.widgetType ?? 'BAR_CHART',
+                  title: data.title ?? autoTitle,
+                  config: data.config ?? {},
+                  position: data.position ?? { x: 0, y: 0, w: 6, h: 4 },
+                  queryId: data.queryId ?? null,
+                  inputText: text,
+                  result: data.result ?? { data: {}, insightText: '' },
+                  px: 0,
+                  py: 0,
+                  pw: 400,
+                  ph: 260,
+                });
+                setSteps(STEP_LABELS.map((l) => ({ label: l, done: true, active: false })));
+                setQuerying(false);
+                setChatDone(true);
+                ctrl.abort();
+                return;
+              }
+              if (ev.event === 'error') {
+                console.error('Query error:', data.message);
+                setQuerying(false);
+                setChatDone(true);
+                ctrl.abort();
+              }
+            } catch {
+              /* ignore parse error */
+            }
+          },
+          onerror(err) {
+            console.error('SSE connection error:', err);
             setQuerying(false);
             setChatDone(true);
-          }, 500);
-        }
-      }, 850);
+            // throw 로 fetchEventSource 의 자동 재시도 차단
+            throw err;
+          },
+        }).catch(() => {
+          /* abort 로 인한 reject 무시 */
+        });
+      } catch (err) {
+        console.error('Query start failed:', err);
+        setQuerying(false);
+        setChatDone(true);
+      }
     },
-    [querying],
+    [querying, id],
   );
 
   return (
@@ -281,6 +356,7 @@ export default function DashboardDetailPage() {
                 isDone={chatDone}
                 widgetTitle={widgetTitle}
                 widgetType={pendingType}
+                result={pendingWidget?.result}
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}
