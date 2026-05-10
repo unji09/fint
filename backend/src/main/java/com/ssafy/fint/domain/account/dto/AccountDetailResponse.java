@@ -7,8 +7,9 @@ import java.util.List;
 
 /**
  * 고객사 상세 조회 응답.
- * 본 task 범위에서는 assignedUsers·latestMood 까지 실구현.
- * meetingCount·lastContactAt·relationDepthScore·contacts·deals 는 후속 작업에서 다른 도메인과 합성 예정.
+ * meetingCount / lastContactAt 는 "고객사 매핑 Deal 에 속한 Activity 중 type=MEETING" 기준 집계.
+ * deals 는 데이터 스코프 정책(팀 있음→팀 deal, 팀 없음→tenant 전체) 적용된 최신 3개 preview.
+ * 전체 목록은 GET /accounts/{accountId}/deals 로.
  */
 public record AccountDetailResponse(
         Long accountId,
