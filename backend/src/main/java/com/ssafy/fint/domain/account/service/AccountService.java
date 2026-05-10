@@ -232,9 +232,9 @@ public class AccountService {
 
     /**
      * 고객사 상세 조회.
-     * <p>권한 검증 → assignedUsers · latestMood · 미팅 집계 · contacts · deals(preview 3개) 를 합성한다.
-     * <p>meetingCount / lastContactAt 는 "고객사 매핑 Deal 에 속한 Activity 중 type=MEETING" 기준.
-     * <p>deals 는 데이터 스코프 정책(팀 있음→팀 deal, 팀 없음→tenant 전체) 적용된 최신 3개 preview.
+     * 권한 검증 → assignedUsers · latestMood · 미팅 집계 · contacts · deals(preview 3개) 를 합성한다.
+     * meetingCount / lastContactAt 는 "고객사 매핑 Deal 에 속한 Activity 중 type=MEETING" 기준.
+     * deals 는 데이터 스코프 정책(팀 있음→팀 deal, 팀 없음→tenant 전체) 적용된 최신 3개 preview.
      * 전체 목록은 {@link #findDealsByAccount(Long, boolean)} 으로.
      */
     public AccountDetailResponse findDetail(Long accountId) {
@@ -294,8 +294,8 @@ public class AccountService {
 
     /**
      * 고객사별 딜 목록 조회.
-     * <p>권한 검증(본인 책임자 + 같은 tenant) → 데이터 스코프(팀/tenant) → mineOnly 필터.
-     * <p>정렬은 updated_at desc, 페이지네이션 없음(전체 반환).
+     * 권한 검증(본인 책임자 + 같은 tenant) → 데이터 스코프(팀/tenant) → mineOnly 필터.
+     * 정렬은 updated_at desc, 페이지네이션 없음(전체 반환).
      */
     public AccountDealsResponse findDealsByAccount(Long accountId, boolean mineOnly) {
         Long userId = currentUserId();
