@@ -28,9 +28,7 @@ router = APIRouter(prefix="/api/v1/ocr", tags=["OCR"])
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
-_PHONE_RE = re.compile(
-    r"(?:01[016789](?:[\s.-]?\d{3,4}){2}|0\d{1,2}(?:[\s.-]?\d{3,4}){2})"
-)
+_PHONE_RE = re.compile(r"(?:01[016789](?:[\s.-]?\d{3,4}){2}|0\d{1,2}(?:[\s.-]?\d{3,4}){2})")
 
 _EMAIL_LABEL_PREFIXES: tuple[str, ...] = ("E-mail", "Email", "Mail", "Tel", "Fax", "M", "P", "F", "T")
 
@@ -38,30 +36,125 @@ _DOMAIN_TAIL_RE = re.compile(r"(?:com|kr|net|org|io|co|gov|edu)$", re.IGNORECASE
 _LABEL_PREFIX_RE = re.compile(r"^[A-Z]\s+\S")
 
 _TITLE_DICT: tuple[str, ...] = (
-    "대표이사", "대표", "부대표", "회장", "부회장", "사장", "부사장",
-    "전무", "상무", "이사", "감사", "임원", "고문",
-    "본부장", "부본부장", "실장", "부실장", "센터장", "지사장", "지점장",
-    "팀장", "부팀장", "파트장", "그룹장", "부서장",
-    "부장", "차장", "과장", "대리", "주임", "사원", "인턴",
-    "수석", "책임", "선임", "주임연구원", "책임연구원", "수석연구원", "선임연구원",
-    "연구원", "연구위원", "기술위원",
-    "매니저", "프로", "스태프", "디자이너", "개발자", "기획자", "PM", "PO", "프로듀서",
-    "컨설턴트", "어드바이저", "에반젤리스트", "아키텍트", "엔지니어",
-    "CEO", "CTO", "CFO", "COO", "CIO", "CMO", "CSO", "CDO", "CPO", "CHRO",
-    "President", "VP", "AVP", "EVP", "SVP",
-    "Founder", "Co-Founder", "Owner", "Chairman", "Partner", "Executive",
-    "Director", "Manager", "Lead", "Head", "Chief",
-    "Senior", "Junior", "Staff", "Principal", "Associate", "Specialist",
-    "Coordinator", "Officer", "Analyst", "Consultant",
-    "Engineer", "Developer", "Architect", "Designer", "Researcher",
-    "Scientist", "Producer", "Planner", "Strategist",
+    "대표이사",
+    "대표",
+    "부대표",
+    "회장",
+    "부회장",
+    "사장",
+    "부사장",
+    "전무",
+    "상무",
+    "이사",
+    "감사",
+    "임원",
+    "고문",
+    "본부장",
+    "부본부장",
+    "실장",
+    "부실장",
+    "센터장",
+    "지사장",
+    "지점장",
+    "팀장",
+    "부팀장",
+    "파트장",
+    "그룹장",
+    "부서장",
+    "부장",
+    "차장",
+    "과장",
+    "대리",
+    "주임",
+    "사원",
+    "인턴",
+    "수석",
+    "책임",
+    "선임",
+    "주임연구원",
+    "책임연구원",
+    "수석연구원",
+    "선임연구원",
+    "연구원",
+    "연구위원",
+    "기술위원",
+    "매니저",
+    "프로",
+    "스태프",
+    "디자이너",
+    "개발자",
+    "기획자",
+    "PM",
+    "PO",
+    "프로듀서",
+    "컨설턴트",
+    "어드바이저",
+    "에반젤리스트",
+    "아키텍트",
+    "엔지니어",
+    "CEO",
+    "CTO",
+    "CFO",
+    "COO",
+    "CIO",
+    "CMO",
+    "CSO",
+    "CDO",
+    "CPO",
+    "CHRO",
+    "President",
+    "VP",
+    "AVP",
+    "EVP",
+    "SVP",
+    "Founder",
+    "Co-Founder",
+    "Owner",
+    "Chairman",
+    "Partner",
+    "Executive",
+    "Director",
+    "Manager",
+    "Lead",
+    "Head",
+    "Chief",
+    "Senior",
+    "Junior",
+    "Staff",
+    "Principal",
+    "Associate",
+    "Specialist",
+    "Coordinator",
+    "Officer",
+    "Analyst",
+    "Consultant",
+    "Engineer",
+    "Developer",
+    "Architect",
+    "Designer",
+    "Researcher",
+    "Scientist",
+    "Producer",
+    "Planner",
+    "Strategist",
 )
 _SORTED_TITLES: tuple[str, ...] = tuple(sorted(_TITLE_DICT, key=len, reverse=True))
 
 _COMPANY_SUFFIXES: tuple[str, ...] = (
-    "(주)", "주식회사", "Inc.", "Inc",
-    "Co., Ltd.", "Co.,Ltd.", "Co.,Ltd", "Co. Ltd.", "Co. Ltd",
-    "Corp.", "Corp", "LLC", "Ltd.", "Ltd",
+    "(주)",
+    "주식회사",
+    "Inc.",
+    "Inc",
+    "Co., Ltd.",
+    "Co.,Ltd.",
+    "Co.,Ltd",
+    "Co. Ltd.",
+    "Co. Ltd",
+    "Corp.",
+    "Corp",
+    "LLC",
+    "Ltd.",
+    "Ltd",
 )
 
 
@@ -97,9 +190,7 @@ def _pick_phone(phones: list[str]) -> str | None:
 
 
 _KOREAN_TITLE_PREFIX = r"(?:수석|책임|선임|주임|총괄|부총괄|고급)\s+"
-_ENGLISH_TITLE_PREFIX = (
-    r"(?:Senior|Junior|Lead|Head|Chief|Vice|Managing|Solution|Software|Co)\s+"
-)
+_ENGLISH_TITLE_PREFIX = r"(?:Senior|Junior|Lead|Head|Chief|Vice|Managing|Solution|Software|Co)\s+"
 
 
 def _match_title(text: str) -> str | None:
@@ -131,19 +222,41 @@ def _has_company_suffix(text: str) -> bool:
     return any(suffix in text for suffix in _COMPANY_SUFFIXES)
 
 
-_GENERIC_DOMAIN_WORDS: frozenset[str] = frozenset({
-    "mail", "email", "www", "smtp",
-    "com", "kr", "net", "org", "io", "co", "gov", "edu",
-    "gmail", "naver", "daum", "hanmail", "nate", "kakao",
-    "outlook", "hotmail", "yahoo", "icloud", "live", "msn",
-})
+_GENERIC_DOMAIN_WORDS: frozenset[str] = frozenset(
+    {
+        "mail",
+        "email",
+        "www",
+        "smtp",
+        "com",
+        "kr",
+        "net",
+        "org",
+        "io",
+        "co",
+        "gov",
+        "edu",
+        "gmail",
+        "naver",
+        "daum",
+        "hanmail",
+        "nate",
+        "kakao",
+        "outlook",
+        "hotmail",
+        "yahoo",
+        "icloud",
+        "live",
+        "msn",
+    }
+)
 
 
 def _email_domain_word(email: str) -> str | None:
     at = email.rfind("@")
     if at < 0:
         return None
-    parts = email[at + 1:].split(".")
+    parts = email[at + 1 :].split(".")
     company_parts = [p for p in parts if p.lower() not in _GENERIC_DOMAIN_WORDS]
     return company_parts[0] if company_parts else None
 
@@ -192,10 +305,7 @@ def _pick_company(boxes: list[OcrBox], *, emails: list[str] | None = None) -> st
         if _has_company_suffix(b.text):
             return b.text
 
-    candidates = [
-        b for b in sorted_by_font
-        if not _is_company_excluded(b.text) and not _is_suspect_korean(b)
-    ]
+    candidates = [b for b in sorted_by_font if not _is_company_excluded(b.text) and not _is_suspect_korean(b)]
     candidates = _filter_watermarks(candidates, boxes)
 
     domain_word = _email_domain_word(emails[0]) if emails else None
@@ -248,24 +358,18 @@ def _pick_name(boxes: list[OcrBox], *, exclude_texts: set[str]) -> str | None:
     candidates = [
         b
         for b in boxes
-        if b.text not in exclude_texts
-        and not _is_email_or_phone(b.text)
-        and not _has_company_suffix(b.text)
+        if b.text not in exclude_texts and not _is_email_or_phone(b.text) and not _has_company_suffix(b.text)
     ]
     if not candidates:
         return None
 
     korean_pieces = [
-        b for b in candidates
-        if 1 <= len(b.text) <= 3 and _is_mostly_korean(b.text) and not _match_title(b.text)
+        b for b in candidates if 1 <= len(b.text) <= 3 and _is_mostly_korean(b.text) and not _match_title(b.text)
     ]
     if korean_pieces:
         sorted_by_font = sorted(korean_pieces, key=lambda b: b.font_height, reverse=True)
         biggest = sorted_by_font[0]
-        related = [
-            b for b in sorted_by_font
-            if abs(b.font_height - biggest.font_height) <= biggest.font_height * 0.3
-        ]
+        related = [b for b in sorted_by_font if abs(b.font_height - biggest.font_height) <= biggest.font_height * 0.3]
         related.sort(key=lambda b: (b.box[0][1], b.box[0][0]))
         combined = "".join(b.text for b in related)
         if 2 <= len(combined) <= 5:
@@ -315,10 +419,7 @@ async def _classify_with_llm(
     openai: OpenAIClient,
     model: str,
 ) -> BusinessCardClassification:
-    relevant = [
-        b for b in boxes
-        if not (_EMAIL_RE.search(b.text) or _PHONE_RE.search(b.text))
-    ]
+    relevant = [b for b in boxes if not (_EMAIL_RE.search(b.text) or _PHONE_RE.search(b.text))]
     relevant.sort(key=lambda b: b.font_height, reverse=True)
     lines: list[str] = []
     for b in relevant[:_LLM_BOX_LIMIT]:
@@ -347,9 +448,7 @@ async def _classify_with_llm(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": box_dump},
     ]
-    result = await openai.chat_structured(
-        messages, response_model=BusinessCardClassification, model=model
-    )
+    result = await openai.chat_structured(messages, response_model=BusinessCardClassification, model=model)
     return cast(BusinessCardClassification, result)
 
 

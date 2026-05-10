@@ -1,9 +1,12 @@
+import numpy as np
+
 from app.dashboard.query_engine import QueryEngine
 from app.schemas.dashboard import (
     DashboardQueryRequest,
     InsightResult,
     IntentResult,
     QuerySpec,
+    SemanticSearchSpec,
     WidgetConfig,
     WidgetType,
 )
@@ -369,3 +372,114 @@ class TestQueryEngine:
 
         assert result["status"] == "COMPLETED"
         assert "data" in result["result"]
+
+
+class FakeEmbedder:
+    @property
+    def dimension(self) -> int:
+        return 384
+
+    def embed_query(self, text: str) -> np.ndarray:
+        return np.zeros(384, dtype=np.float32)
+
+
+class TestQueryEngineSemanticHybrid:
+    def _make_engine(self, *, llm=None, db=None, context_store=None, embedder=None):
+        return QueryEngine(
+            llm=llm or FakeLLM(),
+            db=db or FakeDB(),
+            context_store=context_store or FakeContextStore(),
+            embedder=embedder,
+        )
+
+    def _make_request(self, **overrides):
+        defaults = {
+            "trace_id": "test-uuid",
+            "action": "CREATE",
+            "input_text": "삼성전자 뉴스 보여줘",
+            "dashboard_id": 1,
+            "tenant_id": 42,
+            "user_id": 7,
+        }
+        defaults.update(overrides)
+        return DashboardQueryRequest(**defaults)
+
+    async def test_semantic_search_returns_news_results(self):
+        intent = IntentResult(
+            search_type="SEMANTIC",
+            semantic_spec=SemanticSearchSpec(search_text="삼성전자 반도체", top_k=5),
+            suggested_title="삼성전자 반도체 뉴스",
+        )
+        db = FakeDB(
+            rows=[
+                {
+                    "news_article_id": 1,
+                    "title": "삼성전자 반도체 투자",
+                    "content_summary": "삼성 반도체 요약",
+                    "publisher": "한경",
+                    "published_at": "2025-01-01",
+                    "link": "https://ex.com/1",
+                    "title_score": 0.9,
+                    "summary_score": 0.8,
+                }
+            ]
+        )
+        engine = self._make_engine(llm=FakeLLM(intent=intent), db=db, embedder=FakeEmbedder())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "COMPLETED"
+
+    async def test_semantic_without_embedder_returns_empty(self):
+        intent = IntentResult(
+            search_type="SEMANTIC",
+            semantic_spec=SemanticSearchSpec(search_text="test", top_k=5),
+            suggested_title="뉴스",
+        )
+        engine = self._make_engine(llm=FakeLLM(intent=intent), embedder=None)
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "COMPLETED"
+
+    async def test_hybrid_combines_structured_and_semantic(self):
+        intent = IntentResult(
+            search_type="HYBRID",
+            query_spec=QuerySpec(table="deals", columns=["title", "amount"]),
+            semantic_spec=SemanticSearchSpec(search_text="반도체 투자", top_k=5),
+            suggested_title="반도체 투자 분석",
+        )
+
+        class HybridDB:
+            """structured 쿼리와 vector 쿼리 모두 처리하는 fake."""
+
+            def __init__(self):
+                self._call_count = 0
+
+            async def execute(self, stmt, params=None):
+                self._call_count += 1
+                if self._call_count == 1:
+                    return FakeResult([{"title": "딜A", "amount": 1000}])
+                return FakeResult(
+                    [
+                        {
+                            "news_article_id": 1,
+                            "title": "반도체 뉴스",
+                            "content_summary": "요약",
+                            "publisher": "한경",
+                            "published_at": "2025-01-01",
+                            "link": "https://ex.com/1",
+                            "title_score": 0.8,
+                            "summary_score": 0.7,
+                        }
+                    ]
+                )
+
+        engine = self._make_engine(llm=FakeLLM(intent=intent), db=HybridDB(), embedder=FakeEmbedder())
+        request = self._make_request()
+
+        result = await engine.run(request)
+
+        assert result["status"] == "COMPLETED"

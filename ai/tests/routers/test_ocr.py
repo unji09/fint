@@ -18,6 +18,7 @@ from app.schemas.ocr import BusinessCardClassification
 _RESOURCES_DIR = Path(__file__).parent.parent / "resources"
 _BUSINESS_CARD_IMAGE = _RESOURCES_DIR / "business_card.jpg"
 
+
 class FakeS3:
     async def get_object(self, key: str) -> bytes:
         return b"fake-business-card-image"
@@ -44,7 +45,6 @@ class FakeOcrFailing:
 
 
 class FakeOpenAI:
-
     def __init__(self, response: BusinessCardClassification | None = None, *, fail: bool = False) -> None:
         self._response = response or BusinessCardClassification()
         self._fail = fail
@@ -78,6 +78,7 @@ def _box(text: str, font_height: float = 20.0, *, confidence: float = 0.99) -> O
         confidence=confidence,
     )
 
+
 CLEAR_BOXES: list[OcrBox] = [
     _box("주식회사 핀트", 40.0),
     _box("홍길동", 28.0),
@@ -92,6 +93,7 @@ AMBIGUOUS_BOXES: list[OcrBox] = [
     _box("010-9876-5432", 14.0),
     _box("john@kp.com", 14.0),
 ]
+
 
 def _build_app(
     *,
@@ -242,9 +244,7 @@ async def test_suspect_korean_company_triggers_llm():
         _box("이사", 18.0),
         _box("hong@realcorp.com", 14.0),
     ]
-    llm_response = BusinessCardClassification(
-        name="홍길동", company="RealCorp", title="이사"
-    )
+    llm_response = BusinessCardClassification(name="홍길동", company="RealCorp", title="이사")
     app, _, openai, _ = _build_app(
         ocr_instance=FakeOcr(boxes),
         openai_instance=FakeOpenAI(llm_response),
@@ -285,9 +285,7 @@ async def test_suspect_korean_excluded_from_company_picking():
 
 @pytest.mark.asyncio
 async def test_recognize_business_card_falls_back_to_llm_when_ambiguous():
-    llm_response = BusinessCardClassification(
-        name="John Smith", company="Kim and Park", title=None
-    )
+    llm_response = BusinessCardClassification(name="John Smith", company="Kim and Park", title=None)
     app, _, openai, _ = _build_app(
         ocr_instance=FakeOcr(AMBIGUOUS_BOXES),
         openai_instance=FakeOpenAI(llm_response),
@@ -451,9 +449,7 @@ class _LocalFileS3:
 
 @pytest.mark.skipif(
     not _BUSINESS_CARD_IMAGE.exists(),
-    reason=(
-        f"명함 이미지 없음 — {_BUSINESS_CARD_IMAGE.name} 을 tests/resources/ 에 두면 자동 실행. "
-    ),
+    reason=(f"명함 이미지 없음 — {_BUSINESS_CARD_IMAGE.name} 을 tests/resources/ 에 두면 자동 실행. "),
 )
 @pytest.mark.asyncio
 async def test_recognize_real_business_card_end_to_end(capsys):

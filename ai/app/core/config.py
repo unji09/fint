@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = "https://gms.ssafy.io/gmsapi/api.openai.com/v1"
     OPENAI_OCR_MODEL: str = "gpt-5-nano"
 
+    EMBEDDING_MODEL_PATH: str = "model/e5-small"
+
     S3_BUCKET: str = "fint-local"
     S3_REGION: str = "ap-northeast-2"
     AWS_ACCESS_KEY_ID: str = ""

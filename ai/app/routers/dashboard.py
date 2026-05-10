@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from redis.asyncio import Redis
 
-from app.clients import get_llm_client
+from app.clients import get_embedder_client, get_llm_client
+from app.clients.embedder import OnnxEmbedderClient
 from app.clients.llm import LLMClient
 from app.core.db import get_session_factory
 from app.core.errors import BusinessException, CommonErrorCode
@@ -36,6 +37,7 @@ async def query(
     tenant_id: int = Depends(get_tenant_id),
     redis: Redis = Depends(get_redis),
     llm: LLMClient = Depends(get_llm_client),
+    embedder: OnnxEmbedderClient | None = Depends(get_embedder_client),
 ) -> ApiResponse[TraceIdResponse]:
     body.tenant_id = tenant_id
 
@@ -44,7 +46,7 @@ async def query(
     if body.action == "MODIFY" and not body.current_widget:
         raise BusinessException(CommonErrorCode.ILLEGAL_ARGUMENT, "MODIFY 액션에는 current_widget이 필요합니다")
 
-    asyncio.create_task(run_query_task(request=body, redis=redis, llm=llm))
+    asyncio.create_task(run_query_task(request=body, redis=redis, llm=llm, embedder=embedder))
     return ApiResponse.ok(TraceIdResponse(trace_id=body.trace_id))
 
 
@@ -53,6 +55,7 @@ async def run_query_task(
     request: DashboardQueryRequest,
     redis,
     llm,
+    embedder=None,
 ) -> None:
     redis_store = RedisStore(redis)
     context_store = ContextStore(redis)
@@ -63,7 +66,7 @@ async def run_query_task(
 
     try:
         async with session_factory() as db:
-            engine = QueryEngine(llm=llm, db=db, context_store=context_store)
+            engine = QueryEngine(llm=llm, db=db, context_store=context_store, embedder=embedder)
             result = await engine.run(request, on_status=_on_status)
 
         if result["status"] == "COMPLETED":
