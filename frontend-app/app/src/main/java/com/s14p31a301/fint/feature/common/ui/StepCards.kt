@@ -58,7 +58,13 @@ import kotlinx.coroutines.delay
  * 검색바 → 회사 칩 → 신규 담당자 칩 순으로 페이드 인.
  */
 @Composable
-fun DatabaseSearchCard(visible: Boolean) {
+fun DatabaseSearchCard(
+    visible: Boolean,
+    name: String? = null,
+    company: String? = null,
+) {
+    val displayName = name?.ifBlank { null } ?: "김담당"
+    val displayCompany = company?.ifBlank { null } ?: "ABC 주식회사"
     var showSearch by remember { mutableStateOf(false) }
     var showCompany by remember { mutableStateOf(false) }
     var showContact by remember { mutableStateOf(false) }
@@ -88,7 +94,7 @@ fun DatabaseSearchCard(visible: Boolean) {
             ) {
                 Icon(Icons.Default.Search, null, tint = Placeholder, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("김담당", color = TextSecondary, fontSize = 14.sp)
+                Text(displayName, color = TextSecondary, fontSize = 14.sp)
             }
         }
 
@@ -99,7 +105,7 @@ fun DatabaseSearchCard(visible: Boolean) {
                 iconBg = CyanLight,
                 iconShape = ShapeKind.Building,
                 iconTint = BrandCyan,
-                title = "ABC 주식회사",
+                title = displayCompany,
                 subtitle = "등록된 고객사",
                 trailing = {
                     Icon(Icons.Default.Check, null, tint = BrandCyan, modifier = Modifier.size(20.dp))
@@ -114,7 +120,7 @@ fun DatabaseSearchCard(visible: Boolean) {
                 iconBg = Border,
                 iconShape = ShapeKind.Person,
                 iconTint = Placeholder,
-                title = "김담당",
+                title = displayName,
                 subtitle = "신규 담당자",
                 trailing = {
                     Box(
@@ -137,7 +143,13 @@ fun DatabaseSearchCard(visible: Boolean) {
  * 회사 헤더 → 회사 개요 → 담당자 목록 → 신규 항목 펼침.
  */
 @Composable
-fun PageCreationCard(visible: Boolean) {
+fun PageCreationCard(
+    visible: Boolean,
+    name: String? = null,
+    company: String? = null,
+) {
+    val displayName = name?.ifBlank { null } ?: "김담당"
+    val displayCompany = company?.ifBlank { null } ?: "ABC 주식회사"
     var showHeader by remember { mutableStateOf(false) }
     var show1 by remember { mutableStateOf(false) }
     var show2 by remember { mutableStateOf(false) }
@@ -169,7 +181,7 @@ fun PageCreationCard(visible: Boolean) {
                     BuildingGlyph(tint = BrandCyan, size = 12.dp)
                 }
                 Spacer(Modifier.width(8.dp))
-                Text("ABC 주식회사", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(displayCompany, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
 
@@ -186,7 +198,7 @@ fun PageCreationCard(visible: Boolean) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Person, null, tint = Placeholder, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("김담당", color = TextSecondary, fontSize = 13.sp)
+                    Text(displayName, color = TextSecondary, fontSize = 13.sp)
                     Spacer(Modifier.width(6.dp))
                     SmallSpinner()
                 }
@@ -200,7 +212,32 @@ fun PageCreationCard(visible: Boolean) {
  * 아바타 + 이름 + 2×2 정보 그리드.
  */
 @Composable
-fun ContactUpdateCard(visible: Boolean) {
+fun ContactUpdateCard(
+    visible: Boolean,
+    name: String? = null,
+    company: String? = null,
+    position: String? = null,
+    phone: String? = null,
+    email: String? = null,
+) {
+    val displayName = name?.ifBlank { null } ?: "김담당"
+    val displayCompany = company?.ifBlank { null } ?: "ABC 주식회사"
+    val displayPosition = position?.ifBlank { null } ?: "마케팅 팀장"
+    // 전화/이메일이 있으면 우선 표시, 없으면 기존 placeholder 유지
+    val cell2Label: String
+    val cell2Value: String
+    if (!phone.isNullOrBlank()) {
+        cell2Label = "전화번호"; cell2Value = phone
+    } else {
+        cell2Label = "최근 미팅"; cell2Value = "2024.01.15"
+    }
+    val cell4Label: String
+    val cell4Value: String
+    if (!email.isNullOrBlank()) {
+        cell4Label = "이메일"; cell4Value = email
+    } else {
+        cell4Label = "미팅 메모"; cell4Value = "Q1 도입 검토 중"
+    }
     var showHeader by remember { mutableStateOf(false) }
     val showCells = remember { mutableStateOf(listOf(false, false, false, false)) }
 
@@ -233,8 +270,8 @@ fun ContactUpdateCard(visible: Boolean) {
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("김담당", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Text("ABC 주식회사", color = TextMuted, fontSize = 12.sp)
+                    Text(displayName, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(displayCompany, color = TextMuted, fontSize = 12.sp)
                 }
             }
         }
@@ -243,12 +280,12 @@ fun ContactUpdateCard(visible: Boolean) {
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GridCell(showCells.value[0], "직책", "마케팅 팀장", Modifier.weight(1f))
-                GridCell(showCells.value[1], "최근 미팅", "2024.01.15", Modifier.weight(1f))
+                GridCell(showCells.value[0], "직책", displayPosition, Modifier.weight(1f))
+                GridCell(showCells.value[1], cell2Label, cell2Value, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 GridCell(showCells.value[2], "관심사", "AI 솔루션", Modifier.weight(1f), accent = true)
-                GridCell(showCells.value[3], "미팅 메모", "Q1 도입 검토 중", Modifier.weight(1f))
+                GridCell(showCells.value[3], cell4Label, cell4Value, Modifier.weight(1f))
             }
         }
     }

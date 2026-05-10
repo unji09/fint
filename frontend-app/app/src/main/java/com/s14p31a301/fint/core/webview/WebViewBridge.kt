@@ -1,5 +1,6 @@
 package com.s14p31a301.fint.core.webview
 
+import android.util.Log
 import android.webkit.JavascriptInterface
 
 /**
@@ -15,6 +16,12 @@ class WebViewBridge(
     @JavascriptInterface
     fun saveAuthToken(accessToken: String, refreshToken: String) {
         onSaveAuthToken(accessToken, refreshToken)
+    }
+
+    /** 디버그 로그 (웹 → 네이티브 Logcat 으로 흘려보내기) */
+    @JavascriptInterface
+    fun debugLog(msg: String) {
+        Log.d("WebJS", msg)
     }
 
     @JavascriptInterface

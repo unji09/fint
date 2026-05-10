@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug 빌드 전용 매니페스트 오버레이.
+
+  DevTokenReceiver: adb 로 JWT 를 주입/조회/삭제하는 BroadcastReceiver.
+  release 빌드에는 포함되지 않는다 (debug 소스셋).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name=".debug.DevTokenReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.s14p31a301.fint.DEV_SET_TOKEN" />
+                <action android:name="com.s14p31a301.fint.DEV_GET_TOKEN" />
+                <action android:name="com.s14p31a301.fint.DEV_CLEAR_TOKEN" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
+

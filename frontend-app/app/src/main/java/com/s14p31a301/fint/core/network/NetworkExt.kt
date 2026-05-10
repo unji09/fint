@@ -5,9 +5,7 @@ import com.s14p31a301.fint.core.network.dto.ApiResponse
 import retrofit2.HttpException
 import java.io.IOException
 
-/**
- * Throwable / Retrofit 응답 → AppError 변환.
- */
+// Throwable / Retrofit response -> AppError mapper.
 fun Throwable.toAppError(): AppError = when (this) {
     is AppError -> this
     is HttpException -> when (code()) {
@@ -18,13 +16,19 @@ fun Throwable.toAppError(): AppError = when (this) {
     else -> AppError.Unknown(msg = message)
 }
 
-/**
- * 서버 공통 응답 언래핑. success=false 거나 data=null 이면 [AppError] 발생.
- */
+// Unwraps the common API envelope.
+//
+// Backend specs under mydocs/file_api show response examples like
+// { "data": { ... } } without an explicit "success" field, so we are lenient:
+//   1) if errorCode is present -> always failure
+//   2) if data is non-null     -> success (regardless of "success" field)
+//   3) otherwise (data null)   -> failure
 fun <T> ApiResponse<T>.unwrap(): T {
-    if (!success) {
-        throw AppError.Network(msg = message ?: "API failed (${errorCode ?: "UNKNOWN"})")
+    if (errorCode != null) {
+        throw AppError.Network(msg = message ?: "API failed ($errorCode)")
     }
-    return data ?: throw AppError.Network(msg = "Empty response body")
+    return data ?: throw AppError.Network(
+        msg = message ?: "Empty response body (success=$success)"
+    )
 }
 
