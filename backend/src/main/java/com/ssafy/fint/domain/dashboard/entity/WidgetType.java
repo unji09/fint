@@ -5,8 +5,8 @@ package com.ssafy.fint.domain.dashboard.entity;
  * DashboardWidget, DashboardTemplate 양쪽에서 공유한다.
  */
 public enum WidgetType {
-    BAR,
-    LINE,
+    BAR_CHART,
+    LINE_CHART,
     PIE,
     KPI,
     TABLE,
