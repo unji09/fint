@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import type { Step } from '@/types/dashboard';
+import type { Step, WidgetResult } from '@/types/dashboard';
 import { BarChartSvg, LineChartSvg } from './ChartWidgets';
 
 interface Props {
@@ -11,10 +11,13 @@ interface Props {
   isDone: boolean;
   widgetTitle: string;
   widgetType: string;
+  result?: WidgetResult | null;
   onTitleChange: (v: string) => void;
   onCollapse: () => void;
   onDragStart: (e: React.MouseEvent) => void;
 }
+
+const FALLBACK_INSIGHT = '최근 활동 데이터와 DART 공시를 결합하여 분석한 결과입니다.';
 
 export default function FintChatPanel({
   steps,
@@ -23,10 +26,17 @@ export default function FintChatPanel({
   isDone,
   widgetTitle,
   widgetType,
+  result,
   onTitleChange,
   onCollapse,
   onDragStart,
 }: Props) {
+  const data = (result?.data as Record<string, unknown> | undefined) ?? {};
+  const labels = Array.isArray(data.labels) ? (data.labels as string[]) : undefined;
+  const values = Array.isArray(data.values) ? (data.values as number[]) : undefined;
+  const insightText = result?.insightText && result.insightText.trim().length > 0
+    ? result.insightText
+    : FALLBACK_INSIGHT;
   const [editTitle, setEditTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(widgetTitle);
   useEffect(() => {
@@ -202,7 +212,7 @@ export default function FintChatPanel({
                 lineHeight: 1.6,
               }}
             >
-              최근 활동 데이터와 DART 공시를 결합하여 분석한 결과입니다.
+              {insightText}
             </p>
             <div
               onMouseDown={onDragStart}
@@ -282,9 +292,9 @@ export default function FintChatPanel({
               </div>
               <div style={{ padding: '6px 12px 8px' }}>
                 {widgetType === 'LINE_CHART' ? (
-                  <LineChartSvg size="mini" />
+                  <LineChartSvg size="mini" values={values} />
                 ) : (
-                  <BarChartSvg size="mini" />
+                  <BarChartSvg size="mini" values={values} labels={labels} />
                 )}
               </div>
             </div>

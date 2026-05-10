@@ -1,5 +1,14 @@
-export function BarChartSvg({ size = 'full' }: { size?: 'full' | 'mini' }) {
-  const bars = [40, 48, 38, 50, 45, 62, 65, 70, 68, 74, 78, 80, 82, 90, 92, 95, 86, 84];
+type BarChartProps = {
+  size?: 'full' | 'mini';
+  values?: number[];
+  labels?: string[];
+};
+
+const BAR_FALLBACK_VALUES = [40, 48, 38, 50, 45, 62, 65, 70, 68, 74, 78, 80, 82, 90, 92, 95, 86, 84];
+const BAR_FALLBACK_LABELS = ['W1', 'W4', 'W8', 'W12', 'W15'];
+
+export function BarChartSvg({ size = 'full', values, labels }: BarChartProps) {
+  const bars = values && values.length > 0 ? values : BAR_FALLBACK_VALUES;
   const max = Math.max(...bars);
   const h = size === 'mini' ? 90 : 150;
   const bw = size === 'mini' ? 10 : 18;
@@ -9,12 +18,17 @@ export function BarChartSvg({ size = 'full' }: { size?: 'full' | 'mini' }) {
     pad = size === 'mini' ? 14 : 22;
   const totalW = bars.length * (bw + gap) - gap;
   const sx = (W - totalW) / 2;
+  // labels 가 제공되면 그대로, 아니면 fallback 의 sparse 축 사용
+  const axisLabels = labels && labels.length > 0 ? labels : BAR_FALLBACK_LABELS;
+  const axisIndices = labels && labels.length > 0
+    ? labels.map((_, i) => Math.round((i * (bars.length - 1)) / Math.max(1, labels.length - 1)))
+    : [0, 3, 7, 11, 14];
   return (
     <svg viewBox={`0 0 ${W} ${H + pad}`} style={{ width: '100%', height: h }}>
       {bars.map((v, i) => {
         const bh = (v / max) * H;
         const x = sx + i * (bw + gap);
-        const isFuture = i >= 15;
+        const isFuture = !values && i >= 15;
         return (
           <rect
             key={i}
@@ -32,10 +46,10 @@ export function BarChartSvg({ size = 'full' }: { size?: 'full' | 'mini' }) {
         );
       })}
       {size === 'full' &&
-        ['W1', 'W4', 'W8', 'W12', 'W15'].map((l, i) => (
+        axisLabels.map((l, i) => (
           <text
-            key={l}
-            x={sx + [0, 3, 7, 11, 14][i] * (bw + gap) + bw / 2}
+            key={`${l}-${i}`}
+            x={sx + axisIndices[i] * (bw + gap) + bw / 2}
             y={H + pad / 2 + 14}
             textAnchor="middle"
             fontSize="9"
@@ -49,8 +63,15 @@ export function BarChartSvg({ size = 'full' }: { size?: 'full' | 'mini' }) {
   );
 }
 
-export function LineChartSvg({ size = 'full' }: { size?: 'full' | 'mini' }) {
-  const pts = [20, 28, 35, 32, 45, 48, 52, 58, 55, 65, 70, 68, 75, 80, 76, 85, 90, 95];
+type LineChartProps = {
+  size?: 'full' | 'mini';
+  values?: number[];
+};
+
+const LINE_FALLBACK_VALUES = [20, 28, 35, 32, 45, 48, 52, 58, 55, 65, 70, 68, 75, 80, 76, 85, 90, 95];
+
+export function LineChartSvg({ size = 'full', values }: LineChartProps) {
+  const pts = values && values.length > 0 ? values : LINE_FALLBACK_VALUES;
   const max = Math.max(...pts);
   const W = 300,
     H = size === 'mini' ? 80 : 140,
@@ -78,7 +99,7 @@ export function LineChartSvg({ size = 'full' }: { size?: 'full' | 'mini' }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx={xs[7]} cy={ys[7]} r="4" fill="white" stroke="#06b6d4" strokeWidth="2.5" />
+      <circle cx={xs[Math.min(7, xs.length - 1)]} cy={ys[Math.min(7, ys.length - 1)]} r="4" fill="white" stroke="#06b6d4" strokeWidth="2.5" />
     </svg>
   );
 }
