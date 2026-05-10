@@ -203,7 +203,7 @@ class DashboardWidgetServiceUpdateTest {
                                       Map<String, Object> config, Map<String, Object> position) {
         DashboardWidget widget = DashboardWidget.builder()
                 .dashboard(dashboard)
-                .widgetType(WidgetType.BAR)
+                .widgetType(WidgetType.BAR_CHART)
                 .title(title)
                 .config(config)
                 .position(position)
