@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.dashboard.controller;
 
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.domain.dashboard.service.DashboardService;
 import com.ssafy.fint.domain.dashboard.service.DashboardWidgetService;
@@ -33,6 +34,17 @@ public class DashboardController implements DashboardSwagger {
             @Valid @RequestBody DashboardCreateRequest request
     ) {
         return ApiResponse.created(dashboardService.create(me, request));
+    }
+
+    @Override
+    @PatchMapping("/{dashboardId}")
+    public ResponseEntity<Void> update(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId,
+            @Valid @RequestBody DashboardUpdateRequest request
+    ) {
+        dashboardService.update(me, dashboardId, request);
+        return ResponseEntity.noContent().build();
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.dashboard.controller;
 
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
 import com.ssafy.fint.global.security.CustomUserDetails;
@@ -19,6 +20,16 @@ public interface DashboardSwagger {
                     + "templateId 와 inputText 는 동시 입력하지 않는 운영 시나리오를 가정한다."
     )
     ApiResponse<DashboardCreateResponse> create(CustomUserDetails me, DashboardCreateRequest request);
+
+    @Operation(
+            summary = "대시보드 수정",
+            description = "대시보드 제목을 수정한다. title 이 null 이면 400."
+    )
+    ResponseEntity<Void> update(
+            CustomUserDetails me,
+            Long dashboardId,
+            DashboardUpdateRequest request
+    );
 
     @Operation(
             summary = "위젯 수정 (드래그/리사이즈/필터/제목 통합)",
