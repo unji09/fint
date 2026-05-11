@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.db import close_db, init_db
 from app.core.errors import register_exception_handlers
 from app.core.redis import close_redis, init_redis
-from app.routers import dashboard, health, ocr, stt
+from app.routers import dashboard, health, ocr, strategy, stt
 
 
 @asynccontextmanager
@@ -47,5 +47,6 @@ def create_app() -> FastAPI:
     app.include_router(stt.router)
     app.include_router(dashboard.router)
     app.include_router(ocr.router)
+    app.include_router(strategy.router)
 
     return app
