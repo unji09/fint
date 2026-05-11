@@ -1,20 +1,23 @@
-export type TemperatureLevel = 'HOT' | 'WARM' | 'COOL' | 'COLD' | 'STORM';
+// 백엔드 Mood enum: RAINBOW | SUNNY | CLOUDY | RAINY | THUNDER
+export type MoodLevel = 'RAINBOW' | 'SUNNY' | 'CLOUDY' | 'RAINY' | 'THUNDER';
+export type TemperatureLevel = MoodLevel;
 
 export interface Account {
   accountId: number;
   name: string;
   industry: string;
-  temperature: TemperatureLevel;
+  temperature: MoodLevel;
   pipelineStage: string;
   updatedAt?: string;
 }
 
-/** GET /accounts 응답 아이템 */
+/** GET /accounts 또는 /accounts/searchable 응답 아이템 */
 export interface ApiAccountItem {
   accountId: number;
   name: string;
   industry: string;
-  temperature: number | null; // 0~100
+  latestMood?: MoodLevel | null;
+  temperature?: number | null;
 }
 
 /** GET /accounts/{id}/contacts 응답 아이템 */
@@ -43,6 +46,7 @@ export interface ApiDeal {
   stage: string | null;
   probability: number | null;
   amount: number | null;
+  expectedClose: string | null;
 }
 
 /** CustomerSidebar에서 사용하는 담당자 UI 타입 */

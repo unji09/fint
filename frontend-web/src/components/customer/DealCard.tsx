@@ -26,7 +26,7 @@ export default function DealCard({ deal, selected, onClick }: DealCardProps) {
         padding: '12px 14px 12px 16px',
         flexShrink: 0,
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.15s',
+        transition: 'border-color 0.15s',
       }}
     >
       <div

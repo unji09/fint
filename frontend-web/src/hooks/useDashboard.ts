@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Dashboard, DashboardTemplate, CreateDashboardRequest } from '@/types/dashboard';
@@ -33,11 +35,17 @@ export function useDashboardList() {
       setError('대시보드 목록을 불러오지 못했습니다.');
       // 개발 중 mock 데이터
       setDashboards([
-        { dashboardId: 1, title: '기본', updatedAt: new Date(Date.now() - 86400000).toISOString() },
+        {
+          dashboardId: 1,
+          title: '기본',
+          thumbnailUrl: null,
+          lastAccessedAt: new Date(Date.now() - 86400000).toISOString(),
+        },
         {
           dashboardId: 2,
           title: '제목없음',
-          updatedAt: new Date(Date.now() - 3600000).toISOString(),
+          thumbnailUrl: null,
+          lastAccessedAt: new Date(Date.now() - 3600000).toISOString(),
         },
       ]);
     } finally {
@@ -93,6 +101,98 @@ export function useDashboardTemplates() {
 
   return { templates, loading };
 }
+
+// ─── 위젯 업데이트 ──────────────────────────────────────────────────────────
+
+export function useUpdateWidget() {
+  const [loading, setLoading] = useState(false);
+
+  const update = useCallback(
+    async (dashboardId: number, widgetId: number, req: Record<string, unknown>) => {
+      setLoading(true);
+      try {
+        await fetchWithAuth(`/dashboards/${dashboardId}/widgets/${widgetId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(req),
+        });
+        return true;
+      } catch {
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  return { update, loading };
+}
+
+// ─── 대시보드 쿼리 (SSE 스트림) ──────────────────────────────────────────────
+
+export interface QueryStartResult {
+  traceId: string;
+  queryId: number;
+}
+
+export function useDashboardQuery() {
+  const [loading, setLoading] = useState(false);
+  const [traceId, setTraceId] = useState<string | null>(null);
+
+  const startQuery = useCallback(async (dashboardId: number, inputText: string) => {
+    setLoading(true);
+    try {
+      const data = await fetchWithAuth<QueryStartResult>(
+        `/dashboards/${dashboardId}/queries`,
+        { method: 'POST', body: JSON.stringify({ inputText }) },
+      );
+      setTraceId(data.traceId);
+      return data;
+    } catch (err) {
+      console.error('[useDashboardQuery] 쿼리 시작 실패', err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const streamResults = useCallback(
+    (tid: string, onMessage: (data: unknown) => void, onDone: () => void) => {
+      const token =
+        typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const url = `${API_BASE}/dashboards/queries/${tid}/stream`;
+      const eventSource = new EventSource(
+        `${url}${token ? `?token=${encodeURIComponent(token)}` : ''}`,
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          onMessage(parsed);
+        } catch {
+          onMessage(event.data);
+        }
+      };
+
+      eventSource.addEventListener('done', () => {
+        eventSource.close();
+        onDone();
+      });
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        onDone();
+      };
+
+      return () => eventSource.close();
+    },
+    [],
+  );
+
+  return { startQuery, streamResults, traceId, loading };
+}
+
+// ─── 대시보드 생성 ───────────────────────────────────────────────────────────
 
 export function useCreateDashboard() {
   const router = useRouter();

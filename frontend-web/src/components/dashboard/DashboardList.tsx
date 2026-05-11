@@ -110,7 +110,7 @@ function DashboardCard({ dashboard }: { dashboard: Dashboard }) {
           whiteSpace: 'nowrap',
         }}
       >
-        {formatRelativeTime(dashboard.updatedAt)}
+        {formatRelativeTime(dashboard.lastAccessedAt ?? undefined)}
       </span>
     </button>
   );

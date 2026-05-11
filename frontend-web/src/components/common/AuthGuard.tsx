@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { refreshAccessToken } from '@/hooks/useAuth';
 
 const PUBLIC_PATHS = ['/login'];
 
@@ -18,10 +19,23 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     const token = localStorage.getItem('accessToken');
-    if (!token) {
-      router.replace('/login');
-    } else {
+    if (token) {
       setChecked(true);
+      return;
+    }
+
+    // accessToken 없으면 refreshToken으로 갱신 시도
+    const rt = localStorage.getItem('refreshToken');
+    if (rt) {
+      refreshAccessToken().then((ok) => {
+        if (ok) {
+          setChecked(true);
+        } else {
+          router.replace('/login');
+        }
+      });
+    } else {
+      router.replace('/login');
     }
   }, [pathname, router]);
 

@@ -1,140 +1,175 @@
 'use client';
-// src/components/common/GNB.tsx
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { SearchIcon, UserIcon } from '@/components/common/Icon';
+import { UserIcon } from '@/components/common/Icon';
 import LoginModal from '@/components/common/LoginModal';
+import { fetchWithAuth } from '@/hooks/useAuth';
 
-const FONT = "'Pretendard', -apple-system, sans-serif";
-
+const F = "'Pretendard', -apple-system, sans-serif";
 const NAV = [
   { label: '캘린더', href: '/calendar' },
   { label: '대시보드', href: '/dashboard' },
   { label: '고객 정보', href: '/customer' },
 ] as const;
 
+interface SearchResult { type: 'account' | 'contact' | 'deal'; id: number; label: string; sub: string; href: string }
+interface Notification { notificationId: number; message: string; type: string; createdAt: string }
+
 export default function GNB() {
   const pathname = usePathname();
   const router = useRouter();
   const [showLogin, setShowLogin] = useState(false);
 
+  // 검색
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // 알림
+  const [notiOpen, setNotiOpen] = useState(false);
+  const [notis, setNotis] = useState<Notification[]>([]);
+  const [notiCount, setNotiCount] = useState(0);
+  const notiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      const items: SearchResult[] = [];
+      try {
+        const res = await fetchWithAuth(`/accounts/searchable?keyword=${encodeURIComponent(query)}&size=5`);
+        if (res.ok) {
+          const j = await res.json();
+          (j.data ?? []).forEach((a: any) => items.push({ type: 'account', id: a.accountId, label: a.name, sub: a.industry ?? '', href: `/customer/${a.accountId}` }));
+        }
+      } catch { /* */ }
+      setResults(items);
+      setSearchOpen(items.length > 0);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // 외부 클릭
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
+      if (notiRef.current && !notiRef.current.contains(e.target as Node)) setNotiOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  // 알림 로드
+  const loadNotis = async () => {
+    try {
+      const res = await fetchWithAuth('/notifications');
+      if (res.ok) {
+        const j = await res.json();
+        const list = j.data?.notifications ?? j.data ?? [];
+        setNotis(Array.isArray(list) ? list : []);
+        setNotiCount(j.data?.unreadCount ?? list.length ?? 0);
+      }
+    } catch { /* */ }
+  };
+
+  const handleNotiClick = () => {
+    if (!notiOpen) loadNotis();
+    setNotiOpen(v => !v);
+  };
+
   return (
     <>
-      <header
-        style={{
-          height: 80,
-          flexShrink: 0,
-          backgroundColor: '#FFFFFF',
-          borderBottom: '1px solid #E2E8F0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 32px',
-          zIndex: 50,
-          position: 'sticky',
-          top: 0,
-          fontFamily: FONT,
-          WebkitFontSmoothing: 'antialiased',
-        }}
-      >
-        {/* 로고 */}
-        <img
-          src="/logo.jpg"
-          alt="F!NT"
-          style={{ height: 64, objectFit: 'contain', flexShrink: 0, cursor: 'pointer' }}
-          onClick={() => router.push('/calendar')}
-        />
+      <header style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
+        {/* 로고 — 캘린더 사이드바 너비(300px)에 맞춤 */}
+        <div onClick={() => router.push('/calendar')} style={{ width: 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%' }}>
+          <img src="/logo.jpg" alt="F!NT" style={{ height: 52, objectFit: 'contain', marginTop: -2 }} />
+        </div>
 
-        {/* 내비게이션 */}
-        <nav style={{ display: 'flex', alignItems: 'center' }}>
+        {/* 네비게이션 — 로고 오른쪽, 캘린더 그리드와 정렬 */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: 4, height: '100%' }}>
           {NAV.map(({ label, href }) => {
             const active = pathname === href || pathname.startsWith(href + '/');
             return (
-              <div
-                key={href}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 140,
-                  height: 70,
-                }}
-              >
-                <button
-                  onClick={() => router.push(href)}
-                  style={{
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    cursor: 'pointer',
-                    fontSize: 18,
-                    fontWeight: active ? 700 : 400,
-                    fontFamily: FONT,
-                    color: active ? '#1A1A1A' : '#64748B',
-                    borderBottom: active ? '2px solid #1A1A1A' : '2px solid transparent',
-                    padding: '0 0 4px',
-                    transition: 'color 0.15s, border-color 0.15s',
-                  }}
-                >
-                  {label}
-                </button>
-              </div>
+              <button key={href} onClick={() => router.push(href)}
+                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400, fontFamily: F, color: active ? '#0f172a' : '#64748b', padding: '0 16px', height: '100%', borderBottom: active ? '2px solid #0f172a' : '2px solid transparent', display: 'flex', alignItems: 'center' }}>
+                {label}
+              </button>
             );
           })}
         </nav>
 
-        {/* 검색 + 아바타 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              border: '1px solid #E5E6DE',
-              borderRadius: 8,
-              padding: '7px 14px',
-              backgroundColor: '#F8FAFC',
-            }}
-          >
-            <SearchIcon size={14} />
-            <input
-              placeholder="Search..."
-              style={{
-                border: 'none',
-                outline: 'none',
-                backgroundColor: 'transparent',
-                fontSize: 13,
-                color: '#1F2126',
-                width: 160,
-                fontFamily: FONT,
-              }}
-            />
+        <div style={{ flex: 1 }} />
+
+        {/* 우측: 검색 + 알림 + 프로필 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* 검색 */}
+          <div ref={searchRef} style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', borderRadius: 6, padding: '5px 10px', backgroundColor: '#f8fafc', width: 220 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                <circle cx="6" cy="6" r="4" stroke="#94a3b8" strokeWidth="1.2" />
+                <path d="M9.5 9.5L12 12" stroke="#94a3b8" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              <input placeholder="검색..." value={query}
+                onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
+                onFocus={() => results.length > 0 && setSearchOpen(true)}
+                style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: 13, color: '#1f2126', width: '100%', fontFamily: F }} />
+            </div>
+            {searchOpen && results.length > 0 && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, width: 280, zIndex: 200, backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', marginTop: 4, maxHeight: 240, overflowY: 'auto' }}>
+                {results.map((r) => (
+                  <button key={`${r.type}-${r.id}`} onClick={() => { router.push(r.href); setQuery(''); setSearchOpen(false); }}
+                    style={{ width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#1f2126', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 6, fontFamily: F }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8', backgroundColor: '#f1f5f9', padding: '1px 4px', borderRadius: 2, flexShrink: 0 }}>
+                      {{ account: '고객사', contact: '담당자', deal: '딜' }[r.type]}
+                    </span>
+                    <span style={{ flex: 1 }}>{r.label}</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{r.sub}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* 사람 아이콘 → 클릭 시 로그인 모달 */}
-          <div
-            onClick={() => setShowLogin((prev) => !prev)}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: '50%',
-              backgroundColor: '#E2EAF0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-              cursor: 'pointer',
-              outline: showLogin ? '2px solid #06b6d4' : 'none',
-              transition: 'outline 0.15s',
-            }}
-          >
-            <UserIcon size={18} />
+          {/* 알림 */}
+          <div ref={notiRef} style={{ position: 'relative' }}>
+            <button onClick={handleNotiClick}
+              style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2a5 5 0 00-5 5v3l-1.3 2.6a.5.5 0 00.45.7h11.7a.5.5 0 00.45-.7L15 10V7a5 5 0 00-5-5z" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M8 15a2 2 0 004 0" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              {notiCount > 0 && (
+                <span style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {notiCount > 9 ? '9+' : notiCount}
+                </span>
+              )}
+            </button>
+            {notiOpen && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, width: 320, zIndex: 200, backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', marginTop: 6, maxHeight: 360, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', fontFamily: F, fontSize: 13, fontWeight: 600, color: '#1e293b' }}>알림</div>
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  {notis.length > 0 ? notis.map((n) => (
+                    <div key={n.notificationId} style={{ padding: '10px 14px', borderBottom: '1px solid #f8fafc', fontSize: 13, color: '#475569', fontFamily: F }}>
+                      <div>{n.message}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{new Date(n.createdAt).toLocaleString('ko-KR')}</div>
+                    </div>
+                  )) : (
+                    <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 13, color: '#94a3b8', fontFamily: F }}>알림이 없습니다.</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 프로필 */}
+          <div onClick={() => setShowLogin((prev) => !prev)}
+            style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: '#e2eaf0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <UserIcon size={16} />
           </div>
         </div>
       </header>
 
-      {/* 로그인 모달 */}
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </>
   );

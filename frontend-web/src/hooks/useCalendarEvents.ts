@@ -1,12 +1,8 @@
+'use client';
+
 import { useCallback, useEffect, useState } from 'react';
 import type { CalendarEvent, EventCategory, EventSource } from '@/components/calendar/types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-function authHeader(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : {};
-}
+import { fetchWithAuth } from '@/hooks/useAuth';
 
 function getMonthRange(date: Date) {
   const start = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -81,9 +77,7 @@ export function useCalendarEvents({
     });
 
     try {
-      const res = await fetch(`${API_BASE}/calendar/events?${params}`, {
-        headers: authHeader(),
-      });
+      const res = await fetchWithAuth(`/calendar/events?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setEvents((json.data?.content ?? []).map((r: any) => toCalendarEvent(r)));
@@ -105,9 +99,7 @@ export function useCalendarEvents({
 /** 일정 상세 단건 조회 */
 export async function fetchEventDetail(eventId: string): Promise<CalendarEvent | null> {
   try {
-    const res = await fetch(`${API_BASE}/calendar/events/${encodeURIComponent(eventId)}`, {
-      headers: authHeader(),
-    });
+    const res = await fetchWithAuth(`/calendar/events/${encodeURIComponent(eventId)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     return toCalendarEvent(json.data);
@@ -120,10 +112,7 @@ export async function fetchEventDetail(eventId: string): Promise<CalendarEvent |
 /** 구글 캘린더 동기화 — 동기화 버튼에 직접 연결해서 사용 */
 export async function syncCalendar(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/calendar/sync`, {
-      method: 'POST',
-      headers: authHeader(),
-    });
+    const res = await fetchWithAuth(`/calendar/sync`, { method: 'POST' });
     return res.ok;
   } catch {
     return false;
