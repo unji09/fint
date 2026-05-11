@@ -56,6 +56,12 @@ public interface DashboardSwagger {
     );
 
     @Operation(
+            summary = "대시보드 삭제",
+            description = "대시보드와 소속 위젯 · 쿼리를 모두 삭제한다."
+    )
+    ResponseEntity<Void> delete(CustomUserDetails me, Long dashboardId);
+
+    @Operation(
             summary = "위젯 수정 (드래그/리사이즈/필터/제목 통합)",
             description = "title/config/position 중 제공된 필드만 부분 업데이트. 셋 다 null 이면 400. "
                     + "자연어 쿼리로 새로 생성된 위젯의 위치/크기를 사용자가 처음 배치할 때도 본 API 를 활용한다."
