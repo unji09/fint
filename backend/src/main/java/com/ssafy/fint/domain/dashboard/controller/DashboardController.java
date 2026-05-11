@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -76,6 +77,16 @@ public class DashboardController implements DashboardSwagger {
             @Valid @RequestBody DashboardUpdateRequest request
     ) {
         dashboardService.update(me, dashboardId, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    @DeleteMapping("/{dashboardId}")
+    public ResponseEntity<Void> delete(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId
+    ) {
+        dashboardService.delete(me, dashboardId);
         return ResponseEntity.noContent().build();
     }
 

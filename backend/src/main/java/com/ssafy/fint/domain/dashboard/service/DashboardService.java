@@ -10,6 +10,7 @@ import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartResponse;
 import com.ssafy.fint.domain.dashboard.entity.Dashboard;
 import com.ssafy.fint.domain.dashboard.entity.DashboardWidget;
+import com.ssafy.fint.domain.dashboard.repository.DashboardQueryRepository;
 import com.ssafy.fint.domain.dashboard.repository.DashboardRepository;
 import com.ssafy.fint.domain.dashboard.repository.DashboardTemplateRepository;
 import com.ssafy.fint.domain.dashboard.repository.DashboardWidgetRepository;
@@ -52,6 +53,7 @@ public class DashboardService {
     private final DashboardRepository dashboardRepository;
     private final DashboardTemplateRepository dashboardTemplateRepository;
     private final DashboardWidgetRepository dashboardWidgetRepository;
+    private final DashboardQueryRepository dashboardQueryRepository;
     private final DashboardQueryService dashboardQueryService;
 
     @Transactional(readOnly = true)
@@ -146,6 +148,20 @@ public class DashboardService {
         if (request.thumbnailUrl() != null) {
             dashboard.changeThumbnailUrl(request.thumbnailUrl());
         }
+    }
+
+    @Transactional
+    public void delete(CustomUserDetails me, Long dashboardId) {
+        Dashboard dashboard = dashboardRepository.findById(dashboardId)
+                .orElseThrow(() -> new BusinessException(DashboardErrorCode.DASHBOARD_NOT_FOUND));
+
+        if (!dashboard.getOwner().getUserId().equals(me.getUserId())) {
+            throw new BusinessException(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
+        }
+
+        dashboardWidgetRepository.deleteByDashboard(dashboard);
+        dashboardQueryRepository.deleteByDashboard(dashboard);
+        dashboardRepository.delete(dashboard);
     }
 
     private String resolveTitle(String input) {
