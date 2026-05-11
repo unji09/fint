@@ -39,7 +39,7 @@ export default function DashboardPage() {
       <div
         style={{
           position: 'fixed',
-          top: 90,
+          top: 64,
           left: 0,
           right: 0,
           bottom: 0,

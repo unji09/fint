@@ -24,8 +24,9 @@ export interface DashboardWidget {
 export interface Dashboard {
   dashboardId: number;
   title: string;
+  thumbnailUrl: string | null;
+  lastAccessedAt: string | null;
   widgets?: DashboardWidget[];
-  updatedAt?: string;
 }
 
 export interface DashboardTemplate {
