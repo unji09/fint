@@ -87,7 +87,7 @@ export default function CustomerSidebar({
     >
       <div
         style={{
-          height: 63,
+          height: 64,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
