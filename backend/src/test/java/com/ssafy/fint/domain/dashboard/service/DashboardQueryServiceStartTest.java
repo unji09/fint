@@ -1,14 +1,19 @@
 package com.ssafy.fint.domain.dashboard.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartResponse;
 import com.ssafy.fint.domain.dashboard.entity.Dashboard;
+import com.ssafy.fint.domain.dashboard.entity.DashboardWidget;
+import com.ssafy.fint.domain.dashboard.entity.WidgetType;
 import com.ssafy.fint.domain.dashboard.repository.DashboardRepository;
+import com.ssafy.fint.domain.dashboard.repository.DashboardWidgetRepository;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.entity.UserRole;
 import com.ssafy.fint.global.exception.BusinessException;
+import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,13 +28,16 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -52,6 +60,7 @@ class DashboardQueryServiceStartTest {
     private static final String INPUT_TEXT = "업종별 예상 매출 보여줘";
 
     @Mock private DashboardRepository dashboardRepository;
+    @Mock private DashboardWidgetRepository dashboardWidgetRepository;
     @Mock private RedisTemplate<String, String> redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private DashboardQueryDispatcher queryDispatcher;
@@ -69,6 +78,7 @@ class DashboardQueryServiceStartTest {
     void setUp() {
         dashboardQueryService = new DashboardQueryService(
                 dashboardRepository,
+                dashboardWidgetRepository,
                 redisTemplate,
                 queryDispatcher,
                 objectMapper
@@ -76,10 +86,12 @@ class DashboardQueryServiceStartTest {
     }
 
     @Test
-    @DisplayName("정상 호출 시 traceId 발급 + Redis PENDING 등록(TTL 600s) + FastAPI dispatch 가 모두 발생한다.")
-    void startReturnsTraceIdAndRegistersPendingStateAndDispatches() throws Exception {
+    @DisplayName("위젯이 없는 대시보드는 action=CREATE 로 dispatch 되고 existing_widgets 는 비어 있다.")
+    void startDispatchesCreateWhenDashboardHasNoWidgets() throws Exception {
         Dashboard dashboard = newDashboard(OWNER_USER_ID);
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
+        when(dashboardWidgetRepository.findAllByDashboard_DashboardId(DASHBOARD_ID))
+                .thenReturn(List.of());
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
         QueryStartResponse res = dashboardQueryService.start(
@@ -111,13 +123,50 @@ class DashboardQueryServiceStartTest {
         verify(queryDispatcher).dispatch(commandCaptor.capture());
         DashboardQueryDispatchCommand cmd = commandCaptor.getValue();
         assertThat(cmd.traceId()).isEqualTo(res.traceId());
-        assertThat(cmd.action()).isEqualTo("ADD");
+        assertThat(cmd.action()).isEqualTo(QueryAction.CREATE);
         assertThat(cmd.inputText()).isEqualTo(INPUT_TEXT);
         assertThat(cmd.dashboardId()).isEqualTo(DASHBOARD_ID);
         assertThat(cmd.userId()).isEqualTo(OWNER_USER_ID);
         assertThat(cmd.tenantId()).isEqualTo(TENANT_ID);
         assertThat(cmd.existingWidgets()).isEmpty();
         assertThat(cmd.currentWidget()).isNull();
+    }
+
+    @Test
+    @DisplayName("위젯이 있는 대시보드는 action=ADD 로 dispatch 되고 existing_widgets 에 widget_type/title/source_query/config 가 채워진다.")
+    void startDispatchesAddWithFullWidgetPayloadWhenDashboardHasWidgets() {
+        Dashboard dashboard = newDashboard(OWNER_USER_ID);
+        DashboardWidget widget = DashboardWidget.builder()
+                .dashboard(dashboard)
+                .widgetType(WidgetType.BAR_CHART)
+                .title("업종별 매출")
+                .config(Map.of("colors", List.of("#fff"), "x_label", "업종"))
+                .sourceQuery("SELECT industry, SUM(amount) FROM deals GROUP BY industry")
+                .build();
+        when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
+        when(dashboardWidgetRepository.findAllByDashboard_DashboardId(DASHBOARD_ID))
+                .thenReturn(List.of(widget));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        dashboardQueryService.start(owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT));
+
+        ArgumentCaptor<DashboardQueryDispatchCommand> commandCaptor =
+                ArgumentCaptor.forClass(DashboardQueryDispatchCommand.class);
+        verify(queryDispatcher).dispatch(commandCaptor.capture());
+        DashboardQueryDispatchCommand cmd = commandCaptor.getValue();
+        assertThat(cmd.action()).isEqualTo(QueryAction.ADD);
+        assertThat(cmd.existingWidgets()).hasSize(1);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sentWidget = (Map<String, Object>) cmd.existingWidgets().get(0);
+        assertThat(sentWidget)
+                .containsEntry("widget_type", "BAR_CHART")
+                .containsEntry("title", "업종별 매출")
+                .containsEntry("source_query", "SELECT industry, SUM(amount) FROM deals GROUP BY industry");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sentConfig = (Map<String, Object>) sentWidget.get("config");
+        assertThat(sentConfig)
+                .containsEntry("x_label", "업종")
+                .containsEntry("colors", List.of("#fff"));
     }
 
     @Test
@@ -132,6 +181,27 @@ class DashboardQueryServiceStartTest {
                 .isEqualTo(DashboardErrorCode.DASHBOARD_NOT_FOUND);
 
         verify(redisTemplate, never()).opsForValue();
+        verifyNoInteractions(queryDispatcher);
+    }
+
+    @Test
+    @DisplayName("Redis 직렬화 실패 시 INTERNAL_SERVER_ERROR 로 변환되고 dispatcher 는 호출되지 않는다.")
+    void redisSerializationFails() throws Exception {
+        Dashboard dashboard = newDashboard(OWNER_USER_ID);
+        when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
+
+        ObjectMapper failingMapper = mock(ObjectMapper.class);
+        when(failingMapper.writeValueAsString(any()))
+                .thenThrow(new JsonProcessingException("boom") {});
+        DashboardQueryService failingService = new DashboardQueryService(
+                dashboardRepository, dashboardWidgetRepository, redisTemplate, queryDispatcher, failingMapper);
+
+        assertThatThrownBy(() -> failingService.start(
+                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.INTERNAL_SERVER_ERROR);
+
         verifyNoInteractions(queryDispatcher);
     }
 
