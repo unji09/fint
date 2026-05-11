@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.dashboard.service;
 
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartResponse;
@@ -47,6 +48,17 @@ public class DashboardService {
     private final DashboardTemplateRepository dashboardTemplateRepository;
     private final DashboardWidgetRepository dashboardWidgetRepository;
     private final DashboardQueryService dashboardQueryService;
+
+    @Transactional(readOnly = true)
+    public List<DashboardListResponse> findAll(CustomUserDetails me) {
+        User owner = userRepository.findById(me.getUserId())
+                .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_CREDENTIALS));
+
+        return dashboardRepository.findTop20ByOwnerOrderByLastAccessedAtDesc(owner)
+                .stream()
+                .map(DashboardListResponse::from)
+                .toList();
+    }
 
     @Transactional
     public DashboardCreateResponse create(CustomUserDetails me, DashboardCreateRequest request) {
