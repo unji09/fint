@@ -2,6 +2,8 @@ package com.ssafy.fint.domain.dashboard.controller;
 
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
@@ -10,8 +12,22 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
+
 @Tag(name = "Dashboard", description = "대시보드 CRUD API")
 public interface DashboardSwagger {
+
+    @Operation(
+            summary = "대시보드 목록 조회",
+            description = "로그인 사용자 본인의 대시보드 목록을 최근 접속순으로 최대 20개 반환한다."
+    )
+    ApiResponse<List<DashboardListResponse>> findAll(CustomUserDetails me);
+
+    @Operation(
+            summary = "대시보드 상세 조회",
+            description = "대시보드와 소속 위젯 목록(쿼리 결과 포함)을 반환한다. 조회 성공 시 lastAccessedAt 이 갱신된다."
+    )
+    ApiResponse<DashboardDetailResponse> findDetail(CustomUserDetails me, Long dashboardId);
 
     @Operation(
             summary = "대시보드 생성 (빈/템플릿/자연어 통합 진입)",
