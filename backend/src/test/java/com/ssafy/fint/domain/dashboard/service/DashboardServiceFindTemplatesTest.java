@@ -4,10 +4,10 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.entity.DashboardTemplate;
 import com.ssafy.fint.domain.dashboard.entity.WidgetType;
 import com.ssafy.fint.domain.dashboard.repository.DashboardTemplateRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -25,14 +25,7 @@ class DashboardServiceFindTemplatesTest {
 
     @Mock private DashboardTemplateRepository dashboardTemplateRepository;
 
-    private DashboardService dashboardService;
-
-    @BeforeEach
-    void setUp() {
-        dashboardService = new DashboardService(
-                null, null, dashboardTemplateRepository, null, null, null
-        );
-    }
+    @InjectMocks private DashboardService dashboardService;
 
     @Test
     @DisplayName("groupIds 없이 호출하면 전체 3그룹을 반환한다.")

@@ -13,10 +13,10 @@ import com.ssafy.fint.domain.user.entity.UserRole;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,19 +41,12 @@ class DashboardServiceFindDetailTest {
     @Mock private DashboardRepository dashboardRepository;
     @Mock private DashboardWidgetRepository dashboardWidgetRepository;
 
-    private DashboardService dashboardService;
+    @InjectMocks private DashboardService dashboardService;
 
     private final CustomUserDetails owner =
             new CustomUserDetails(OWNER_USER_ID, TENANT_ID, "MEMBER");
     private final CustomUserDetails stranger =
             new CustomUserDetails(STRANGER_USER_ID, TENANT_ID, "MEMBER");
-
-    @BeforeEach
-    void setUp() {
-        dashboardService = new DashboardService(
-                null, dashboardRepository, null, dashboardWidgetRepository, null, null
-        );
-    }
 
     @Test
     @DisplayName("대시보드 상세 조회 시 위젯 목록과 쿼리 정보가 함께 반환된다.")

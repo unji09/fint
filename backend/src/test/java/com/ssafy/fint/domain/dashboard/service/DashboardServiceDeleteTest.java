@@ -10,11 +10,11 @@ import com.ssafy.fint.domain.user.entity.UserRole;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -39,19 +39,12 @@ class DashboardServiceDeleteTest {
     @Mock private DashboardWidgetRepository dashboardWidgetRepository;
     @Mock private DashboardQueryRepository dashboardQueryRepository;
 
-    private DashboardService dashboardService;
+    @InjectMocks private DashboardService dashboardService;
 
     private final CustomUserDetails owner =
             new CustomUserDetails(OWNER_USER_ID, TENANT_ID, "MEMBER");
     private final CustomUserDetails stranger =
             new CustomUserDetails(STRANGER_USER_ID, TENANT_ID, "MEMBER");
-
-    @BeforeEach
-    void setUp() {
-        dashboardService = new DashboardService(
-                null, dashboardRepository, null, dashboardWidgetRepository, dashboardQueryRepository, null
-        );
-    }
 
     @Test
     @DisplayName("소유자가 삭제하면 위젯 → 쿼리 → 대시보드 순서로 삭제된다.")

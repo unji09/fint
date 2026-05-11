@@ -18,11 +18,11 @@ import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -62,21 +62,9 @@ class DashboardServiceCreateTest {
     @Mock private DashboardWidgetRepository dashboardWidgetRepository;
     @Mock private DashboardQueryService dashboardQueryService;
 
-    private DashboardService dashboardService;
+    @InjectMocks private DashboardService dashboardService;
 
     private final CustomUserDetails me = new CustomUserDetails(USER_ID, TENANT_ID, "MEMBER");
-
-    @BeforeEach
-    void setUp() {
-        dashboardService = new DashboardService(
-                userRepository,
-                dashboardRepository,
-                dashboardTemplateRepository,
-                dashboardWidgetRepository,
-                null,
-                dashboardQueryService
-        );
-    }
 
     @Test
     @DisplayName("빈 입력 시 dashboards INSERT 만 발생하고 traceId 는 null 이다.")

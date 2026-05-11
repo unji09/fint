@@ -9,10 +9,10 @@ import com.ssafy.fint.domain.user.entity.UserRole;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -34,17 +34,10 @@ class DashboardServiceFindAllTest {
     @Mock private UserRepository userRepository;
     @Mock private DashboardRepository dashboardRepository;
 
-    private DashboardService dashboardService;
+    @InjectMocks private DashboardService dashboardService;
 
     private final CustomUserDetails me =
             new CustomUserDetails(USER_ID, TENANT_ID, "MEMBER");
-
-    @BeforeEach
-    void setUp() {
-        dashboardService = new DashboardService(
-                userRepository, dashboardRepository, null, null, null, null
-        );
-    }
 
     @Test
     @DisplayName("본인 대시보드 목록을 lastAccessedAt DESC 순으로 반환한다.")

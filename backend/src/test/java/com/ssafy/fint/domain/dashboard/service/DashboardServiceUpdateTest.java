@@ -10,10 +10,10 @@ import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -37,19 +37,12 @@ class DashboardServiceUpdateTest {
 
     @Mock private DashboardRepository dashboardRepository;
 
-    private DashboardService dashboardService;
+    @InjectMocks private DashboardService dashboardService;
 
     private final CustomUserDetails owner =
             new CustomUserDetails(OWNER_USER_ID, TENANT_ID, "MEMBER");
     private final CustomUserDetails stranger =
             new CustomUserDetails(STRANGER_USER_ID, TENANT_ID, "MEMBER");
-
-    @BeforeEach
-    void setUp() {
-        dashboardService = new DashboardService(
-                null, dashboardRepository, null, null, null, null
-        );
-    }
 
     @Test
     @DisplayName("title 전달 시 대시보드 제목이 변경된다.")
