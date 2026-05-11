@@ -78,7 +78,7 @@ RUN uv sync --frozen --no-install-project --group dev
 COPY . .
 RUN uv sync --frozen --group dev
 DOCKERFILE
-                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} python -m pytest --tb=short -q
+                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} uv run pytest --tb=short -q
                             '''
                         }
                     }
