@@ -24,12 +24,14 @@ class FilterOperator(StrEnum):
     IN = "IN"
     LIKE = "LIKE"
     BETWEEN = "BETWEEN"
+    IS_NULL = "IS NULL"
+    IS_NOT_NULL = "IS NOT NULL"
 
 
 class FilterCondition(BaseModel):
     column: str
     operator: FilterOperator
-    value: str | int | float | list[str | int | float]
+    value: str | int | float | list[str | int | float] | None = None
 
 
 class OrderDirection(StrEnum):

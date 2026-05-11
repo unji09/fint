@@ -19,7 +19,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logging.basicConfig(level=settings.LOG_LEVEL, force=True)
     init_db(settings.database_url)
     init_redis(settings.redis_url)
-    await warmup_ocr_client().warmup()
+    try:
+        await warmup_ocr_client().warmup()
+    except Exception:
+        logging.getLogger(__name__).warning("OCR warmup failed — OCR endpoint disabled")
 
     from pathlib import Path
 
