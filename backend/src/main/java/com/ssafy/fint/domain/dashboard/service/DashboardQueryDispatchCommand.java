@@ -9,7 +9,7 @@ import java.util.List;
  */
 public record DashboardQueryDispatchCommand(
         String traceId,
-        String action,
+        QueryAction action,
         String inputText,
         Long dashboardId,
         Long tenantId,
