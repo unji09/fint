@@ -40,7 +40,6 @@ class TestUpdateStatus:
         raw = await fake_redis.get("dashboard:query:trace-1")
         data = json.loads(raw)
         assert data["status"] == "INTENT_PARSING"
-        assert data["result"] is None
 
     async def test_status_has_ttl(self, store, fake_redis):
         await store.update_status("trace-1", QueryStatus.DATA_QUERYING)
@@ -59,6 +58,23 @@ class TestUpdateStatus:
         raw = await fake_redis.get("dashboard:query:trace-1")
         data = json.loads(raw)
         assert data["status"] == "STYLING"
+
+    async def test_preserves_existing_fields(self, store, fake_redis):
+        """Spring이 먼저 저장한 dashboardId 등이 update_status로 덮어쓰이지 않아야 한다."""
+        initial = {"status": "PENDING", "dashboardId": 42, "inputText": "매출 보여줘"}
+        await fake_redis.set(
+            "dashboard:query:trace-1",
+            json.dumps(initial),
+            ex=RESULT_TTL,
+        )
+
+        await store.update_status("trace-1", QueryStatus.INTENT_PARSING)
+
+        raw = await fake_redis.get("dashboard:query:trace-1")
+        data = json.loads(raw)
+        assert data["status"] == "INTENT_PARSING"
+        assert data["dashboardId"] == 42
+        assert data["inputText"] == "매출 보여줘"
 
 
 class TestSetCompleted:

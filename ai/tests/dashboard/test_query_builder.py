@@ -125,6 +125,101 @@ class TestFilters:
 
         assert "BETWEEN" in sql
 
+    def test_is_null_filter(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title", "amount"],
+            filters=[
+                FilterCondition(column="won_at", operator=FilterOperator.IS_NULL),
+            ],
+        )
+        sql, params = build_query(spec, tenant_id=1)
+
+        assert "IS NULL" in sql
+        assert "won_at" in sql
+
+    def test_is_not_null_filter(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title", "amount"],
+            filters=[
+                FilterCondition(column="won_at", operator=FilterOperator.IS_NOT_NULL),
+            ],
+        )
+        sql, params = build_query(spec, tenant_id=1)
+
+        assert "IS NOT NULL" in sql
+        assert "won_at" in sql
+
+    def test_is_null_does_not_add_parameter(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[
+                FilterCondition(column="won_at", operator=FilterOperator.IS_NULL),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        param_values = list(params.values())
+        assert None not in param_values
+
+
+class TestWildcardExpansion:
+    def test_star_expands_to_all_columns(self):
+        spec = QuerySpec(table="accounts", columns=["*"])
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "name" in sql
+        assert "industry" in sql
+        assert "account_id" in sql
+
+    def test_star_expansion_produces_valid_sql(self):
+        spec = QuerySpec(table="accounts", columns=["*"])
+        sql, params = build_query(spec, tenant_id=1)
+
+        assert "SELECT" in sql
+        assert "*" not in sql.split("FROM")[0]
+
+
+class TestDateTrunc:
+    def test_date_trunc_in_columns(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', won_at)", "SUM(amount)"],
+            group_by=["DATE_TRUNC('month', won_at)"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "DATE_TRUNC('month', deals.won_at)" in sql
+
+    def test_date_trunc_in_group_by(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', won_at)", "COUNT(*)"],
+            group_by=["DATE_TRUNC('month', won_at)"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "GROUP BY DATE_TRUNC('month', deals.won_at)" in sql
+
+    def test_date_trunc_invalid_column_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', fake_col)"],
+        )
+        with pytest.raises(QueryBuildError, match="허용되지 않은 컬럼"):
+            build_query(spec, tenant_id=1)
+
+    def test_date_trunc_has_alias(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', won_at)"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "AS \"DATE_TRUNC('month', won_at)\"" in sql
+
 
 class TestOrderAndGroupBy:
     def test_order_by(self):
@@ -431,3 +526,27 @@ class TestTenantIsolation:
         sql, params = build_query(spec, tenant_id=1)
 
         assert "is_deleted" not in sql
+
+    def test_accounts_tenant_via_account_user_assignment(self):
+        spec = QuerySpec(table="accounts", columns=["name"])
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "JOIN account_user_assignment" in sql
+        assert "JOIN users" in sql
+        assert "users.tenant_id" in sql
+
+    def test_deals_tenant_via_teams(self):
+        spec = QuerySpec(table="deals", columns=["title"])
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "JOIN teams" in sql
+        assert "teams.tenant_id" in sql
+
+    def test_contacts_tenant_via_accounts_chain(self):
+        spec = QuerySpec(table="contacts", columns=["name"])
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "JOIN accounts" in sql
+        assert "JOIN account_user_assignment" in sql
+        assert "JOIN users" in sql
+        assert "users.tenant_id" in sql
