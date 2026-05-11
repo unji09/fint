@@ -4,6 +4,7 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartResponse;
@@ -26,6 +27,8 @@ import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 대시보드 생성 서비스. 빈 / 템플릿 그룹 카피 / 자연어 쿼리 트리거 3분기 통합 진입.
@@ -50,6 +53,25 @@ public class DashboardService {
     private final DashboardTemplateRepository dashboardTemplateRepository;
     private final DashboardWidgetRepository dashboardWidgetRepository;
     private final DashboardQueryService dashboardQueryService;
+
+    @Transactional(readOnly = true)
+    public List<DashboardTemplateGroupResponse> findTemplates(List<Long> groupIds) {
+        Map<Long, List<DashboardTemplateGroupResponse.TemplateWidget>> grouped =
+                dashboardTemplateRepository.findAll().stream()
+                        .collect(Collectors.groupingBy(
+                                t -> (t.getDashboardTemplateId() - 1) / TEMPLATE_GROUP_SIZE + 1,
+                                Collectors.mapping(
+                                        DashboardTemplateGroupResponse.TemplateWidget::from,
+                                        Collectors.toList()
+                                )
+                        ));
+
+        return grouped.entrySet().stream()
+                .filter(e -> groupIds == null || groupIds.contains(e.getKey()))
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> new DashboardTemplateGroupResponse(e.getKey(), e.getValue()))
+                .toList();
+    }
 
     @Transactional
     public DashboardDetailResponse findDetail(CustomUserDetails me, Long dashboardId) {
