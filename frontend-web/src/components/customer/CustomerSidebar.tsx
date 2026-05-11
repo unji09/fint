@@ -87,11 +87,11 @@ export default function CustomerSidebar({
     >
       <div
         style={{
-          height: 62,
+          height: 64,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderBottom: '2px solid rgba(6,182,212,0.8)',
+          borderBottom: '1px solid rgba(6,182,212,0.8)',
           padding: '0 20px',
           gap: 32,
           flexShrink: 0,
@@ -157,6 +157,8 @@ export default function CustomerSidebar({
                 <div key={acc.accountId} style={{ marginBottom: 7 }}>
                   <button
                     onClick={() => handleAccountClick(acc.accountId)}
+                    onMouseOver={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
+                    onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                     style={{
                       width: '100%',
                       background: isSelected ? '#f2fcff' : 'transparent',
@@ -168,6 +170,7 @@ export default function CustomerSidebar({
                       alignItems: 'center',
                       cursor: 'pointer',
                       textAlign: 'left',
+                      transition: 'background-color 0.12s',
                     }}
                   >
                     <MoodIcon mood={acc.temperature} />
