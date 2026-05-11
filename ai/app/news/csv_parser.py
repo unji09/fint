@@ -26,10 +26,10 @@ def parse_csv(path: Path, *, byte_offset: int = 0) -> Iterator[NewsRecord]:
         if byte_offset == 0:
             f.readline()
         else:
+            f.buffer.seek(byte_offset - 1)
+            at_line_start = f.buffer.read(1) == b"\n"
             f.buffer.seek(byte_offset)
-            remainder = f.buffer.read(4096)
-            f.buffer.seek(byte_offset)
-            if remainder:
+            if not at_line_start:
                 f.readline()
 
         reader = csv.reader(f, delimiter="|", quotechar='"')
