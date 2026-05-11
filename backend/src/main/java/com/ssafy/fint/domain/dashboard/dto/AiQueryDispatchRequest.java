@@ -22,7 +22,7 @@ public record AiQueryDispatchRequest(
     public static AiQueryDispatchRequest from(DashboardQueryDispatchCommand command) {
         return new AiQueryDispatchRequest(
                 command.traceId(),
-                command.action(),
+                command.action().name(),
                 command.inputText(),
                 command.dashboardId(),
                 command.tenantId(),

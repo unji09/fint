@@ -31,9 +31,6 @@ public class DashboardQueryService {
     private static final String REDIS_KEY_PREFIX = "dashboard:query:";
     private static final Duration PENDING_STATE_TTL = Duration.ofSeconds(600);
     private static final String STATUS_PENDING = "PENDING";
-    private static final String ACTION_CREATE = "CREATE";
-    private static final String ACTION_ADD = "ADD";
-
     private final DashboardRepository dashboardRepository;
     private final DashboardWidgetRepository dashboardWidgetRepository;
     private final RedisTemplate<String, String> redisTemplate;
@@ -89,7 +86,7 @@ public class DashboardQueryService {
         List<Object> existingWidgets = hasWidgets
                 ? widgets.stream().<Object>map(this::toAiPayload).toList()
                 : List.of();
-        String action = hasWidgets ? ACTION_ADD : ACTION_CREATE;
+        QueryAction action = hasWidgets ? QueryAction.ADD : QueryAction.CREATE;
 
         return new DashboardQueryDispatchCommand(
                 traceId,
