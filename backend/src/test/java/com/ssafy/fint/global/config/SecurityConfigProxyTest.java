@@ -16,6 +16,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -84,5 +85,13 @@ class SecurityConfigProxyTest {
                         .header("X-Forwarded-Proto", "https")
                         .header("X-Forwarded-For", "172.18.0.1"))
                 .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @DisplayName("SSE 스트림 엔드포인트는 토큰 없이 접근 가능 (403 아님)")
+    void sseStreamWithoutToken() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboards/queries/test-trace-id/stream")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().is(not(403)));
     }
 }
