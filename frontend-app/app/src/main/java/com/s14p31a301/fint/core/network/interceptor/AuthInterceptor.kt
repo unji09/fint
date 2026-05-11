@@ -1,5 +1,6 @@
 package com.s14p31a301.fint.core.network.interceptor
 
+import android.util.Log
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -17,13 +18,19 @@ class AuthInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
         if (original.header(HEADER_AUTHORIZATION) != null) {
+            Log.d(TAG, "skip: Authorization already set on ${original.method} ${original.url}")
             return chain.proceed(original)
         }
 
         val token = tokenProvider()
         val request = if (token.isNullOrBlank()) {
+            Log.w(TAG, "NO TOKEN → ${original.method} ${original.url}  (로그인 안 된 상태로 보냄)")
             original
         } else {
+            Log.d(
+                TAG,
+                "attach Bearer (len=${token.length}, head=${token.take(12)}…) → ${original.method} ${original.url}"
+            )
             original.newBuilder()
                 .header(HEADER_AUTHORIZATION, "Bearer $token")
                 .build()
@@ -33,5 +40,6 @@ class AuthInterceptor(
 
     companion object {
         const val HEADER_AUTHORIZATION = "Authorization"
+        private const val TAG = "AuthInterceptor"
     }
 }

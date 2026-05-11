@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,9 +35,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.s14p31a301.fint.feature.common.ui.BusinessCardPreview
 import com.s14p31a301.fint.feature.common.ui.EditableFormRow
 import com.s14p31a301.fint.feature.common.ui.FintTopHeader
@@ -50,6 +55,7 @@ import com.s14p31a301.fint.ui.theme.TextPrimary
 import com.s14p31a301.fint.ui.theme.TextSecondary
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import java.io.File
 
 /**
  * 명함 OCR 결과 확인/수정 → 담당자 등록 화면.
@@ -79,6 +85,11 @@ fun BusinessCardResultScreen(
                 onCancel = onCancel,
             )
             BusinessCardUiState.Phase.Saving -> RegisterProgressContent(
+                name = state.form.name,
+                company = state.form.company,
+                position = state.form.position,
+                phone = state.form.phone,
+                email = state.form.email,
                 onComplete = viewModel::onSavingProgressFinished,
             )
             BusinessCardUiState.Phase.Done -> RegistrationCompletionContent(
@@ -123,7 +134,10 @@ private fun ConfirmContent(
                         .padding(horizontal = 16.dp)
                         .padding(top = 20.dp, bottom = 120.dp),
                 ) {
-                    // Card preview
+                    // Captured business card image preview
+                    //  - 로컬 캡처본(`state.imagePath`) 을 즉시 표시
+                    //  - 업로드/OCR 완료된 시점에도 동일한 파일이라 별도 presigned download 불필요
+                    //  - imagePath 가 없거나 유실된 경우 그라디언트 placeholder 로 fallback
                     Surface(
                         color = SurfaceCard,
                         shape = RoundedCornerShape(16.dp),
@@ -131,10 +145,11 @@ private fun ConfirmContent(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Box(Modifier.padding(12.dp)) {
-                            BusinessCardPreview(
-                                name = state.form.name.ifBlank { null },
-                                company = state.form.company.ifBlank { null },
-                                position = state.form.position.ifBlank { null },
+                            CapturedCardImage(
+                                imagePath = state.imagePath,
+                                fallbackName = state.form.name.ifBlank { null },
+                                fallbackCompany = state.form.company.ifBlank { null },
+                                fallbackPosition = state.form.position.ifBlank { null },
                             )
                         }
                     }
@@ -214,5 +229,42 @@ private fun ConfirmContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * 사용자가 방금 촬영해 S3 로 업로드한 명함 이미지 미리보기.
+ *
+ * - 로컬 파일이 곧 업로드된 원본이므로 그대로 표시 (presigned download 불필요).
+ * - 파일이 유실되었거나 imagePath 가 없는 경우 그라디언트 placeholder 로 fallback.
+ */
+@Composable
+private fun CapturedCardImage(
+    imagePath: String?,
+    fallbackName: String?,
+    fallbackCompany: String?,
+    fallbackPosition: String?,
+) {
+    val file = imagePath?.let { File(it) }?.takeIf { it.exists() }
+    if (file != null) {
+        val context = LocalContext.current
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(file)
+                .crossfade(true)
+                .build(),
+            contentDescription = "촬영한 명함 이미지",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(280f / 175f)
+                .clip(RoundedCornerShape(12.dp)),
+        )
+    } else {
+        BusinessCardPreview(
+            name = fallbackName,
+            company = fallbackCompany,
+            position = fallbackPosition,
+        )
     }
 }

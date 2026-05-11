@@ -1,11 +1,15 @@
 package com.s14p31a301.fint.core.network.s3
 
+import android.util.Log
+import com.s14p31a301.fint.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.logging.HttpLoggingInterceptor
 import okio.BufferedSink
 import okio.buffer
 import okio.source
@@ -38,23 +42,75 @@ class S3Uploader(
         presignedUrl: String,
         file: File,
         contentType: String,
+        /**
+         * S3 SSE 헤더. presigned URL 이 KMS 로 서명되었다면 PUT 요청에도 동일하게
+         * 보내야 한다. 기본값 `aws:kms` (S3 Presigned URL 업로드 규칙 참조).
+         */
+        sseHeader: String? = SSE_KMS,
+        /**
+         * SSE-KMS Key Id (또는 alias). 서버가 presigned URL 발급 시
+         * `ssekmsKeyId` 로 서명했다면 PUT 요청 헤더 `x-amz-server-side-encryption-aws-kms-key-id`
+         * 값이 동일해야 한다. 다르거나 누락되면 `SignatureDoesNotMatch`.
+         * 기본값: alias/crm-fint-s3-key (S3 Presigned URL 업로드 규칙.md §1).
+         */
+        sseKmsKeyId: String? = DEFAULT_KMS_KEY_ID,
+        /** 확장용 추가 헤더. */
+        extraHeaders: Map<String, String> = emptyMap(),
         progressListener: ProgressListener? = null,
     ): kotlin.Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val mediaType = contentType.toMediaTypeOrNull()
             val body = ProgressRequestBody(file, mediaType, progressListener)
 
-            val request = Request.Builder()
+            // 명세(S3 Presigned URL 업로드 규칙.md) 검증용 로그.
+            //  - 버킷: crm-private-bucket-fint
+            //  - Content-Type 일치, SSE-KMS 헤더 + KMS key id 동봉
+            val httpUrl = presignedUrl.toHttpUrlOrNull()
+            val host = httpUrl?.host ?: "<invalid-url>"
+            val pathHead = httpUrl?.encodedPath?.take(120) ?: ""
+            val bucketOk = host.startsWith("$EXPECTED_BUCKET.") ||
+                pathHead.startsWith("/$EXPECTED_BUCKET/")
+            Log.d(
+                TAG,
+                "PUT host=$host path=$pathHead bucketOk=$bucketOk " +
+                    "contentType=$contentType sse=$sseHeader kmsKeyId=$sseKmsKeyId size=${file.length()}"
+            )
+            if (!bucketOk) {
+                Log.w(
+                    TAG,
+                    "Presigned URL bucket mismatch! expected=$EXPECTED_BUCKET host=$host path=$pathHead"
+                )
+            }
+
+            val builder = Request.Builder()
                 .url(presignedUrl)
                 .put(body)
                 .header("Content-Type", contentType)
-                .build()
+            if (sseHeader != null) {
+                builder.header("x-amz-server-side-encryption", sseHeader)
+            }
+            // SSE-KMS Key Id: presigned URL 서명에 ssekmsKeyId 가 포함됐다면 동일 값을 헤더로
+            // 보내야 SignatureDoesNotMatch 를 피할 수 있다.
+            if (!sseKmsKeyId.isNullOrBlank()) {
+                builder.header("x-amz-server-side-encryption-aws-kms-key-id", sseKmsKeyId)
+            }
+            extraHeaders.forEach { (k, v) -> builder.header(k, v) }
+            val request = builder.build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    error("S3 upload failed: ${response.code} ${response.message}")
+                    // S3 는 실패 시 XML(AccessDenied / SignatureDoesNotMatch 등) 본문을 돌려준다.
+                    // 디버깅 위해 반드시 함께 로그.
+                    val errBody = runCatching { response.body?.string() }.getOrNull()
+                    Log.e(
+                        TAG,
+                        "S3 upload failed: code=${response.code} msg=${response.message} body=$errBody"
+                    )
+                    error("S3 upload failed: ${response.code} ${response.message} body=$errBody")
                 }
+                Log.d(TAG, "S3 upload OK: code=${response.code}")
             }
+            Unit
         }
     }
 
@@ -87,10 +143,29 @@ class S3Uploader(
     }
 
     companion object {
+        const val SSE_KMS = "aws:kms"
+        /**
+         * 명세 (S3 Presigned URL 업로드 규칙.md §1) 의 기본 KMS Key alias.
+         * 서버가 presigned URL 을 ssekmsKeyId 포함 서명으로 발급하므로
+         * 클라이언트도 동일 값을 헤더로 송신해야 한다.
+         */
+        const val DEFAULT_KMS_KEY_ID = "alias/crm-fint-s3-key"
+        /** 명세 (S3 Presigned URL 업로드 규칙.md) 상의 명함/녹음 공용 버킷명. */
+        const val EXPECTED_BUCKET = "crm-private-bucket-fint"
+        private const val TAG = "S3Uploader"
+
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
+            .apply {
+                if (BuildConfig.DEBUG) {
+                    addInterceptor(
+                        HttpLoggingInterceptor { msg -> Log.d(TAG, msg) }
+                            .setLevel(HttpLoggingInterceptor.Level.HEADERS)
+                    )
+                }
+            }
             .build()
     }
 }
