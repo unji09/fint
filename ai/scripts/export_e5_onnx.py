@@ -5,6 +5,7 @@
 
 사전 조건:
     uv sync --group batch  (torch, transformers, sentence-transformers 설치)
+    ONNX 변환 시 transformers 4.44를 사용해야 TorchScript 호환.
 """
 
 from __future__ import annotations
@@ -32,41 +33,50 @@ def main() -> None:
     model = AutoModel.from_pretrained(MODEL_NAME)
     model.eval()
 
-    dummy_input = tokenizer("query: 테스트", return_tensors="pt", padding=True, truncation=True, max_length=512)
+    dummy = tokenizer(
+        "query: test", return_tensors="pt", padding=True, truncation=True, max_length=512
+    )
 
     onnx_path = output_dir / "model.onnx"
     print(f"Exporting to ONNX: {onnx_path}")
 
-    torch.onnx.export(
-        model,
-        (dummy_input["input_ids"], dummy_input["attention_mask"]),
-        str(onnx_path),
-        input_names=["input_ids", "attention_mask"],
-        output_names=["last_hidden_state"],
-        dynamic_axes={
-            "input_ids": {0: "batch", 1: "seq"},
-            "attention_mask": {0: "batch", 1: "seq"},
-            "last_hidden_state": {0: "batch", 1: "seq"},
-        },
-        opset_version=14,
-    )
+    with torch.no_grad():
+        torch.onnx.export(
+            model,
+            (dummy["input_ids"], dummy["attention_mask"]),
+            str(onnx_path),
+            input_names=["input_ids", "attention_mask"],
+            output_names=["last_hidden_state"],
+            dynamic_axes={
+                "input_ids": {0: "batch", 1: "seq"},
+                "attention_mask": {0: "batch", 1: "seq"},
+                "last_hidden_state": {0: "batch", 1: "seq"},
+            },
+            opset_version=14,
+            dynamo=False,
+        )
 
     tokenizer.save_pretrained(str(output_dir))
 
     if not (output_dir / "tokenizer.json").exists():
-        raise FileNotFoundError("tokenizer.json not created — model may not support fast tokenizer")
+        raise FileNotFoundError("tokenizer.json not created")
 
-    for f in output_dir.iterdir():
-        if f.name not in ("model.onnx", "tokenizer.json"):
+    keep = {"model.onnx", "tokenizer.json"}
+    for f in list(output_dir.iterdir()):
+        if f.name not in keep:
             if f.is_file():
                 f.unlink()
             elif f.is_dir():
                 shutil.rmtree(f)
 
-    print(f"Done. Files in {output_dir}:")
+    onnx_size = (output_dir / "model.onnx").stat().st_size / (1024 * 1024)
+    print(f"\nDone. Files in {output_dir}:")
     for f in sorted(output_dir.iterdir()):
         size_mb = f.stat().st_size / (1024 * 1024)
         print(f"  {f.name}: {size_mb:.1f} MB")
+
+    if onnx_size < 50:
+        print(f"\nWARNING: model.onnx is only {onnx_size:.1f} MB (expected ~120 MB)")
 
 
 if __name__ == "__main__":

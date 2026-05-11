@@ -9,33 +9,103 @@ pipeline {
     }
 
     stages {
-        // ===== CI: MR 열릴 때 테스트 =====
-        stage('Test') {
-            when {
-                expression { env.gitlabMergeRequestId != null }
-            }
+        stage('Detect Changes') {
             steps {
-                dir('backend') {
-                    sh './gradlew test --no-daemon'
-                }
-            }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: 'backend/build/test-results/test/*.xml'
-                }
-                success {
-                    updateGitlabCommitStatus name: 'jenkins-ci', state: 'success'
-                }
-                failure {
-                    updateGitlabCommitStatus name: 'jenkins-ci', state: 'failed'
+                script {
+                    def diffCmd = (env.gitlabMergeRequestId != null)
+                        ? 'git diff --name-only origin/dev...HEAD'
+                        : 'git diff --name-only HEAD~1'
+                    def changes = sh(script: diffCmd, returnStdout: true).trim()
+
+                    env.BACKEND_CHANGED  = changes.contains('backend/') ? 'true' : 'false'
+                    env.FRONTEND_CHANGED = changes.contains('frontend-web/') ? 'true' : 'false'
+                    env.AI_CHANGED       = changes.contains('ai/') ? 'true' : 'false'
+
+                    if (changes.contains('Jenkinsfile') || changes.contains('infra/')) {
+                        env.BACKEND_CHANGED  = 'true'
+                        env.FRONTEND_CHANGED = 'true'
+                        env.AI_CHANGED       = 'true'
+                    }
+
+                    env.ANY_CHANGED = (env.BACKEND_CHANGED == 'true' || env.FRONTEND_CHANGED == 'true' || env.AI_CHANGED == 'true') ? 'true' : 'false'
+
+                    echo "Backend: ${env.BACKEND_CHANGED}, Frontend: ${env.FRONTEND_CHANGED}, AI: ${env.AI_CHANGED}"
                 }
             }
         }
 
-        // ===== CD: dev 머지 시 배포 =====
+        // ===== CI: 변경된 영역만 테스트 =====
+        stage('Test') {
+            parallel {
+                stage('Backend Test') {
+                    when { expression { env.BACKEND_CHANGED == 'true' } }
+                    steps {
+                        dir('backend') {
+                            sh './gradlew test --no-daemon'
+                        }
+                    }
+                    post {
+                        always {
+                            junit allowEmptyResults: true, testResults: 'backend/build/test-results/test/*.xml'
+                        }
+                    }
+                }
+                stage('Frontend Build Check') {
+                    when { expression { env.FRONTEND_CHANGED == 'true' } }
+                    steps {
+                        dir('frontend-web') {
+                            sh """
+                                docker build \
+                                  --build-arg NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1 \
+                                  --target builder \
+                                  -t ${FRONTEND_IMAGE_NAME}:ci-${BUILD_NUMBER} \
+                                  .
+                            """
+                        }
+                    }
+                }
+                stage('AI Test') {
+                    when { expression { env.AI_CHANGED == 'true' } }
+                    steps {
+                        dir('ai') {
+                            sh '''
+                                docker build -f - -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} . <<'DOCKERFILE'
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+WORKDIR /app
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-install-project
+COPY . .
+RUN uv sync --frozen
+DOCKERFILE
+                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} python -m pytest --tb=short -q
+                            '''
+                        }
+                    }
+                }
+            }
+            post {
+                success {
+                    script {
+                        if (env.gitlabMergeRequestId != null) {
+                            updateGitlabCommitStatus name: 'jenkins-ci', state: 'success'
+                        }
+                    }
+                }
+                failure {
+                    script {
+                        if (env.gitlabMergeRequestId != null) {
+                            updateGitlabCommitStatus name: 'jenkins-ci', state: 'failed'
+                        }
+                    }
+                }
+            }
+        }
+
+        // ===== CD: 변경된 영역만 빌드 + 배포 =====
         stage('Build JAR') {
             when {
-                expression { env.gitlabMergeRequestId == null }
+                expression { env.gitlabMergeRequestId == null && env.BACKEND_CHANGED == 'true' }
             }
             steps {
                 dir('backend') {
@@ -46,7 +116,7 @@ pipeline {
 
         stage('Build Image') {
             when {
-                expression { env.gitlabMergeRequestId == null }
+                expression { env.gitlabMergeRequestId == null && env.BACKEND_CHANGED == 'true' }
             }
             steps {
                 dir('backend') {
@@ -57,7 +127,7 @@ pipeline {
 
         stage('Build AI Image') {
             when {
-                expression { env.gitlabMergeRequestId == null }
+                expression { env.gitlabMergeRequestId == null && env.AI_CHANGED == 'true' }
             }
             steps {
                 dir('ai') {
@@ -68,7 +138,7 @@ pipeline {
 
         stage('Build Frontend Image') {
             when {
-                expression { env.gitlabMergeRequestId == null }
+                expression { env.gitlabMergeRequestId == null && env.FRONTEND_CHANGED == 'true' }
             }
             steps {
                 sh '''
@@ -99,7 +169,7 @@ pipeline {
 
         stage('Deploy') {
             when {
-                expression { env.gitlabMergeRequestId == null }
+                expression { env.gitlabMergeRequestId == null && env.ANY_CHANGED == 'true' }
             }
             steps {
                 sh '''
@@ -112,7 +182,7 @@ pipeline {
 
         stage('Health Check') {
             when {
-                expression { env.gitlabMergeRequestId == null }
+                expression { env.gitlabMergeRequestId == null && env.ANY_CHANGED == 'true' }
             }
             steps {
                 retry(30) {

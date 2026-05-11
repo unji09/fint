@@ -68,8 +68,8 @@ export default function DashboardDetailPage() {
       .then((j) => setAllDashboards(j.data ?? []))
       .catch(() =>
         setAllDashboards([
-          { dashboardId: 1, title: '기본', updatedAt: '' },
-          { dashboardId: 2, title: '제목없음', updatedAt: '' },
+          { dashboardId: 1, title: '기본', thumbnailUrl: null, lastAccessedAt: null },
+          { dashboardId: 2, title: '제목없음', thumbnailUrl: null, lastAccessedAt: null },
         ]),
       );
   }, [id]);

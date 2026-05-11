@@ -83,7 +83,7 @@ export default function GNB() {
       <header style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
         {/* 로고 — 캘린더 사이드바 너비(300px)에 맞춤 */}
         <div onClick={() => router.push('/calendar')} style={{ width: 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%' }}>
-          <img src="/logo.jpg" alt="F!NT" style={{ height: 52, objectFit: 'contain', marginTop: -2 }} />
+          <img src="/logo.png" alt="F!NT" style={{ maxHeight: 44, maxWidth: 200, objectFit: 'contain' }} />
         </div>
 
         {/* 네비게이션 — 로고 오른쪽, 캘린더 그리드와 정렬 */}
@@ -92,7 +92,10 @@ export default function GNB() {
             const active = pathname === href || pathname.startsWith(href + '/');
             return (
               <button key={href} onClick={() => router.push(href)}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400, fontFamily: F, color: active ? '#0f172a' : '#64748b', padding: '0 16px', height: '100%', borderBottom: active ? '2px solid #0f172a' : '2px solid transparent', display: 'flex', alignItems: 'center' }}>
+                onMouseEnter={() => router.prefetch(href)}
+                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400, fontFamily: F, color: active ? '#0f172a' : '#64748b', padding: '0 16px', height: '100%', borderBottom: active ? '2px solid #0f172a' : '2px solid transparent', display: 'flex', alignItems: 'center', transition: 'color 0.12s, background-color 0.12s' }}
+                onMouseOver={(e) => { if (!active) e.currentTarget.style.color = '#0f172a'; }}
+                onMouseOut={(e) => { if (!active) e.currentTarget.style.color = '#64748b'; }}>
                 {label}
               </button>
             );
@@ -105,7 +108,7 @@ export default function GNB() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* 검색 */}
           <div ref={searchRef} style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', borderRadius: 6, padding: '5px 10px', backgroundColor: '#f8fafc', width: 220 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', borderRadius: 6, padding: '5px 10px', backgroundColor: '#f8fafc', width: 200 }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
                 <circle cx="6" cy="6" r="4" stroke="#94a3b8" strokeWidth="1.2" />
                 <path d="M9.5 9.5L12 12" stroke="#94a3b8" strokeWidth="1.2" strokeLinecap="round" />
@@ -134,7 +137,9 @@ export default function GNB() {
           {/* 알림 */}
           <div ref={notiRef} style={{ position: 'relative' }}>
             <button onClick={handleNotiClick}
-              style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+              style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', transition: 'background-color 0.12s, border-color 0.12s' }}
+              onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+              onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
               <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                 <path d="M10 2a5 5 0 00-5 5v3l-1.3 2.6a.5.5 0 00.45.7h11.7a.5.5 0 00.45-.7L15 10V7a5 5 0 00-5-5z" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M8 15a2 2 0 004 0" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" />
@@ -164,7 +169,9 @@ export default function GNB() {
 
           {/* 프로필 */}
           <div onClick={() => setShowLogin((prev) => !prev)}
-            style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: '#e2eaf0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: '#e2eaf0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'background-color 0.12s' }}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#cbd5e1'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#e2eaf0'; }}>
             <UserIcon size={16} />
           </div>
         </div>
