@@ -55,29 +55,34 @@ class KoBARTSummarizer:
             logger.info("KoBART loaded on CPU (slow)")
         self._model.eval()
 
-    def summarize_batch(self, texts: list[str]) -> list[str]:
+    def summarize_batch(self, texts: list[str], sub_batch_size: int = 8) -> list[str]:
         import torch
 
         device = next(self._model.parameters()).device
         max_input_len = 1024
+        all_summaries: list[str] = []
 
-        inputs = self._tokenizer(
-            texts,
-            max_length=max_input_len,
-            truncation=True,
-            padding=True,
-            return_tensors="pt",
-        ).to(device)
+        for i in range(0, len(texts), sub_batch_size):
+            chunk = texts[i : i + sub_batch_size]
+            inputs = self._tokenizer(
+                chunk,
+                max_length=max_input_len,
+                truncation=True,
+                padding=True,
+                return_tensors="pt",
+            ).to(device)
 
-        with torch.no_grad():
-            outputs = self._model.generate(
-                **inputs,
-                max_new_tokens=150,
-                num_beams=3,
-                early_stopping=True,
-            )
+            with torch.no_grad():
+                outputs = self._model.generate(
+                    **inputs,
+                    max_new_tokens=150,
+                    num_beams=1,
+                    do_sample=False,
+                )
 
-        return self._tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            all_summaries.extend(self._tokenizer.batch_decode(outputs, skip_special_tokens=True))
+
+        return all_summaries
 
 
 def main() -> None:
@@ -99,25 +104,12 @@ def main() -> None:
 
     logger.info("Found %d CSV files: %s", len(csv_files), [f.name for f in csv_files])
 
-    from sentence_transformers import SentenceTransformer
+    from app.clients.embedder import OnnxEmbedderClient
 
-    logger.info("Loading e5-small for batch embedding...")
-    e5_model = SentenceTransformer("intfloat/multilingual-e5-small")
+    logger.info("Loading e5-small ONNX embedder (CPU)...")
+    embedder = OnnxEmbedderClient(args.model_dir)
+    logger.info("Embedder loaded (dim=%d)", embedder.dimension)
 
-    class SentenceTransformerEmbedder:
-        def __init__(self, model: SentenceTransformer) -> None:
-            self._model = model
-
-        @property
-        def dimension(self) -> int:
-            return self._model.get_sentence_embedding_dimension()
-
-        def embed_passages(self, texts: list[str]) -> np.ndarray:
-
-            prefixed = [f"passage: {t}" for t in texts]
-            return self._model.encode(prefixed, normalize_embeddings=True, show_progress_bar=False)
-
-    embedder = SentenceTransformerEmbedder(e5_model)
     summarizer = KoBARTSummarizer()
 
     from app.news.batch_processor import BatchProcessor
