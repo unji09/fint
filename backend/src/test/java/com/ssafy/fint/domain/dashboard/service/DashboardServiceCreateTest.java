@@ -73,6 +73,7 @@ class DashboardServiceCreateTest {
                 dashboardRepository,
                 dashboardTemplateRepository,
                 dashboardWidgetRepository,
+                null,
                 dashboardQueryService
         );
     }

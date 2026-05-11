@@ -30,7 +30,7 @@ class DashboardServiceFindTemplatesTest {
     @BeforeEach
     void setUp() {
         dashboardService = new DashboardService(
-                null, null, dashboardTemplateRepository, null, null
+                null, null, dashboardTemplateRepository, null, null, null
         );
     }
 

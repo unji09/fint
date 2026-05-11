@@ -42,7 +42,7 @@ class DashboardServiceFindAllTest {
     @BeforeEach
     void setUp() {
         dashboardService = new DashboardService(
-                userRepository, dashboardRepository, null, null, null
+                userRepository, dashboardRepository, null, null, null, null
         );
     }
 

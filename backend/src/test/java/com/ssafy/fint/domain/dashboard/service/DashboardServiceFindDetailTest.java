@@ -51,7 +51,7 @@ class DashboardServiceFindDetailTest {
     @BeforeEach
     void setUp() {
         dashboardService = new DashboardService(
-                null, dashboardRepository, null, dashboardWidgetRepository, null
+                null, dashboardRepository, null, dashboardWidgetRepository, null, null
         );
     }
 
