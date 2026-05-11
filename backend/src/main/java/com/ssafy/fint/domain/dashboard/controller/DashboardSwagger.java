@@ -4,6 +4,7 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
@@ -22,6 +23,13 @@ public interface DashboardSwagger {
             description = "로그인 사용자 본인의 대시보드 목록을 최근 접속순으로 최대 20개 반환한다."
     )
     ApiResponse<List<DashboardListResponse>> findAll(CustomUserDetails me);
+
+    @Operation(
+            summary = "대시보드 템플릿 목록 조회",
+            description = "시스템 제공 대시보드 템플릿을 그룹 단위로 반환한다. "
+                    + "groupIds 파라미터로 특정 그룹만 필터링할 수 있으며, 생략 시 전체 반환."
+    )
+    ApiResponse<List<DashboardTemplateGroupResponse>> findTemplates(List<Long> groupIds);
 
     @Operation(
             summary = "대시보드 상세 조회",
