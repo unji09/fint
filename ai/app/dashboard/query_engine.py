@@ -33,6 +33,9 @@ _SYSTEM_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
   rejection_reason에 안내 메시지를 넣으세요.
 - SQL을 직접 작성하지 마세요. QuerySpec 구조로만 응답하세요.
 - 집계가 필요하면 columns에 "COUNT(*)", "SUM(column)" 등을 사용하세요.
+- 다른 테이블의 컬럼을 참조할 때는 반드시 joins에 해당 테이블을 추가하고,
+  컬럼명을 "table.column" 형식으로 작성하세요.
+  예: deals 조회 시 고객사명 필터링 → joins에 accounts 추가, filter column에 "accounts.name"
 
 {schema}
 """
