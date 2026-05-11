@@ -93,6 +93,8 @@ private fun ScanContent(
 
     // 가이드 프레임의 화면(=Box) 내 좌표/크기. dim overlay 가 이 영역만 비워서 시선을 집중시킨다.
     var frameRect by remember { mutableStateOf<Rect?>(null) }
+    // PreviewView 의 실제 크기 (px). 촬영 후 frameRect 와 함께 crop 좌표 계산에 사용.
+    var previewSize by remember { mutableStateOf<androidx.compose.ui.unit.IntSize?>(null) }
 
     val previewView = remember {
         PreviewView(context).apply {
@@ -116,7 +118,14 @@ private fun ScanContent(
         // 1. Camera preview (제일 아래)
         AndroidView(
             factory = { previewView },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { coords ->
+                    previewSize = androidx.compose.ui.unit.IntSize(
+                        coords.size.width,
+                        coords.size.height,
+                    )
+                },
         )
 
         // 2. Dim overlay — 가이드 프레임 영역만 hole 로 뚫어 명함만 밝게.
@@ -205,7 +214,25 @@ private fun ScanContent(
                         scope.launch {
                             val file = fileManager.newImageFile()
                             runCatching { cameraManager.takePicture(capture, file) }
-                                .onSuccess { onCaptured(it.absolutePath) }
+                                .onSuccess { saved ->
+                                    // 가이드 프레임 영역만 잘라 같은 파일에 덮어쓴다.
+                                    val frame = frameRect
+                                    val pSize = previewSize
+                                    if (frame != null && pSize != null) {
+                                        runCatching {
+                                            cameraManager.cropToFrame(
+                                                file = saved,
+                                                previewW = pSize.width,
+                                                previewH = pSize.height,
+                                                frameLeft = frame.left,
+                                                frameTop = frame.top,
+                                                frameW = frame.width,
+                                                frameH = frame.height,
+                                            )
+                                        }
+                                    }
+                                    onCaptured(saved.absolutePath)
+                                }
                             isCapturing = false
                         }
                     },

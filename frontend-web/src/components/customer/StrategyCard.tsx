@@ -72,14 +72,24 @@ function CircularGauge({ pct }: { pct: number }) {
 interface StrategyCardProps {
   card: StrategyCard;
   index: number;
+  onExpand?: () => void;
 }
 
-export default function StrategyCardComponent({ card, index }: StrategyCardProps) {
+export default function StrategyCardComponent({ card, index, onExpand }: StrategyCardProps) {
   const [expanded, setExpanded] = useState(false);
+
+  const handleToggle = () => {
+    if (onExpand) {
+      onExpand();
+      setExpanded(!expanded);
+    } else {
+      setExpanded(!expanded);
+    }
+  };
 
   return (
     <div
-      onClick={() => setExpanded(!expanded)}
+      onClick={handleToggle}
       style={{
         background: 'white',
         border: expanded ? '2px solid #2bbad1' : '1px solid #f1f5f9',

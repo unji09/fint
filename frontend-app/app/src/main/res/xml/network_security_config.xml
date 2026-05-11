@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTP(cleartext) 통신 허용 설정.
+  - 개발 서버(70.12.246.23) 및 사내망 IP에 대해서만 평문 허용.
+  - S3(AWS) 등 외부는 기본 정책(HTTPS only) 유지.
+-->
+<network-security-config>
+    <!-- 기본: HTTPS만 허용 -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- 개발 서버: HTTP 허용 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">70.12.246.23</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
+

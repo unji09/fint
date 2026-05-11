@@ -43,16 +43,18 @@ class RapidOcrClient:
                 _rapidocr_logger.setLevel(logging.WARNING)
                 for _h in list(_rapidocr_logger.handlers):
                     _h.setLevel(logging.WARNING)
-                self._engine = RapidOCR(params={
-                    "Global.text_score": 0.4,
-                    "Det.lang_type": LangDet.CH,
-                    "Det.ocr_version": OCRVersion.PPOCRV5,
-                    "Det.model_type": ModelType.MOBILE,
-                    "Det.box_thresh": 0.4,
-                    "Rec.lang_type": LangRec.KOREAN,
-                    "Rec.ocr_version": OCRVersion.PPOCRV5,
-                    "Rec.model_type": ModelType.MOBILE,
-                })
+                self._engine = RapidOCR(
+                    params={
+                        "Global.text_score": 0.4,
+                        "Det.lang_type": LangDet.CH,
+                        "Det.ocr_version": OCRVersion.PPOCRV5,
+                        "Det.model_type": ModelType.MOBILE,
+                        "Det.box_thresh": 0.4,
+                        "Rec.lang_type": LangRec.KOREAN,
+                        "Rec.ocr_version": OCRVersion.PPOCRV5,
+                        "Rec.model_type": ModelType.MOBILE,
+                    }
+                )
             return self._engine
 
     async def warmup(self) -> None:
@@ -65,9 +67,7 @@ class RapidOcrClient:
         except BusinessException:
             raise
         except Exception as e:
-            raise BusinessException(
-                CommonErrorCode.EXTERNAL_API_FAILED, f"OCR inference failed: {e}"
-            ) from e
+            raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, f"OCR inference failed: {e}") from e
 
 
 def _preprocess_for_ocr(arr: np.ndarray) -> np.ndarray:

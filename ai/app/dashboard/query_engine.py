@@ -13,6 +13,7 @@ from app.dashboard.chart_formatter import format_chart_data
 from app.dashboard.guardrails import GuardrailError, check_input
 from app.dashboard.query_builder import QueryBuildError, build_query
 from app.dashboard.schema_context import build_llm_schema_prompt
+from app.dashboard.vector_search import semantic_search
 from app.schemas.dashboard import (
     DashboardQueryRequest,
     InsightResult,
@@ -51,10 +52,11 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 
 
 class QueryEngine:
-    def __init__(self, *, llm, db, context_store) -> None:
+    def __init__(self, *, llm, db, context_store, embedder=None) -> None:
         self._llm = llm
         self._db = db
         self._context_store = context_store
+        self._embedder = embedder
 
     async def run(
         self,
@@ -180,11 +182,37 @@ class QueryEngine:
         ]
 
     async def _execute_query(self, intent: IntentResult, *, tenant_id: int) -> list[dict]:
+        structured_rows: list[dict] = []
+        semantic_rows: list[dict] = []
+
         if intent.search_type in ("STRUCTURED", "HYBRID") and intent.query_spec:
             sql, params = build_query(intent.query_spec, tenant_id=tenant_id)
             result = await self._db.execute(text(sql), params)
-            return [dict(row) for row in result.mappings().all()]
-        return []
+            structured_rows = [dict(row) for row in result.mappings().all()]
+
+        if intent.search_type in ("SEMANTIC", "HYBRID") and intent.semantic_spec:
+            search_results = await semantic_search(
+                intent.semantic_spec,
+                embedder=self._embedder,
+                db=self._db,
+            )
+            semantic_rows = [
+                {
+                    "title": r.document_title,
+                    "summary": r.chunk_text,
+                    "source": r.source,
+                    "score": round(r.score, 4),
+                    "link": r.link,
+                    "published_at": r.published_at,
+                }
+                for r in search_results
+            ]
+
+        if intent.search_type == "HYBRID":
+            return structured_rows + semantic_rows
+        if intent.search_type == "SEMANTIC":
+            return semantic_rows
+        return structured_rows
 
     async def _generate_insight(
         self, input_text: str, rows: list[dict], *, modify_context: dict | None = None

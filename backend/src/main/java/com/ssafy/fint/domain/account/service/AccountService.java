@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.service;
 
+import com.ssafy.fint.domain.account.dto.AccountDealsResponse;
 import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
@@ -14,7 +15,12 @@ import com.ssafy.fint.domain.account.entity.Mood;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
+import com.ssafy.fint.domain.account.repository.ContactRepository;
 import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
+import com.ssafy.fint.domain.activity.entity.ActivityType;
+import com.ssafy.fint.domain.activity.repository.ActivityRepository;
+import com.ssafy.fint.domain.deal.entity.Deal;
+import com.ssafy.fint.domain.deal.repository.DealRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
@@ -31,6 +37,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -45,12 +53,16 @@ public class AccountService {
 
     private static final int DEFAULT_SIGNAL_SIZE = 20;
     private static final int DEFAULT_SEARCHABLE_SIZE = 10;
+    private static final int DETAIL_DEAL_PREVIEW_SIZE = 3;
 
     private final AccountRepository accountRepository;
     private final AccountUserAssignmentRepository accountUserAssignmentRepository;
     private final AccountExternalInfoRepository accountExternalInfoRepository;
     private final TemperatureHistoryRepository temperatureHistoryRepository;
     private final UserRepository userRepository;
+    private final ActivityRepository activityRepository;
+    private final ContactRepository contactRepository;
+    private final DealRepository dealRepository;
 
     @Transactional
     public AccountRegisterResponse register(AccountRegisterRequest request) {
@@ -220,8 +232,10 @@ public class AccountService {
 
     /**
      * 고객사 상세 조회.
-     * 본 task 범위: 권한 검증 + 기본 정보 + assignedUsers + latestMood.
-     * meetingCount·lastContactAt·relationDepthScore·contacts·deals 는 후속 (다른 도메인 합성).
+     * 권한 검증 → assignedUsers · latestMood · 미팅 집계 · contacts · deals(preview 3개) 를 합성한다.
+     * meetingCount / lastContactAt 는 "고객사 매핑 Deal 에 속한 Activity 중 type=MEETING" 기준.
+     * deals 는 데이터 스코프 정책(팀 있음→팀 deal, 팀 없음→tenant 전체) 적용된 최신 3개 preview.
+     * 전체 목록은 {@link #findDealsByAccount(Long, boolean)} 으로.
      */
     public AccountDetailResponse findDetail(Long accountId) {
         Long userId = currentUserId();
@@ -230,6 +244,8 @@ public class AccountService {
         Account account = accountRepository
                 .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        Long callerTeamId = resolveCallerTeamId(userId);
 
         List<AccountDetailResponse.AssignedUser> assignedUsers = accountUserAssignmentRepository
                 .findByAccountIdWithUser(accountId)
@@ -243,12 +259,84 @@ public class AccountService {
                 .map(th -> th.getMood())
                 .orElse(null);
 
+        int meetingCount = activityRepository
+                .countByDeal_Account_AccountIdAndType(accountId, ActivityType.MEETING);
+
+        OffsetDateTime lastContactAt = activityRepository
+                .findLastMeetingStartAtByAccountId(accountId)
+                .orElse(null);
+
+        List<AccountDetailResponse.ContactItem> contacts = contactRepository
+                .findAllByAccount_AccountId(accountId)
+                .stream()
+                .map(c -> new AccountDetailResponse.ContactItem(
+                        c.getContactId(), c.getName(), c.getTitle(), c.getPhone(), c.getEmail()))
+                .toList();
+
+        List<AccountDetailResponse.DealItem> deals = dealRepository
+                .findByAccountAndScope(
+                        accountId, callerTeamId, null,
+                        PageRequest.of(0, DETAIL_DEAL_PREVIEW_SIZE))
+                .stream()
+                .map(d -> new AccountDetailResponse.DealItem(
+                        d.getDealId(), d.getTitle(), d.getCurrentPipeline(),
+                        toIntegerOrNull(d.getProbability()),
+                        toLongOrNull(d.getAmount())))
+                .toList();
+
         return new AccountDetailResponse(
                 account.getAccountId(), account.getName(), account.getIndustry(),
                 assignedUsers, latestMood,
-                0, null,
-                List.of(), List.of()
+                meetingCount, lastContactAt,
+                contacts, deals
         );
+    }
+
+    /**
+     * 고객사별 딜 목록 조회.
+     * 권한 검증(본인 책임자 + 같은 tenant) → 데이터 스코프(팀/tenant) → mineOnly 필터.
+     * 정렬은 updated_at desc, 페이지네이션 없음(전체 반환).
+     */
+    public AccountDealsResponse findDealsByAccount(Long accountId, boolean mineOnly) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        Long callerTeamId = resolveCallerTeamId(userId);
+        Long mineOnlyUserId = mineOnly ? userId : null;
+
+        List<Deal> deals = dealRepository.findByAccountAndScope(
+                accountId, callerTeamId, mineOnlyUserId, Pageable.unpaged());
+
+        List<AccountDealsResponse.DealItem> items = deals.stream()
+                .map(d -> new AccountDealsResponse.DealItem(
+                        d.getDealId(), d.getTitle(), d.getCurrentPipeline(),
+                        toIntegerOrNull(d.getProbability()),
+                        toLongOrNull(d.getAmount())))
+                .toList();
+
+        return new AccountDealsResponse(items);
+    }
+
+    private Long resolveCallerTeamId(Long userId) {
+        User caller = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+        return caller.getTeam() != null ? caller.getTeam().getTeamId() : null;
+    }
+
+    private static Integer toIntegerOrNull(Short value) {
+        return value == null ? null : value.intValue();
+    }
+
+    /**
+     * BigDecimal 금액을 명세상의 Long 으로 변환.
+     * 소수부가 있으면 절사한다 (DB 컬럼 NUMERIC(15,2) 이지만 명세는 정수 KRW 가정).
+     */
+    private static Long toLongOrNull(BigDecimal value) {
+        return value == null ? null : value.longValue();
     }
 
     private Long currentUserId() {

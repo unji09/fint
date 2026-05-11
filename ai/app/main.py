@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.clients import warmup_ocr_client
+from app.clients import warmup_embedder_client, warmup_ocr_client
 from app.core.config import get_settings
 from app.core.db import close_db, init_db
 from app.core.errors import register_exception_handlers
@@ -20,6 +20,16 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     init_db(settings.database_url)
     init_redis(settings.redis_url)
     await warmup_ocr_client().warmup()
+
+    from pathlib import Path
+
+    model_path = Path(settings.EMBEDDING_MODEL_PATH)
+    if model_path.exists() and (model_path / "model.onnx").exists():
+        logging.getLogger(__name__).info("Loading embedding model from %s", model_path)
+        warmup_embedder_client(str(model_path))
+    else:
+        logging.getLogger(__name__).info("Embedding model not found at %s, semantic search disabled", model_path)
+
     yield
     await close_redis()
     await close_db()

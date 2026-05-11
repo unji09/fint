@@ -58,12 +58,30 @@ import kotlinx.coroutines.delay
 fun RegisterProgressContent(
     title: String = "새로운 담당자를\n등록할게요",
     stepDurationMs: Long = 3000L,
+    name: String? = null,
+    company: String? = null,
+    position: String? = null,
+    phone: String? = null,
+    email: String? = null,
     onComplete: () -> Unit,
 ) {
     val steps = listOf(
-        StepDef("F!NT 데이터베이스 조회") { vis -> DatabaseSearchCard(vis) },
-        StepDef("페이지 생성") { vis -> PageCreationCard(vis) },
-        StepDef("담당자 정보 업데이트") { vis -> ContactUpdateCard(vis) },
+        StepDef("F!NT 데이터베이스 조회") { vis ->
+            DatabaseSearchCard(visible = vis, name = name, company = company)
+        },
+        StepDef("페이지 생성") { vis ->
+            PageCreationCard(visible = vis, name = name, company = company)
+        },
+        StepDef("담당자 정보 업데이트") { vis ->
+            ContactUpdateCard(
+                visible = vis,
+                name = name,
+                company = company,
+                position = position,
+                phone = phone,
+                email = email,
+            )
+        },
     )
 
     var currentStep by remember { mutableIntStateOf(0) }

@@ -79,7 +79,14 @@ export default function CanvasWidgetCard({ w, onUpdate, onTitleChange }: Props) 
         <span style={{ color: '#94a3b8', fontSize: 16 }}>···</span>
       </div>
       <div style={{ flex: 1, overflow: 'hidden', padding: '8px 14px 10px' }}>
-        {w.widgetType === 'LINE_CHART' ? <LineChartSvg /> : w.widgetType === 'SEGMENT' ? <SegmentChart /> : <BarChartSvg />}
+        {(() => {
+          const data = (w.result?.data as Record<string, unknown> | undefined) ?? {};
+          const labels = Array.isArray(data.labels) ? (data.labels as string[]) : undefined;
+          const values = Array.isArray(data.values) ? (data.values as number[]) : undefined;
+          if (w.widgetType === 'LINE_CHART') return <LineChartSvg values={values} />;
+          if (w.widgetType === 'SEGMENT') return <SegmentChart />;
+          return <BarChartSvg values={values} labels={labels} />;
+        })()}
       </div>
       {RESIZE_HANDLES.map(h => (
         <div key={h.dir} data-resize="1" onMouseDown={e => onResizeDown(e, h.dir)}

@@ -17,7 +17,6 @@ import EventDetailPanel from '@/components/calendar/EventDetailPanel';
 import AddEventModal from '@/components/calendar/AddEventModal';
 import type { CalendarEvent, ViewMode } from '@/components/calendar/types';
 import { CATEGORY_COLOR, CATEGORY_BG } from '@/components/calendar/types';
-import { MOCK_EVENTS } from '@/components/calendar/mockData';
 import { useCalendarEvents, fetchEventDetail } from '@/hooks/useCalendarEvents';
 import {
   addMonths,
@@ -28,6 +27,12 @@ import {
 } from '@/components/calendar/utils';
 
 // ── 피그마 수치 상수 ─────────────────────────────────────────
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+function authHeader(): HeadersInit {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : {};
+}
+
 const BG = '#F8F8F5'; // 페이지 배경 (linear-gradient 근사)
 const WHITE = '#FFFFFF';
 const BORDER = '#E5E6DE'; // Figma: var(--color/yellow/89, #e5e6de)
@@ -44,16 +49,16 @@ const F_PRETENDARD = "'Pretendard', -apple-system, sans-serif";
 const F_INTER = "'Inter', 'Noto Sans KR', sans-serif";
 const F_SEGOE = "'Pretendard', 'Segoe UI', sans-serif"; // 달력 날짜 폰트
 
-// ── 파이프라인 (Figma: 7항목, 각 w-[229.571px]) ─────────────
-const PIPELINE = [
-  { label: '첫 미팅 준비', dot: '#8CB2E5', cBg: '#EEF4FB', cTxt: '#8CB2E5', count: 12 },
-  { label: '니즈 파악', dot: '#738CD9', cBg: '#EAEEF9', cTxt: '#738CD9', count: 8 },
-  { label: '제안서 작성', dot: '#806BC7', cBg: '#ECE9F7', cTxt: '#806BC7', count: 6 },
-  { label: '제안 발표', dot: '#6B5CBF', cBg: '#E9E7F5', cTxt: '#6B5CBF', count: 4 },
-  { label: '협상 중', dot: '#997333', cBg: '#F0EAE0', cTxt: '#997333', count: 3 },
-  { label: '계약 검토', dot: '#339E80', cBg: '#E0F0EC', cTxt: '#339E80', count: 2 },
-  { label: '성사 / 실패', dot: '#268C66', cBg: '#DEEEE8', cTxt: '#268C66', count: 5 },
-] satisfies PipelineItem[];
+// ── 파이프라인 스타일 (Figma: 7항목) — count는 API에서 동적 집계 ─
+const PIPELINE_STYLES = [
+  { label: '첫 미팅 준비', code: 'FIRST_MEETING',   dot: '#8CB2E5', cBg: '#EEF4FB', cTxt: '#8CB2E5' },
+  { label: '니즈 파악',   code: 'NEEDS_ANALYSIS',  dot: '#738CD9', cBg: '#EAEEF9', cTxt: '#738CD9' },
+  { label: '제안서 작성', code: 'PROPOSAL_WRITING', dot: '#806BC7', cBg: '#ECE9F7', cTxt: '#806BC7' },
+  { label: '제안 발표',   code: 'PROPOSAL_PRESENT', dot: '#6B5CBF', cBg: '#E9E7F5', cTxt: '#6B5CBF' },
+  { label: '협상 중',     code: 'NEGOTIATION',      dot: '#997333', cBg: '#F0EAE0', cTxt: '#997333' },
+  { label: '계약 검토',   code: 'CONTRACT_REVIEW',  dot: '#339E80', cBg: '#E0F0EC', cTxt: '#339E80' },
+  { label: '성사 / 실패', code: 'CLOSED',            dot: '#268C66', cBg: '#DEEEE8', cTxt: '#268C66' },
+];
 
 // ── 미니 주간 (월~일) ─────────────────────────────────────────
 const WK = ['월', '화', '수', '목', '금', '토', '일'];
@@ -387,12 +392,36 @@ export default function CalendarPage() {
   const [showPicker, setShowPicker] = useState(false);
 
   const [asideWidth, setAsideWidth] = useState(300); // Figma: w-[300px]
+  const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
+
+  // ── 파이프라인 state (API에서 집계) ──────────────────────────
+  const [pipeline, setPipeline] = useState<PipelineItem[]>(
+    PIPELINE_STYLES.map((s) => ({ ...s, count: 0 })),
+  );
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/deals?size=200`, { headers: authHeader() });
+        if (!res.ok) return;
+        const json = await res.json();
+        const deals: any[] = json.data?.content ?? json.data ?? [];
+        const counts: Record<string, number> = {};
+        deals.forEach((d: any) => {
+          const code = d.pipelineStage?.stageCode ?? '';
+          if (code) counts[code] = (counts[code] ?? 0) + 1;
+        });
+        setPipeline(PIPELINE_STYLES.map((s) => ({ ...s, count: counts[s.code] ?? 0 })));
+      } catch {
+        /* count 0 유지 */
+      }
+    })();
+  }, []);
 
   // ── API 연동 ──────────────────────────────────────────────────
-  const { events: apiEvents } = useCalendarEvents({ currentDate, viewMode });
+  const { events: apiEvents, refetch } = useCalendarEvents({ currentDate, viewMode });
 
-  // API 실패 시 mock fallback
-  const events = apiEvents.length > 0 ? apiEvents : MOCK_EVENTS;
+  const events = apiEvents;
 
   const dragRef = useRef<{ on: boolean; x0: number; w0: number }>({ on: false, x0: 0, w0: 300 });
   const onDragStart = useCallback(
@@ -435,10 +464,13 @@ export default function CalendarPage() {
   const dayEvs = getEventsForDay(events, selectedDate);
 
   // 이벤트 클릭 → 상세 조회 (추가 필드 병합)
+  const clickedIdRef = useRef<string | null>(null);
   const handleEventClick = async (ev: CalendarEvent) => {
+    clickedIdRef.current = ev.eventId;
     setSelectedEvent(ev); // 즉시 표시
     const detail = await fetchEventDetail(ev.eventId);
-    if (detail) setSelectedEvent(detail); // 상세 정보로 교체
+    // 응답 도착 시 여전히 같은 이벤트를 보고 있는지 확인 (race condition 방지)
+    if (detail && clickedIdRef.current === ev.eventId) setSelectedEvent(detail);
   };
   const miniWk = getMondayWeek(selectedDate);
 
@@ -783,7 +815,7 @@ export default function CalendarPage() {
                 overflow: 'hidden',
               }}
             >
-              {PIPELINE.map((s, i) => (
+              {pipeline.map((s, i) => (
                 <div
                   key={s.label}
                   style={{
@@ -845,7 +877,7 @@ export default function CalendarPage() {
             {viewMode === 'month' ? (
               <MonthGrid
                 currentDate={currentDate}
-                events={MOCK_EVENTS}
+                events={events}
                 selectedDate={selectedDate}
                 onDayClick={onDayClick}
                 onEventClick={(ev) => {
@@ -867,7 +899,7 @@ export default function CalendarPage() {
                   handleEventClick(ev);
                 }}
                 onTimeClick={onTimeClick}
-                pipeline={PIPELINE}
+                pipeline={pipeline}
               />
             )}
             {/* FAB */}
@@ -906,12 +938,30 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <EventDetailPanel event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      <EventDetailPanel
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        onDeleted={() => {
+          refetch();
+          setSelectedEvent(null);
+        }}
+        onEdit={(ev) => {
+          setEditEvent(ev);
+          setSelectedEvent(null);
+        }}
+      />
       <AddEventModal
-        key={addDate ? addDate.toISOString() : 'closed'}
-        open={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
+        open={isAddOpen || !!editEvent}
+        onClose={() => {
+          setIsAddOpen(false);
+          setEditEvent(null);
+        }}
+        onSaved={() => {
+          refetch();
+          setEditEvent(null);
+        }}
         defaultDate={addDate}
+        editEvent={editEvent}
       />
     </div>
   );

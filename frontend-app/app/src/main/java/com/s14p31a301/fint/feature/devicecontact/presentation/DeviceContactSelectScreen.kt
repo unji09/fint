@@ -84,6 +84,11 @@ fun DeviceContactSelectScreen(
                 onCancel = onCancel,
             )
             DeviceContactSelectUiState.Phase.Saving -> RegisterProgressContent(
+                name = state.form.name,
+                company = state.form.company,
+                position = state.form.position,
+                phone = state.form.phone,
+                email = state.form.email,
                 onComplete = viewModel::onSavingProgressFinished,
             )
             DeviceContactSelectUiState.Phase.Done -> RegistrationCompletionContent(

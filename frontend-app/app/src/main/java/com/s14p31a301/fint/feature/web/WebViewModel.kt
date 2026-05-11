@@ -58,8 +58,13 @@ class WebViewModel(
 
     /** 웹 로그인 성공 → Bridge.saveAuthToken → 여기로 위임 */
     fun saveAuthToken(accessToken: String, refreshToken: String) {
+        android.util.Log.d(
+            "WebVM",
+            "saveAuthToken received (accessLen=${accessToken.length}, refreshLen=${refreshToken.length})"
+        )
         viewModelScope.launch {
             tokenDataStore.saveTokens(accessToken, refreshToken)
+            android.util.Log.d("WebVM", "saveAuthToken persisted to DataStore")
         }
     }
 

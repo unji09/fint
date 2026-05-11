@@ -26,9 +26,7 @@ def test_database_url_format():
         POSTGRES_DB="mydb",
     )
 
-    assert settings.database_url == (
-        "postgresql+asyncpg://myuser:mypass@db.example.com:5433/mydb"
-    )
+    assert settings.database_url == ("postgresql+asyncpg://myuser:mypass@db.example.com:5433/mydb")
 
 
 def test_redis_url_without_password():

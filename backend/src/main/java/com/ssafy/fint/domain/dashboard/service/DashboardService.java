@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.dashboard.service;
 
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartResponse;
 import com.ssafy.fint.domain.dashboard.entity.Dashboard;
@@ -13,6 +14,8 @@ import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
+import com.ssafy.fint.global.exception.CommonErrorCode;
+import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -70,6 +73,28 @@ public class DashboardService {
         }
 
         return new DashboardCreateResponse(dashboard.getDashboardId(), traceId);
+    }
+
+    @Transactional
+    public void update(CustomUserDetails me, Long dashboardId, DashboardUpdateRequest request) {
+        if (request.title() == null && request.thumbnailUrl() == null) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT,
+                    "수정할 필드가 하나 이상 필요합니다.");
+        }
+
+        Dashboard dashboard = dashboardRepository.findById(dashboardId)
+                .orElseThrow(() -> new BusinessException(DashboardErrorCode.DASHBOARD_NOT_FOUND));
+
+        if (!dashboard.getOwner().getUserId().equals(me.getUserId())) {
+            throw new BusinessException(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
+        }
+
+        if (request.title() != null) {
+            dashboard.changeTitle(request.title());
+        }
+        if (request.thumbnailUrl() != null) {
+            dashboard.changeThumbnailUrl(request.thumbnailUrl());
+        }
     }
 
     private String resolveTitle(String input) {
