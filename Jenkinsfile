@@ -68,10 +68,18 @@ pipeline {
                     when { expression { env.AI_CHANGED == 'true' } }
                     steps {
                         dir('ai') {
-                            sh """
-                                docker build -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} .
+                            sh '''
+                                docker build -f - -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} . <<'DOCKERFILE'
+FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+WORKDIR /app
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-install-project
+COPY . .
+RUN uv sync --frozen
+DOCKERFILE
                                 docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} python -m pytest --tb=short -q
-                            """
+                            '''
                         }
                     }
                 }
