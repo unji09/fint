@@ -67,7 +67,9 @@ async def test_missing_auth_returns_401(client):
 
 
 @pytest.mark.asyncio
-async def test_invalid_jwt_returns_401(client):
+@patch("app.core.security.get_settings")
+async def test_invalid_jwt_returns_401(mock_settings, client):
+    mock_settings.return_value.JWT_SECRET = JWT_SECRET
     resp = await client.get("/test/tenant", headers={"Authorization": "Bearer invalid.token.here"})
 
     assert resp.status_code == 401

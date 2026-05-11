@@ -15,6 +15,7 @@ from app.dashboard.schema_context import (
 from app.schemas.dashboard import FilterOperator, QuerySpec
 
 _AGG_PATTERN = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\((\*|\w+)\)$", re.IGNORECASE)
+_DATE_TRUNC_PATTERN = re.compile(r"^DATE_TRUNC\('(\w+)',\s*(\w+)\)$", re.IGNORECASE)
 
 
 class QueryBuildError(Exception):
@@ -22,6 +23,10 @@ class QueryBuildError(Exception):
 
 
 def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
+    if spec.columns == ["*"]:
+        cols = get_allowed_columns(spec.table)
+        if cols:
+            spec = spec.model_copy(update={"columns": sorted(cols)})
     _validate_spec(spec)
 
     params: dict[str, object] = {}
@@ -36,19 +41,20 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
 
     table_meta = ALLOWED_TABLES[spec.table]
 
-    select_exprs: list[str] = []
-    for col in spec.columns:
+    def _qualify_expr(col: str) -> str:
         agg_match = _AGG_PATTERN.match(col)
+        dt_match = _DATE_TRUNC_PATTERN.match(col)
         if agg_match:
             func, arg = agg_match.group(1).upper(), agg_match.group(2)
-            if arg == "*" and func != "COUNT":
-                raise QueryBuildError(f"{func}(*)는 허용되지 않습니다. *는 COUNT에서만 사용 가능합니다")
             if arg == "*":
-                select_exprs.append(f'{func}(*) AS "{col}"')
-            else:
-                select_exprs.append(f'{func}({spec.table}.{arg}) AS "{col}"')
-        else:
-            select_exprs.append(f"{spec.table}.{col}")
+                return f'{func}(*) AS "{col}"'
+            return f'{func}({spec.table}.{arg}) AS "{col}"'
+        if dt_match:
+            interval, column = dt_match.group(1), dt_match.group(2)
+            return f"DATE_TRUNC('{interval}', {spec.table}.{column}) AS \"{col}\""
+        return f"{spec.table}.{col}"
+
+    select_exprs: list[str] = [_qualify_expr(col) for col in spec.columns]
 
     sql_parts = [f"SELECT {', '.join(select_exprs)}", f"FROM {spec.table}"]
 
@@ -86,7 +92,9 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
     # 사용자 필터
     for f in spec.filters:
         col_ref = f"{spec.table}.{f.column}"
-        if f.operator == FilterOperator.IN:
+        if f.operator in (FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL):
+            sql_parts.append(f"AND {col_ref} {f.operator.value}")
+        elif f.operator == FilterOperator.IN:
             if not isinstance(f.value, list) or not f.value:
                 raise QueryBuildError("IN 연산자에는 비어있지 않은 리스트가 필요합니다")
             placeholders = ", ".join(_next_param(v) for v in f.value)
@@ -101,14 +109,21 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
             placeholder = _next_param(f.value)
             sql_parts.append(f"AND {col_ref} {f.operator.value} {placeholder}")
 
+    def _qualify_ref(col: str) -> str:
+        dt_match = _DATE_TRUNC_PATTERN.match(col)
+        if dt_match:
+            interval, column = dt_match.group(1), dt_match.group(2)
+            return f"DATE_TRUNC('{interval}', {spec.table}.{column})"
+        return f"{spec.table}.{col}"
+
     # GROUP BY
     if spec.group_by:
-        group_cols = ", ".join(f"{spec.table}.{c}" for c in spec.group_by)
+        group_cols = ", ".join(_qualify_ref(c) for c in spec.group_by)
         sql_parts.append(f"GROUP BY {group_cols}")
 
     # ORDER BY
     if spec.order_by:
-        order_exprs = [f"{spec.table}.{o.column} {o.direction.value}" for o in spec.order_by]
+        order_exprs = [f"{_qualify_ref(o.column)} {o.direction.value}" for o in spec.order_by]
         sql_parts.append(f"ORDER BY {', '.join(order_exprs)}")
 
     # LIMIT
@@ -128,6 +143,7 @@ def _validate_spec(spec: QuerySpec) -> None:
 
     for col in spec.columns:
         agg_match = _AGG_PATTERN.match(col)
+        dt_match = _DATE_TRUNC_PATTERN.match(col)
         if agg_match:
             func, arg = agg_match.group(1).upper(), agg_match.group(2)
             if func not in ALLOWED_AGGREGATES:
@@ -136,6 +152,10 @@ def _validate_spec(spec: QuerySpec) -> None:
                 raise QueryBuildError(f"{func}(*)는 허용되지 않습니다. *는 COUNT에서만 사용 가능합니다")
             if arg != "*" and arg not in allowed_cols:
                 raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{arg}")
+        elif dt_match:
+            column = dt_match.group(2)
+            if column not in allowed_cols:
+                raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{column}")
         elif col not in allowed_cols:
             raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{col}")
 
@@ -152,7 +172,11 @@ def _validate_spec(spec: QuerySpec) -> None:
 
     if spec.group_by:
         for col in spec.group_by:
-            if col not in allowed_cols:
+            dt_match = _DATE_TRUNC_PATTERN.match(col)
+            if dt_match:
+                if dt_match.group(2) not in allowed_cols:
+                    raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{dt_match.group(2)}")
+            elif col not in allowed_cols:
                 raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{col}")
 
     allowed_joins = get_allowed_join_targets(spec.table)
