@@ -83,7 +83,7 @@ export default function GNB() {
       <header style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
         {/* 로고 — 캘린더 사이드바 너비(300px)에 맞춤 */}
         <div onClick={() => router.push('/calendar')} style={{ width: 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%' }}>
-          <img src="/logo.jpg" alt="F!NT" style={{ height: 52, objectFit: 'contain', marginTop: -2 }} />
+          <img src="/logo.png" alt="F!NT" style={{ height: 56, objectFit: 'contain' }} />
         </div>
 
         {/* 네비게이션 — 로고 오른쪽, 캘린더 그리드와 정렬 */}
