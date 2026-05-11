@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.dashboard.controller;
 
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
@@ -37,6 +38,15 @@ public class DashboardController implements DashboardSwagger {
             @AuthenticationPrincipal CustomUserDetails me
     ) {
         return ApiResponse.ok(dashboardService.findAll(me));
+    }
+
+    @Override
+    @GetMapping("/{dashboardId}")
+    public ApiResponse<DashboardDetailResponse> findDetail(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId
+    ) {
+        return ApiResponse.ok(dashboardService.findDetail(me, dashboardId));
     }
 
     @Override

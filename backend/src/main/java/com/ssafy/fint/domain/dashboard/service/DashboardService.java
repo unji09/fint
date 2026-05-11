@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.dashboard.service;
 
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateRequest;
 import com.ssafy.fint.domain.dashboard.dto.DashboardCreateResponse;
+import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -48,6 +50,21 @@ public class DashboardService {
     private final DashboardTemplateRepository dashboardTemplateRepository;
     private final DashboardWidgetRepository dashboardWidgetRepository;
     private final DashboardQueryService dashboardQueryService;
+
+    @Transactional
+    public DashboardDetailResponse findDetail(CustomUserDetails me, Long dashboardId) {
+        Dashboard dashboard = dashboardRepository.findById(dashboardId)
+                .orElseThrow(() -> new BusinessException(DashboardErrorCode.DASHBOARD_NOT_FOUND));
+
+        if (!dashboard.getOwner().getUserId().equals(me.getUserId())) {
+            throw new BusinessException(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
+        }
+
+        dashboard.touchAccess(OffsetDateTime.now());
+
+        List<DashboardWidget> widgets = dashboardWidgetRepository.findByDashboard(dashboard);
+        return DashboardDetailResponse.of(dashboard, widgets);
+    }
 
     @Transactional(readOnly = true)
     public List<DashboardListResponse> findAll(CustomUserDetails me) {
