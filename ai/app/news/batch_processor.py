@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -12,7 +13,8 @@ from app.news.csv_parser import NewsRecord
 
 logger = logging.getLogger(__name__)
 
-CHECKPOINT_INTERVAL = 10_000
+CHECKPOINT_INTERVAL = 1_000
+LOG_INTERVAL = 100
 
 
 class SummarizerProtocol(Protocol):
@@ -65,17 +67,26 @@ class BatchProcessor:
                 cp.current_file = filename
                 records_in_file = records_base
 
+                total_failed = 0
                 async for batch, new_offset in self._iter_batches(csv_file, byte_offset=byte_offset):
                     prepared = self._prepare_batch(batch)
                     inserted = await self._insert_batch(prepared, conn)
                     total_inserted += inserted
+                    batch_failed = len(batch) - inserted
+                    total_failed += batch_failed
                     records_in_file += len(batch)
+
+                    logger.info(
+                        "[%s] %d / 640,857 | batch: %d건 (성공 %d, 스킵 %d) | 누적: 성공 %d, 스킵 %d",
+                        filename, records_in_file, len(batch), inserted, batch_failed,
+                        total_inserted, total_failed,
+                    )
 
                     if records_in_file % CHECKPOINT_INTERVAL < self._batch_size:
                         cp.records_processed = records_in_file
                         cp.byte_offset = new_offset
                         save_checkpoint(cp, self._checkpoint_path)
-                        logger.info("%s: %d records processed", filename, records_in_file)
+                        logger.info("[%s] === CHECKPOINT saved at %d ===", filename, records_in_file)
 
                 cp.completed_files.append(filename)
                 cp.current_file = None
@@ -147,7 +158,7 @@ class BatchProcessor:
                     "publisher": record.publisher,
                     "title": record.title,
                     "link": record.link,
-                    "published_at": record.published_at,
+                    "published_at": _parse_datetime(record.published_at),
                     "category": record.category,
                     "reporter": record.reporter,
                     "article": record.article,
@@ -167,7 +178,7 @@ class BatchProcessor:
                     INSERT INTO news_articles
                         (publisher, title, link, published_at, category, reporter,
                          article, content_summary, title_embedding, summary_embedding)
-                    VALUES ($1, $2, $3, $4::timestamptz, $5, $6, $7, $8, $9, $10)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     ON CONFLICT (publisher, title, published_at) DO NOTHING
                     """,
                     row["publisher"],
@@ -186,6 +197,18 @@ class BatchProcessor:
             except Exception:
                 logger.warning("Failed to insert: %s - %s", row["publisher"], row["title"], exc_info=True)
         return inserted
+
+
+_DT_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]
+
+
+def _parse_datetime(s: str) -> datetime:
+    for fmt in _DT_FORMATS:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse datetime: {s!r}")
 
 
 def _vec_to_pgvector(vec: np.ndarray) -> str:
