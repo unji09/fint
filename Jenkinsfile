@@ -74,9 +74,9 @@ FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project --group dev
 COPY . .
-RUN uv sync --frozen
+RUN uv sync --frozen --group dev
 DOCKERFILE
                                 docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} python -m pytest --tb=short -q
                             '''
