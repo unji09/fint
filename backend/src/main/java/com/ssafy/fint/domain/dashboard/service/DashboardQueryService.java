@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartResponse;
 import com.ssafy.fint.domain.dashboard.entity.Dashboard;
+import com.ssafy.fint.domain.dashboard.entity.DashboardWidget;
 import com.ssafy.fint.domain.dashboard.repository.DashboardRepository;
+import com.ssafy.fint.domain.dashboard.repository.DashboardWidgetRepository;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
@@ -17,8 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,9 +31,11 @@ public class DashboardQueryService {
     private static final String REDIS_KEY_PREFIX = "dashboard:query:";
     private static final Duration PENDING_STATE_TTL = Duration.ofSeconds(600);
     private static final String STATUS_PENDING = "PENDING";
+    private static final String ACTION_CREATE = "CREATE";
     private static final String ACTION_ADD = "ADD";
 
     private final DashboardRepository dashboardRepository;
+    private final DashboardWidgetRepository dashboardWidgetRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final DashboardQueryDispatcher queryDispatcher;
     private final ObjectMapper objectMapper;
@@ -79,17 +83,32 @@ public class DashboardQueryService {
 
     private DashboardQueryDispatchCommand buildDispatchCommand(
             String traceId, Long dashboardId, String inputText, CustomUserDetails me) {
-        // 본 엔드포인트(/dashboards/{id}/queries)는 기존 대시보드에 위젯을 추가하는 ADD 케이스.
-        // existing_widgets 의 element 스키마는 AI 측과 합의 전이므로 빈 리스트로 송신한다.
+        // 위젯이 0개면 CREATE, 1개 이상이면 ADD (+ 기존 위젯 컨텍스트를 LLM 에 전달해 중복 회피 유도).
+        List<DashboardWidget> widgets = dashboardWidgetRepository.findAllByDashboard_DashboardId(dashboardId);
+        boolean hasWidgets = !widgets.isEmpty();
+        List<Object> existingWidgets = hasWidgets
+                ? widgets.stream().<Object>map(this::toAiPayload).toList()
+                : List.of();
+        String action = hasWidgets ? ACTION_ADD : ACTION_CREATE;
+
         return new DashboardQueryDispatchCommand(
                 traceId,
-                ACTION_ADD,
+                action,
                 inputText,
                 dashboardId,
                 me.getTenantId(),
                 me.getUserId(),
-                Collections.emptyList(),
+                existingWidgets,
                 null
         );
+    }
+
+    private Map<String, Object> toAiPayload(DashboardWidget widget) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("widget_type", widget.getWidgetType() == null ? null : widget.getWidgetType().name());
+        payload.put("title", widget.getTitle());
+        payload.put("source_query", widget.getSourceQuery());
+        payload.put("config", widget.getConfig());
+        return payload;
     }
 }
