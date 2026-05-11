@@ -53,7 +53,8 @@ import java.util.UUID;
  *  - §1 : SSE-KMS 필수 (alias/crm-fint-s3-key)
  *  - §2 : 발급 주체는 EC2 서버, S3 Key 는 서버에서만 생성
  *  - §3 : 미팅 녹음 → meetings/{meetingId}/{uuid}.{ext}, audio/* MIME
- *  - §4 : 명함 OCR  → business-cards/{contactId}/{uuid}.{ext}, image/* MIME, 5분/5MB
+ *  - §4 : 명함 OCR  → business-cards/{uuid}.{ext}, image/* MIME, 5분/5MB
+ *               (명함 등록 이전 단계라 contactId 없음)
  *  - §5 : PUT 만 발급, URL 1회용 (재사용 금지는 클라이언트 책임)
  */
 @Slf4j
@@ -76,7 +77,7 @@ public class FilePresignedService {
         validator.validateContentType(req.fileType(), req.contentType());
         validator.validateSize(req.purpose(), req.fileSize());
 
-        String fileKey = buildFileKey(req.purpose(), req.fileName(), req.meetingId(), req.contactId());
+        String fileKey = buildFileKey(req.purpose(), req.fileName(), req.meetingId());
         long expiresIn = (req.purpose() == FilePurpose.OCR)
                 ? props.presign().ocrUploadExpirationSeconds() // 규칙 §4: OCR 업로드 5분
                 : props.presign().singleExpirationSeconds();
@@ -144,7 +145,7 @@ public class FilePresignedService {
         }
         validator.validateContentType(req.fileType(), req.contentType());
 
-        String fileKey = buildFileKey(FilePurpose.MEETING_RECORD, req.fileName(), req.meetingId(), null);
+        String fileKey = buildFileKey(FilePurpose.MEETING_RECORD, req.fileName(), req.meetingId());
         long expiresIn = props.presign().multipartExpirationSeconds();
 
         CreateMultipartUploadResponse created;
@@ -244,9 +245,10 @@ public class FilePresignedService {
     /**
      * 규칙 §3, §4: purpose 기반 S3 Key 생성 (서버에서만 결정 — 클라 위조 차단).
      *  - MEETING_RECORD → meetings/{meetingId}/{uuid}.{ext}
-     *  - OCR            → business-cards/{contactId}/{uuid}.{ext}
+     *  - OCR            → business-cards/{uuid}.{ext}
+     *               (명함 등록 이전 단계라 contactId 를 키에 포함하지 않는다)
      */
-    private String buildFileKey(FilePurpose purpose, String fileName, Long meetingId, Long contactId) {
+    private String buildFileKey(FilePurpose purpose, String fileName, Long meetingId) {
         String ext = extractExtension(fileName);
         String uuid = UUID.randomUUID().toString();
 
@@ -257,12 +259,7 @@ public class FilePresignedService {
                 }
                 yield props.upload().keyPrefix().meeting() + meetingId + "/" + uuid + ext;
             }
-            case OCR -> {
-                if (contactId == null) {
-                    throw new BusinessException(FileErrorCode.MISSING_CONTACT_ID);
-                }
-                yield props.upload().keyPrefix().businessCard() + contactId + "/" + uuid + ext;
-            }
+            case OCR -> props.upload().keyPrefix().businessCard() + uuid + ext;
         };
     }
 
