@@ -12,7 +12,7 @@ from app.core.errors import BusinessException, CommonErrorCode
 from app.core.response import ApiResponse
 from app.core.security import get_tenant_id
 from app.news.collector import collect_news
-from app.schemas.news import NewsCollectRequest, NewsCollectResponse
+from app.schemas.news import SignalsCollectRequest, SignalsCollectResponse
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +20,14 @@ router = APIRouter(prefix="/ai", tags=["signals"])
 
 
 @router.post("/signals/collect")
-async def collect_news_endpoint(
-    body: NewsCollectRequest,
+async def collect_signals_endpoint(
+    body: SignalsCollectRequest,
     tenant_id: int = Depends(get_tenant_id),
     x_tenant_id: str | None = Header(None, include_in_schema=True),
     db: AsyncSession = Depends(get_db),
     naver_client: NaverNewsClient = Depends(get_naver_client),
     embedder: OnnxEmbedderClient | None = Depends(get_embedder_client),
-) -> ApiResponse[NewsCollectResponse]:
+) -> ApiResponse[SignalsCollectResponse]:
     if body.source in ("naver", "all") and embedder is None:
         raise BusinessException(
             CommonErrorCode.INVALID_INPUT,
@@ -44,7 +44,7 @@ async def collect_news_endpoint(
     )
 
     logger.info(
-        "news collect completed: tenant_id=%d, source=%s, new=%d, existing=%d",
-        tenant_id, body.source, len(result.new_articles), len(result.existing_links),
+        "signals collect completed: tenant_id=%d, source=%s, news_new=%d",
+        tenant_id, body.source, len(result.news.new_articles),
     )
     return ApiResponse.ok(result)
