@@ -41,6 +41,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -63,6 +65,7 @@ import java.util.UUID;
 public class FilePresignedService {
 
     private static final String EXT_SAFE_CHARS = "[^A-Za-z0-9]";
+    private static final DateTimeFormatter THUMBNAIL_TS = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
@@ -77,10 +80,11 @@ public class FilePresignedService {
         validator.validateContentType(req.fileType(), req.contentType());
         validator.validateSize(req.purpose(), req.fileSize());
 
-        String fileKey = buildFileKey(req.purpose(), req.fileName(), req.meetingId());
-        long expiresIn = (req.purpose() == FilePurpose.OCR)
-                ? props.presign().ocrUploadExpirationSeconds() // 규칙 §4: OCR 업로드 5분
-                : props.presign().singleExpirationSeconds();
+        String fileKey = buildFileKey(req.purpose(), req.fileName(), req.meetingId(), req.dashboardId());
+        long expiresIn = switch (req.purpose()) {
+            case OCR, THUMBNAIL -> props.presign().ocrUploadExpirationSeconds();
+            case MEETING_RECORD -> props.presign().singleExpirationSeconds();
+        };
 
         try {
             PutObjectRequest putReq = PutObjectRequest.builder()
@@ -145,7 +149,7 @@ public class FilePresignedService {
         }
         validator.validateContentType(req.fileType(), req.contentType());
 
-        String fileKey = buildFileKey(FilePurpose.MEETING_RECORD, req.fileName(), req.meetingId());
+        String fileKey = buildFileKey(FilePurpose.MEETING_RECORD, req.fileName(), req.meetingId(), null);
         long expiresIn = props.presign().multipartExpirationSeconds();
 
         CreateMultipartUploadResponse created;
@@ -239,16 +243,35 @@ public class FilePresignedService {
     }
 
     // ---------------------------------------------------------------------
+    // 5) S3 객체 존재 확인
+    // ---------------------------------------------------------------------
+    public boolean existsOnS3(String fileKey) {
+        try {
+            s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(props.bucket())
+                    .key(fileKey)
+                    .build());
+            return true;
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (AwsServiceException e) {
+            log.error("[S3 headObject failed] key={}, err={}", fileKey, e.getMessage());
+            throw new BusinessException(FileErrorCode.S3_PRESIGN_FAILED);
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // helpers (S3 Key 생성 — 검증 책임은 FileUploadValidator 로 분리됨)
     // ---------------------------------------------------------------------
 
     /**
-     * 규칙 §3, §4: purpose 기반 S3 Key 생성 (서버에서만 결정 — 클라 위조 차단).
+     * purpose 기반 S3 Key 생성 (서버에서만 결정 — 클라 위조 차단).
      *  - MEETING_RECORD → meetings/{meetingId}/{uuid}.{ext}
      *  - OCR            → business-cards/{uuid}.{ext}
-     *               (명함 등록 이전 단계라 contactId 를 키에 포함하지 않는다)
+     *  - THUMBNAIL      → thumbnails/{dashboardId}/{yyyyMMddHHmmssSSS}_{uuid}.{ext}
      */
-    private String buildFileKey(FilePurpose purpose, String fileName, Long meetingId) {
+    private String buildFileKey(FilePurpose purpose, String fileName,
+                                Long meetingId, Long dashboardId) {
         String ext = extractExtension(fileName);
         String uuid = UUID.randomUUID().toString();
 
@@ -260,6 +283,14 @@ public class FilePresignedService {
                 yield props.upload().keyPrefix().meeting() + meetingId + "/" + uuid + ext;
             }
             case OCR -> props.upload().keyPrefix().businessCard() + uuid + ext;
+            case THUMBNAIL -> {
+                if (dashboardId == null) {
+                    throw new BusinessException(FileErrorCode.MISSING_DASHBOARD_ID);
+                }
+                String ts = OffsetDateTime.now().format(THUMBNAIL_TS);
+                yield props.upload().keyPrefix().thumbnail()
+                        + dashboardId + "/" + ts + "_" + uuid + ext;
+            }
         };
     }
 

@@ -32,8 +32,9 @@ public record AwsS3Properties(
     public record Upload(
             long maxSingleSize,
             long maxOcrSize,
+            long maxThumbnailSize,
             KeyPrefix keyPrefix
     ) {
-        public record KeyPrefix(String meeting, String businessCard) {}
+        public record KeyPrefix(String meeting, String businessCard, String thumbnail) {}
     }
 }
