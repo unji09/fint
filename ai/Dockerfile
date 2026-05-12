@@ -1,11 +1,21 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim AS base
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-install-project --no-dev
 
+
+FROM base AS test
+
+RUN uv sync --frozen --no-install-project --group dev
+COPY . .
+RUN uv sync --frozen --group dev
+
+
+FROM base AS builder
+
+RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev
 RUN mkdir -p /app/model
@@ -24,8 +34,6 @@ COPY --from=builder /app/app /app/app
 COPY --from=builder /app/model /app/model
 
 ENV PATH="/app/.venv/bin:$PATH"
-
-RUN python -c "from rapidocr import RapidOCR, LangDet, LangRec, OCRVersion, ModelType; RapidOCR(params={'Det.lang_type': LangDet.CH, 'Det.ocr_version': OCRVersion.PPOCRV5, 'Det.model_type': ModelType.MOBILE, 'Rec.lang_type': LangRec.KOREAN, 'Rec.ocr_version': OCRVersion.PPOCRV5, 'Rec.model_type': ModelType.MOBILE})"
 
 EXPOSE 8000
 

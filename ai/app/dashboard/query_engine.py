@@ -46,12 +46,13 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 
 ## 규칙
 - 핵심 발견을 3~5개로 요약하세요.
-- 위젯 타입은 데이터 특성에 맞게 선택하세요:
-  - BAR_CHART: 카테고리별 비교
-  - LINE_CHART: 시계열 추이
-  - PIE: 비율/구성
-  - KPI: 단일 핵심 지표
-  - TABLE: 상세 목록
+- 위젯 타입은 아래 기준을 **순서대로** 적용하여 선택하세요:
+  1. 결과가 1행이고 수치 1개 → **KPI**
+  2. 컬럼이 5개 이상이거나 행이 20개 초과인 목록 → **TABLE**
+  3. 날짜/기간 축이 있는 시계열 → **LINE_CHART**
+  4. 카테고리 3~10개의 비율/구성 → **PIE**
+  5. 카테고리별 수치 비교 (2~20개) → **BAR_CHART**
+  6. 위 어디에도 해당하지 않으면 → **TABLE**
 """
 
 
@@ -112,7 +113,7 @@ class QueryEngine:
 
         await _notify(QueryStatus.STYLING)
 
-        chart_data = format_chart_data(
+        corrected_type, chart_data = format_chart_data(
             insight.widget_type,
             rows,
             x_column=self._infer_x_column(intent, insight),
@@ -130,7 +131,7 @@ class QueryEngine:
         return {
             "status": "COMPLETED",
             "result": {
-                "widget_type": insight.widget_type.value,
+                "widget_type": corrected_type.value,
                 "title": insight.title,
                 "config": insight.config.model_dump(exclude_none=True),
                 "data": chart_data,
