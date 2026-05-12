@@ -44,11 +44,14 @@ class OnnxEmbedderClient:
         encodings = self._tokenizer.encode_batch(texts)
         input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
         attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
+        token_type_ids = np.zeros_like(input_ids)
 
-        outputs = self._session.run(
-            None,
-            {"input_ids": input_ids, "attention_mask": attention_mask},
-        )
+        feed = {"input_ids": input_ids, "attention_mask": attention_mask}
+        model_inputs = {i.name for i in self._session.get_inputs()}
+        if "token_type_ids" in model_inputs:
+            feed["token_type_ids"] = token_type_ids
+
+        outputs = self._session.run(None, feed)
         token_embeddings = outputs[0]
 
         mask_expanded = attention_mask[:, :, np.newaxis].astype(np.float32)
