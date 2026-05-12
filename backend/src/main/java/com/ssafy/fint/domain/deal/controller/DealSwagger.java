@@ -58,6 +58,12 @@ public interface DealSwagger {
     ApiResponse<DealUpdateResponse> update(CustomUserDetails me, Long dealId, DealUpdateRequest request);
 
     @Operation(
+        summary = "딜-담당자 연결 해제",
+        description = "딜과 담당자의 연결(deal_contacts)을 삭제한다. 성공 시 204 No Content 를 반환한다."
+    )
+    ApiResponse<Void> unlinkContact(CustomUserDetails me, Long dealId, Long contactId);
+
+    @Operation(
         summary = "딜 소프트 삭제",
         description = "현재 테넌트의 영업건을 소프트 삭제한다 (deals.is_deleted = true). "
             + "DELETE /deals/{dealId} 로 라우팅하며, 실제 데이터는 보존된다. "
