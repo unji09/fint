@@ -662,3 +662,83 @@ class TestCrossTableColumns:
         )
         with pytest.raises(QueryBuildError):
             build_query(spec, tenant_id=1)
+
+
+class TestAliasSanitization:
+    def test_aggregate_with_alias_stripped(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["SUM(amount) as total_amount"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "SUM(deals.amount)" in sql
+
+    def test_date_trunc_with_alias_stripped(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', created_at) AS month"],
+            group_by=["DATE_TRUNC('month', created_at) AS month"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "DATE_TRUNC('month', deals.created_at)" in sql
+        assert "GROUP BY DATE_TRUNC('month', deals.created_at)" in sql
+
+    def test_plain_column_without_alias_unchanged(self):
+        spec = QuerySpec(
+            table="accounts",
+            columns=["name", "industry"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "accounts.name" in sql
+        assert "accounts.industry" in sql
+
+    def test_mixed_alias_and_plain_columns(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "SUM(amount) AS total"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            group_by=["accounts.name"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "accounts.name" in sql
+        assert "SUM(deals.amount)" in sql
+
+
+class TestOrderByExpressions:
+    def test_order_by_date_trunc(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', created_at)", "COUNT(*)"],
+            group_by=["DATE_TRUNC('month', created_at)"],
+            order_by=[OrderSpec(column="DATE_TRUNC('month', created_at)")],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "ORDER BY DATE_TRUNC('month', deals.created_at)" in sql
+
+    def test_order_by_aggregate(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "SUM(amount)"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            group_by=["accounts.name"],
+            order_by=[OrderSpec(column="SUM(amount)", direction=OrderDirection.DESC)],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "ORDER BY SUM(deals.amount) DESC" in sql
+
+    def test_order_by_with_alias_stripped(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', created_at) AS month", "COUNT(*)"],
+            group_by=["DATE_TRUNC('month', created_at) AS month"],
+            order_by=[OrderSpec(column="DATE_TRUNC('month', created_at) AS month")],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "ORDER BY DATE_TRUNC('month', deals.created_at)" in sql
