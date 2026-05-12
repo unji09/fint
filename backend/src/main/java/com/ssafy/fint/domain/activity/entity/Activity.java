@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.activity.entity;
 
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
+import com.ssafy.fint.domain.mood.MoodStatus;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.global.common.entity.BaseUpdatableEntity;
 import jakarta.persistence.Column;
@@ -84,6 +85,10 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "stt_status", nullable = false, length = 20)
     private SttStatus sttStatus;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mood_status", nullable = false, length = 20)
+    private MoodStatus moodStatus;
+
     @Builder
     private Activity(
             User user,
@@ -108,6 +113,7 @@ public class Activity extends BaseUpdatableEntity {
         this.attendees = attendees;
         this.memo = memo;
         this.sttStatus = SttStatus.PENDING;
+        this.moodStatus = MoodStatus.PENDING;
     }
 
     public void changeSttStatus(SttStatus sttStatus) {
@@ -158,4 +164,9 @@ public class Activity extends BaseUpdatableEntity {
     public void changeMemo(String memo) {
         this.memo = memo;
     }
+
+    public void changeMoodStatus(MoodStatus moodStatus) {
+        this.moodStatus = moodStatus;
+    }
 }
+

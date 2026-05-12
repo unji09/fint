@@ -30,6 +30,9 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+internal:
+  secret: your-secret-key-here
+
 # Swagger
 springdoc:
   swagger-ui:

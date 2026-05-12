@@ -85,7 +85,7 @@ class DealServiceCreateTest {
         assertThat(res.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(res.teamId()).isNull();
         assertThat(res.title()).isEqualTo("신규 딜");
-        assertThat(res.probability()).isEqualTo((short) 70);
+        assertThat(res.probability()).isEqualTo((short) 84);
         assertThat(res.contacts()).isEmpty();
 
         verify(dealRepository).save(any(Deal.class));

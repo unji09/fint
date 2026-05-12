@@ -4,6 +4,7 @@ import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
 import com.ssafy.fint.domain.deal.dto.DealListResponse;
+import com.ssafy.fint.domain.deal.dto.DealStageResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.global.ApiResponse;
@@ -42,12 +43,25 @@ public interface DealSwagger {
     ApiResponse<DealDetailResponse> findDetail(CustomUserDetails me, Long dealId);
 
     @Operation(
+        summary = "딜 파이프라인 단계 조회",
+        description = "해당 딜의 일정 중 시작일이 현재 이하인 것 가운데 가장 최근 일정의 파이프라인 단계를 반환한다. "
+            + "해당하는 일정이 없으면 stageId/stageName 모두 null 이다."
+    )
+    ApiResponse<DealStageResponse> findCurrentStage(CustomUserDetails me, Long dealId);
+
+    @Operation(
         summary = "딜 수정",
         description = "현재 테넌트의 영업건을 부분 수정한다. null 이 아닌 필드만 반영된다. "
             + "pipelineStageId 는 활동 등록 시 단계 자동 추적 용도로 통합된 필드이며, "
             + "본 PATCH 호출에서도 직접 단계 변경 용도로 사용 가능하다."
     )
     ApiResponse<DealUpdateResponse> update(CustomUserDetails me, Long dealId, DealUpdateRequest request);
+
+    @Operation(
+        summary = "딜-담당자 연결 해제",
+        description = "딜과 담당자의 연결(deal_contacts)을 삭제한다. 성공 시 204 No Content 를 반환한다."
+    )
+    ApiResponse<Void> unlinkContact(CustomUserDetails me, Long dealId, Long contactId);
 
     @Operation(
         summary = "딜 소프트 삭제",

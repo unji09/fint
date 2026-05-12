@@ -6,6 +6,7 @@ from app.clients.anthropic import AnthropicClient
 from app.clients.embedder import OnnxEmbedderClient
 from app.clients.gpu import GpuServerClient
 from app.clients.llm import LLMClient
+from app.clients.naver import NaverNewsClient
 from app.clients.openai import OpenAIClient
 from app.clients.s3 import BotoS3Client, S3Client
 from app.clients.whisper import (
@@ -136,6 +137,31 @@ def get_gpu_client(
 
     return _gpu_client(
         settings.GPU_SERVER_URL,
+    )
+
+
+@lru_cache
+def _naver_client(
+    client_id: str,
+    client_secret: str,
+) -> NaverNewsClient:
+    return NaverNewsClient(
+        client_id=client_id,
+        client_secret=client_secret,
+    )
+
+
+def get_naver_client(
+    settings: Settings = Depends(get_settings),
+) -> NaverNewsClient:
+    if not settings.NAVER_CLIENT_ID or not settings.NAVER_CLIENT_SECRET:
+        raise BusinessException(
+            CommonErrorCode.INVALID_INPUT,
+            "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 환경변수가 설정되지 않았습니다",
+        )
+    return _naver_client(
+        settings.NAVER_CLIENT_ID,
+        settings.NAVER_CLIENT_SECRET,
     )
 
 

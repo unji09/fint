@@ -83,8 +83,8 @@ pipeline {
                     steps {
                         dir('ai') {
                             sh '''
-                                docker build --no-cache --target test -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} .
-                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} uv run pytest --tb=short -q
+                                docker build --target test -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} .
+                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} python -m pytest --tb=short -q
                             '''
                             script {
                                 if (env.gitlabMergeRequestId != null) {

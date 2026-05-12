@@ -101,9 +101,21 @@ class _PrefixCapturingTokenizer(_StubTokenizer):
         return super().encode_batch(texts)
 
 
+class _StubInputMeta:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
 class _StubSession:
     def __init__(self, dim: int) -> None:
         self._dim = dim
+
+    def get_inputs(self) -> list[_StubInputMeta]:
+        return [
+            _StubInputMeta("input_ids"),
+            _StubInputMeta("attention_mask"),
+            _StubInputMeta("token_type_ids"),
+        ]
 
     def run(self, _output_names, input_feed: dict) -> list[np.ndarray]:
         batch_size, seq_len = input_feed["input_ids"].shape

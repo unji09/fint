@@ -75,7 +75,8 @@ ai/tests/resources/
 **/.claude/settings.local.json
 
 # ===== Personal workspace (local only, not tracked) =====
-mydocs/
+backend/mydocs/
+ai/mydocs/
 
 # ===== Package Files =====
 *.war
