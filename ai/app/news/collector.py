@@ -13,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.embedder import EmbedderClient
 from app.clients.naver import NaverNewsClient
 from app.news.naver_collector import AccountInfo, NaverNewsCollector
-from app.schemas.news import CollectedArticle, ExistingArticleLink, NewsCollectResponse
+from app.schemas.news import (
+    CollectedNewsArticle,
+    DartResult,
+    ExistingNewsLink,
+    NewsResult,
+    SignalsCollectResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,57 +53,64 @@ async def collect_news(
     naver_client: NaverNewsClient | None = None,
     embedder: EmbedderClient | None = None,
     include_embeddings: bool = True,
-) -> NewsCollectResponse:
+) -> SignalsCollectResponse:
     accounts = await get_accounts_for_tenant(db, tenant_id)
     if not accounts:
-        return NewsCollectResponse(
+        return SignalsCollectResponse(
             total_accounts=0,
-            new_articles=[],
-            existing_links=[],
+            news=NewsResult(new_articles=[], existing_links=[]),
+            dart=DartResult(new_disclosures=[], existing_rcept_nos=[]),
             errors=["해당 tenant에 등록된 고객사가 없습니다"],
         )
 
     errors: list[str] = []
-    new_articles: list[CollectedArticle] = []
-    existing_links: list[ExistingArticleLink] = []
+    news_result = NewsResult(new_articles=[], existing_links=[])
+    dart_result = DartResult(new_disclosures=[], existing_rcept_nos=[])
 
     if source in ("naver", "all"):
         if naver_client is None or embedder is None:
             errors.append("네이버 뉴스 수집에 필요한 클라이언트가 설정되지 않았습니다")
         else:
             collector = NaverNewsCollector(naver_client, embedder)
-            naver_result = await collector.collect_for_accounts(accounts, db)
+            naver_data = await collector.collect_for_accounts(accounts, db)
 
-            for article_data in naver_result.new_articles:
+            new_articles = []
+            for ad in naver_data.new_articles:
                 new_articles.append(
-                    CollectedArticle(
-                        title=article_data.item.title,
-                        link=article_data.item.link,
-                        original_link=article_data.item.original_link or None,
-                        published_at=article_data.item.pub_date,
-                        content_summary=article_data.item.description or None,
-                        title_embedding=article_data.title_embedding if include_embeddings else [],
-                        summary_embedding=article_data.summary_embedding if include_embeddings else [],
-                        account_ids=article_data.account_ids,
+                    CollectedNewsArticle(
+                        title=ad.item.title,
+                        link=ad.item.link,
+                        original_link=ad.item.original_link or None,
+                        published_at=ad.item.pub_date,
+                        content_summary=ad.item.description or None,
+                        title_embedding=ad.title_embedding if include_embeddings else [],
+                        summary_embedding=ad.summary_embedding if include_embeddings else [],
+                        account_ids=ad.account_ids,
                     )
                 )
 
-            for link, account_ids in naver_result.existing_links.items():
-                existing_links.append(
-                    ExistingArticleLink(link=link, account_ids=account_ids)
-                )
+            existing_links = [
+                ExistingNewsLink(link=link, account_ids=acct_ids)
+                for link, acct_ids in naver_data.existing_links.items()
+            ]
+
+            news_result = NewsResult(
+                new_articles=new_articles,
+                existing_links=existing_links,
+            )
 
     if source in ("dart", "all"):
         errors.append("DART 수집은 추후 구현 예정입니다")
 
     logger.info(
-        "collect_news done: tenant_id=%d, accounts=%d, new_articles=%d, existing_links=%d",
-        tenant_id, len(accounts), len(new_articles), len(existing_links),
+        "collect done: tenant=%d, accounts=%d, news_new=%d, news_existing=%d",
+        tenant_id, len(accounts),
+        len(news_result.new_articles), len(news_result.existing_links),
     )
 
-    return NewsCollectResponse(
+    return SignalsCollectResponse(
         total_accounts=len(accounts),
-        new_articles=new_articles,
-        existing_links=existing_links,
+        news=news_result,
+        dart=dart_result,
         errors=errors,
     )

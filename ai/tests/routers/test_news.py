@@ -12,22 +12,25 @@ from app.core.db import get_db
 from app.core.errors import register_exception_handlers
 from app.core.security import get_tenant_id
 from app.routers.news import router
-from app.schemas.news import NewsCollectResponse
+from app.schemas.news import (
+    DartResult,
+    NewsResult,
+    SignalsCollectResponse,
+)
 
 TENANT_ID = 1
 
-MOCK_RESULT = NewsCollectResponse(
+MOCK_RESULT = SignalsCollectResponse(
     total_accounts=3,
-    new_articles=[],
-    existing_links=[],
+    news=NewsResult(new_articles=[], existing_links=[]),
+    dart=DartResult(new_disclosures=[], existing_rcept_nos=[]),
     errors=[],
 )
 
 
 @pytest.fixture
 def mock_db():
-    db = AsyncMock()
-    return db
+    return AsyncMock()
 
 
 @pytest.fixture
@@ -63,9 +66,9 @@ async def ac(test_app):
         yield client
 
 
-class TestCollectNewsEndpoint:
+class TestCollectSignalsEndpoint:
     @pytest.mark.asyncio
-    async def test_returns_200_on_success(self, ac):
+    async def test_returns_200_with_news_and_dart_sections(self, ac):
         with patch(
             "app.routers.news.collect_news",
             new_callable=AsyncMock,
@@ -78,9 +81,12 @@ class TestCollectNewsEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == 200
-        assert body["data"]["new_articles"] == []
-        assert body["data"]["existing_links"] == []
-        assert body["data"]["total_accounts"] == 3
+        data = body["data"]
+        assert data["total_accounts"] == 3
+        assert data["news"]["new_articles"] == []
+        assert data["news"]["existing_links"] == []
+        assert data["dart"]["new_disclosures"] == []
+        assert data["dart"]["existing_rcept_nos"] == []
 
     @pytest.mark.asyncio
     async def test_missing_tenant_returns_401(self, mock_db, mock_naver, mock_embedder):
@@ -128,10 +134,10 @@ class TestCollectNewsEndpoint:
         with patch(
             "app.routers.news.collect_news",
             new_callable=AsyncMock,
-            return_value=NewsCollectResponse(
+            return_value=SignalsCollectResponse(
                 total_accounts=3,
-                new_articles=[],
-                existing_links=[],
+                news=NewsResult(new_articles=[], existing_links=[]),
+                dart=DartResult(new_disclosures=[], existing_rcept_nos=[]),
                 errors=["DART 수집은 추후 구현 예정입니다"],
             ),
         ):
