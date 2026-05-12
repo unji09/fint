@@ -10,6 +10,7 @@ FROM base AS test
 
 RUN uv sync --frozen --no-install-project --group dev
 COPY . .
+RUN uv sync --frozen --group dev
 ENV PATH="/app/.venv/bin:$PATH"
 
 
