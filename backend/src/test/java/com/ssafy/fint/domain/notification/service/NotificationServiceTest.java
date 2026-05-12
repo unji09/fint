@@ -7,7 +7,7 @@ import com.ssafy.fint.domain.ai.repository.AiSuggestionRepository;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
 import com.ssafy.fint.domain.notification.dto.NotificationReadAllResponse;
-import com.ssafy.fint.domain.notification.exception.NotificationErrorCode;
+import com.ssafy.fint.global.exception.NotificationErrorCode;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.entity.UserRole;
