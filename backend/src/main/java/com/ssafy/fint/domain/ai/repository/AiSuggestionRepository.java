@@ -57,4 +57,18 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
             @Param("userId") Long userId,
             Pageable pageable
     );
+
+    @Query("""
+            select s from AiSuggestion s
+            join s.account a
+            join AccountUserAssignment aua on aua.account = a
+            join aua.user u
+            where s.aiSuggestionId = :suggestionId
+              and u.userId = :userId
+              and u.isDeleted = false
+            """)
+    Optional<AiSuggestion> findByIdAndUserId(
+            @Param("suggestionId") Long suggestionId,
+            @Param("userId") Long userId
+    );
 }
