@@ -72,4 +72,14 @@ public interface DashboardSwagger {
             Long widgetId,
             WidgetUpdateRequest request
     );
+
+    @Operation(
+            summary = "위젯 삭제",
+            description = "위젯과 연결된 쿼리를 함께 삭제한다."
+    )
+    ResponseEntity<Void> deleteWidget(
+            CustomUserDetails me,
+            Long dashboardId,
+            Long widgetId
+    );
 }
