@@ -3,12 +3,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.clients import warmup_embedder_client, warmup_ocr_client
+from app.clients import warmup_embedder_client
 from app.core.config import get_settings
 from app.core.db import close_db, init_db
 from app.core.errors import register_exception_handlers
 from app.core.redis import close_redis, init_redis
-from app.routers import dashboard, health, ocr, stt
+from app.routers import dashboard, health, ocr, strategy, stt
 
 
 @asynccontextmanager
@@ -19,10 +19,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logging.basicConfig(level=settings.LOG_LEVEL, force=True)
     init_db(settings.database_url)
     init_redis(settings.redis_url)
-    try:
-        await warmup_ocr_client().warmup()
-    except Exception:
-        logging.getLogger(__name__).warning("OCR warmup failed — OCR endpoint disabled")
 
     from pathlib import Path
 
@@ -50,5 +46,6 @@ def create_app() -> FastAPI:
     app.include_router(stt.router)
     app.include_router(dashboard.router)
     app.include_router(ocr.router)
+    app.include_router(strategy.router)
 
     return app

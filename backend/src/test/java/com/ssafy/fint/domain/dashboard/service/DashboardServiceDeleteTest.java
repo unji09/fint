@@ -1,18 +1,19 @@
 package com.ssafy.fint.domain.dashboard.service;
 
-import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.entity.Dashboard;
+import com.ssafy.fint.domain.dashboard.repository.DashboardQueryRepository;
 import com.ssafy.fint.domain.dashboard.repository.DashboardRepository;
+import com.ssafy.fint.domain.dashboard.repository.DashboardWidgetRepository;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.entity.UserRole;
 import com.ssafy.fint.global.exception.BusinessException;
-import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,15 +21,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class DashboardServiceUpdateTest {
+class DashboardServiceDeleteTest {
 
     private static final long TENANT_ID = 1L;
     private static final long OWNER_USER_ID = 99L;
@@ -36,6 +36,8 @@ class DashboardServiceUpdateTest {
     private static final long DASHBOARD_ID = 5L;
 
     @Mock private DashboardRepository dashboardRepository;
+    @Mock private DashboardWidgetRepository dashboardWidgetRepository;
+    @Mock private DashboardQueryRepository dashboardQueryRepository;
 
     @InjectMocks private DashboardService dashboardService;
 
@@ -45,39 +47,17 @@ class DashboardServiceUpdateTest {
             new CustomUserDetails(STRANGER_USER_ID, TENANT_ID, "MEMBER");
 
     @Test
-    @DisplayName("title 전달 시 대시보드 제목이 변경된다.")
-    void updateTitle() {
-        Dashboard dashboard = newDashboard(OWNER_USER_ID, "원래 제목");
+    @DisplayName("소유자가 삭제하면 위젯 → 쿼리 → 대시보드 순서로 삭제된다.")
+    void deleteSuccess() {
+        Dashboard dashboard = newDashboard(OWNER_USER_ID);
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
 
-        dashboardService.update(owner, DASHBOARD_ID, new DashboardUpdateRequest("새 제목", null));
+        dashboardService.delete(owner, DASHBOARD_ID);
 
-        assertThat(dashboard.getTitle()).isEqualTo("새 제목");
-    }
-
-    @Test
-    @DisplayName("thumbnailUrl 만 전달 시 썸네일만 변경된다.")
-    void updateOnlyThumbnailUrl() {
-        Dashboard dashboard = newDashboard(OWNER_USER_ID, "제목");
-        when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
-
-        dashboardService.update(owner, DASHBOARD_ID,
-                new DashboardUpdateRequest(null, "https://s3.example.com/thumb.png"));
-
-        assertThat(dashboard.getTitle()).isEqualTo("제목");
-        assertThat(dashboard.getThumbnailUrl()).isEqualTo("https://s3.example.com/thumb.png");
-    }
-
-    @Test
-    @DisplayName("title 과 thumbnailUrl 모두 null 이면 INVALID_INPUT 으로 차단된다.")
-    void allFieldsNullRejected() {
-        assertThatThrownBy(() -> dashboardService.update(
-                owner, DASHBOARD_ID, new DashboardUpdateRequest(null, null)))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(CommonErrorCode.INVALID_INPUT);
-
-        verify(dashboardRepository, never()).findById(anyLong());
+        InOrder order = inOrder(dashboardWidgetRepository, dashboardQueryRepository, dashboardRepository);
+        order.verify(dashboardWidgetRepository).deleteByDashboard(dashboard);
+        order.verify(dashboardQueryRepository).deleteByDashboard(dashboard);
+        order.verify(dashboardRepository).delete(dashboard);
     }
 
     @Test
@@ -85,29 +65,30 @@ class DashboardServiceUpdateTest {
     void dashboardNotFound() {
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> dashboardService.update(
-                owner, DASHBOARD_ID, new DashboardUpdateRequest("새 제목", null)))
+        assertThatThrownBy(() -> dashboardService.delete(owner, DASHBOARD_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_NOT_FOUND);
+
+        verify(dashboardRepository, never()).delete(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    @DisplayName("호출자가 대시보드 소유자가 아니면 DASHBOARD_ACCESS_DENIED 로 차단된다.")
+    @DisplayName("호출자가 소유자가 아니면 DASHBOARD_ACCESS_DENIED 로 차단된다.")
     void forbiddenWhenNotOwner() {
-        Dashboard dashboard = newDashboard(OWNER_USER_ID, "제목");
+        Dashboard dashboard = newDashboard(OWNER_USER_ID);
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
 
-        assertThatThrownBy(() -> dashboardService.update(
-                stranger, DASHBOARD_ID, new DashboardUpdateRequest("새 제목", null)))
+        assertThatThrownBy(() -> dashboardService.delete(stranger, DASHBOARD_ID))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
 
-        assertThat(dashboard.getTitle()).isEqualTo("제목");
+        verify(dashboardWidgetRepository, never()).deleteByDashboard(org.mockito.ArgumentMatchers.any());
+        verify(dashboardRepository, never()).delete(org.mockito.ArgumentMatchers.any());
     }
 
-    private Dashboard newDashboard(long ownerUserId, String title) {
+    private Dashboard newDashboard(long ownerUserId) {
         User user = User.builder()
                 .tenant(newTenant())
                 .role(UserRole.MEMBER)
@@ -117,7 +98,7 @@ class DashboardServiceUpdateTest {
         ReflectionTestUtils.setField(user, "userId", ownerUserId);
         Dashboard dashboard = Dashboard.builder()
                 .owner(user)
-                .title(title)
+                .title("테스트 대시보드")
                 .build();
         ReflectionTestUtils.setField(dashboard, "dashboardId", DASHBOARD_ID);
         return dashboard;

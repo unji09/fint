@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -80,6 +81,16 @@ public class DashboardController implements DashboardSwagger {
     }
 
     @Override
+    @DeleteMapping("/{dashboardId}")
+    public ResponseEntity<Void> delete(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId
+    ) {
+        dashboardService.delete(me, dashboardId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
     @PatchMapping("/{dashboardId}/widgets/{widgetId}")
     public ResponseEntity<Void> updateWidget(
             @AuthenticationPrincipal CustomUserDetails me,
@@ -88,6 +99,17 @@ public class DashboardController implements DashboardSwagger {
             @Valid @RequestBody WidgetUpdateRequest request
     ) {
         dashboardWidgetService.update(me, dashboardId, widgetId, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    @DeleteMapping("/{dashboardId}/widgets/{widgetId}")
+    public ResponseEntity<Void> deleteWidget(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId,
+            @PathVariable Long widgetId
+    ) {
+        dashboardWidgetService.delete(me, dashboardId, widgetId);
         return ResponseEntity.noContent().build();
     }
 }

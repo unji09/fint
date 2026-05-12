@@ -270,4 +270,12 @@ def build_llm_schema_prompt() -> str:
     lines.append(f"  - {', '.join(sorted(ALLOWED_AGGREGATES))}(column_name) 또는 COUNT(*)")
     lines.append("")
 
+    lines.append("## Cross-Table Column Reference")
+    lines.append("JOIN된 테이블의 컬럼을 참조할 때는 `table.column` 형식을 사용하세요.")
+    lines.append("예: deals 테이블에서 고객사명으로 필터링할 때")
+    lines.append('  - joins에 {"table": "accounts", "on_self": "account_id", "on_other": "account_id"} 추가')
+    lines.append('  - filters의 column에 "accounts.name" 으로 지정')
+    lines.append('  - columns에도 "accounts.name" 형식으로 사용 가능')
+    lines.append("")
+
     return "\n".join(lines)

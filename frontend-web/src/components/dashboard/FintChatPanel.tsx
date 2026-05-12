@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { Step, WidgetResult } from '@/types/dashboard';
-import { BarChartSvg, LineChartSvg } from './ChartWidgets';
+import { BarChartSvg, LineChartSvg, SegmentChart, KpiCard, TableWidget } from './ChartWidgets';
 
 interface Props {
   steps: Step[];
@@ -292,7 +292,13 @@ export default function FintChatPanel({
               </div>
               <div style={{ padding: '6px 12px 8px' }}>
                 {widgetType === 'LINE_CHART' ? (
-                  <LineChartSvg size="mini" values={values} />
+                  <LineChartSvg size="mini" values={values} labels={labels} />
+                ) : widgetType === 'PIE' || widgetType === 'SEGMENT' ? (
+                  <SegmentChart labels={labels} values={values} />
+                ) : widgetType === 'KPI' ? (
+                  <KpiCard value={values?.[0]} label={labels?.[0]} />
+                ) : widgetType === 'TABLE' ? (
+                  <TableWidget data={data} />
                 ) : (
                   <BarChartSvg size="mini" values={values} labels={labels} />
                 )}
