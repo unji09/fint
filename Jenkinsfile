@@ -83,14 +83,8 @@ pipeline {
                     steps {
                         dir('ai') {
                             sh '''
-                                docker build --no-cache --target test -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} .
-                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} sh -c '
-                                    echo "=== FILES ===" && ls /app/ && echo "---" && ls /app/app/ 2>&1 || echo "NO /app/app/ DIR"
-                                    echo "=== ENV ===" && echo "PYTHONPATH=$PYTHONPATH" && echo "PATH=$PATH" && echo "CWD=$(pwd)"
-                                    echo "=== SYS.PATH ===" && python -c "import sys; print(chr(10).join(sys.path))"
-                                    echo "=== IMPORT TEST ===" && python -c "import app; print(app.__file__)" 2>&1 || echo "IMPORT FAILED"
-                                    echo "=== RUN PYTEST ===" && python -m pytest --tb=short -q
-                                '
+                                docker build --target test -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} .
+                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} python -m pytest --tb=short -q
                             '''
                             script {
                                 if (env.gitlabMergeRequestId != null) {
