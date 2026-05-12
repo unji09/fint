@@ -7,6 +7,7 @@ import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
 import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
+import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
@@ -79,6 +80,9 @@ public class ActivityService {
         if (request.dealId() != null) {
             deal = dealRepository.findByIdAndTenantId(request.dealId(), tenantId)
                     .orElseThrow(() -> new BusinessException(ActivityErrorCode.DEAL_NOT_FOUND));
+        } else if (request.newDeal() != null) {
+            DealCreateResponse created = dealService.create(SecurityUtils.currentPrincipal(), request.newDeal());
+            deal = dealRepository.getReferenceById(created.dealId());
         }
 
         PipelineStage stage = null;
@@ -111,8 +115,9 @@ public class ActivityService {
             );
         }
 
-        log.debug("[ActivityCreate] activityId={} tenantId={} userId={} dealId={} pipelineStageId={}",
-                saved.getActivityId(), tenantId, userId, request.dealId(), request.pipelineStageId());
+        log.debug("[ActivityCreate] activityId={} tenantId={} userId={} dealId={} newDeal={} pipelineStageId={}",
+                saved.getActivityId(), tenantId, userId, request.dealId(),
+                request.newDeal() != null, request.pipelineStageId());
         return ActivityCreateResponse.from(saved);
     }
 

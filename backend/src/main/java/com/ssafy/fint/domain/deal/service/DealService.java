@@ -158,15 +158,15 @@ public class DealService {
     }
 
     @Transactional(readOnly = true)
-    public DealListResponse findList(CustomUserDetails me, Long accountId, Pageable pageable) {
+    public DealListResponse findList(CustomUserDetails me, Long accountId, Long contactId, Pageable pageable) {
         User caller = userRepository.findById(me.getUserId())
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_TOKEN));
 
         boolean tenantWide = UserRole.ADMIN.name().equals(me.getRole()) || caller.getTeam() == null;
 
         Page<Deal> page = tenantWide
-                ? dealRepository.findAllByTenant(me.getTenantId(), accountId, pageable)
-                : dealRepository.findAllByTeam(caller.getTeam().getTeamId(), accountId, pageable);
+                ? dealRepository.findAllByTenant(me.getTenantId(), accountId, contactId, pageable)
+                : dealRepository.findAllByTeam(caller.getTeam().getTeamId(), accountId, contactId, pageable);
 
         List<Deal> deals = page.getContent();
         if (deals.isEmpty()) {

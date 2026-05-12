@@ -35,6 +35,8 @@ pipeline {
         }
 
         // ===== CI: 변경된 영역만 테스트 =====
+        // MR → 테스트 + 프로덕션 Dockerfile 빌드 검증
+        // dev 머지 → 테스트만 (빌드/배포는 CD 단계에서 수행)
         stage('Test') {
             parallel {
                 stage('Backend Test') {
@@ -42,6 +44,13 @@ pipeline {
                     steps {
                         dir('backend') {
                             sh './gradlew test --no-daemon'
+                            script {
+                                if (env.gitlabMergeRequestId != null) {
+                                    sh './gradlew bootJar -x test --no-daemon'
+                                    sh "docker build -f Dockerfile.runtime -t ${IMAGE_NAME}:ci-build-${BUILD_NUMBER} ."
+                                    sh "docker rmi ${IMAGE_NAME}:ci-build-${BUILD_NUMBER} || true"
+                                }
+                            }
                         }
                     }
                     post {
@@ -63,23 +72,37 @@ pipeline {
                             """
                         }
                     }
+                    post {
+                        always {
+                            sh "docker rmi ${FRONTEND_IMAGE_NAME}:ci-${BUILD_NUMBER} || true"
+                        }
+                    }
                 }
                 stage('AI Test') {
                     when { expression { env.AI_CHANGED == 'true' } }
                     steps {
                         dir('ai') {
                             sh '''
-                                docker build -f - -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} . <<'DOCKERFILE'
-FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-WORKDIR /app
-COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-install-project --group dev
-COPY . .
-RUN uv sync --frozen --group dev
-DOCKERFILE
-                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} uv run pytest --tb=short -q
+                                docker build --no-cache --target test -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} .
+                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} sh -c '
+                                    echo "=== FILES ===" && ls /app/ && echo "---" && ls /app/app/ 2>&1 || echo "NO /app/app/ DIR"
+                                    echo "=== ENV ===" && echo "PYTHONPATH=$PYTHONPATH" && echo "PATH=$PATH" && echo "CWD=$(pwd)"
+                                    echo "=== SYS.PATH ===" && python -c "import sys; print(chr(10).join(sys.path))"
+                                    echo "=== IMPORT TEST ===" && python -c "import app; print(app.__file__)" 2>&1 || echo "IMPORT FAILED"
+                                    echo "=== RUN PYTEST ===" && python -m pytest --tb=short -q
+                                '
                             '''
+                            script {
+                                if (env.gitlabMergeRequestId != null) {
+                                    sh "docker build -t ${AI_IMAGE_NAME}:ci-build-${BUILD_NUMBER} ."
+                                    sh "docker rmi ${AI_IMAGE_NAME}:ci-build-${BUILD_NUMBER} || true"
+                                }
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            sh "docker rmi ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} || true"
                         }
                     }
                 }

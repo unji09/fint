@@ -13,8 +13,6 @@ import com.ssafy.fint.domain.account.repository.ContactRepository;
 import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
-import com.ssafy.fint.domain.deal.entity.Deal;
-import com.ssafy.fint.domain.deal.repository.DealRepository;
 import com.ssafy.fint.domain.tenant.entity.Team;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
@@ -26,24 +24,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -77,9 +69,6 @@ class AccountServiceFindDetailTest {
 
     @Mock
     private ContactRepository contactRepository;
-
-    @Mock
-    private DealRepository dealRepository;
 
     @InjectMocks
     private AccountService accountService;
@@ -132,9 +121,6 @@ class AccountServiceFindDetailTest {
                 .willReturn(Optional.empty());
         given(contactRepository.findAllByAccount_AccountId(ACCOUNT_ID))
                 .willReturn(List.of());
-        given(dealRepository.findByAccountAndScope(
-                eq(ACCOUNT_ID), isNull(), isNull(), any(Pageable.class)))
-                .willReturn(List.of());
 
         AccountDetailResponse result = accountService.findDetail(ACCOUNT_ID);
 
@@ -148,7 +134,6 @@ class AccountServiceFindDetailTest {
         assertThat(result.meetingCount()).isZero();
         assertThat(result.lastContactAt()).isNull();
         assertThat(result.contacts()).isEmpty();
-        assertThat(result.deals()).isEmpty();
     }
 
     @Test
@@ -188,9 +173,6 @@ class AccountServiceFindDetailTest {
                 .willReturn(Optional.empty());
         given(contactRepository.findAllByAccount_AccountId(ACCOUNT_ID))
                 .willReturn(List.of());
-        given(dealRepository.findByAccountAndScope(
-                eq(ACCOUNT_ID), isNull(), isNull(), any(Pageable.class)))
-                .willReturn(List.of());
 
         AccountDetailResponse result = accountService.findDetail(ACCOUNT_ID);
 
@@ -199,7 +181,7 @@ class AccountServiceFindDetailTest {
     }
 
     @Test
-    @DisplayName("미팅 카운트·마지막 미팅 시각·contacts·deals(preview) 가 합성되어 반환된다")
+    @DisplayName("미팅 카운트·마지막 미팅 시각·contacts 가 합성되어 반환된다")
     void aggregatesMeetingAndContactsAndDeals() {
         Account account = mock(Account.class);
         given(account.getAccountId()).willReturn(ACCOUNT_ID);
@@ -232,20 +214,6 @@ class AccountServiceFindDetailTest {
         given(contactRepository.findAllByAccount_AccountId(ACCOUNT_ID))
                 .willReturn(List.of(contact));
 
-        Deal deal = mock(Deal.class);
-        given(deal.getDealId()).willReturn(201L);
-        given(deal.getTitle()).willReturn("플랫폼 라이선스");
-        given(deal.getCurrentPipeline()).willReturn("PROPOSAL");
-        given(deal.getProbability()).willReturn((short) 70);
-        given(deal.getAmount()).willReturn(new BigDecimal("12345678.90"));
-
-        ArgumentCaptor<Long> teamCaptor = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<Long> mineCaptor = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        given(dealRepository.findByAccountAndScope(
-                eq(ACCOUNT_ID), teamCaptor.capture(), mineCaptor.capture(), pageableCaptor.capture()))
-                .willReturn(List.of(deal));
-
         AccountDetailResponse result = accountService.findDetail(ACCOUNT_ID);
 
         assertThat(result.meetingCount()).isEqualTo(3);
@@ -258,20 +226,6 @@ class AccountServiceFindDetailTest {
         assertThat(contactItem.title()).isEqualTo("팀장");
         assertThat(contactItem.phone()).isEqualTo("010-1111-2222");
         assertThat(contactItem.email()).isEqualTo("kim@kakao.com");
-
-        assertThat(result.deals()).hasSize(1);
-        AccountDetailResponse.DealItem dealItem = result.deals().get(0);
-        assertThat(dealItem.dealId()).isEqualTo(201L);
-        assertThat(dealItem.title()).isEqualTo("플랫폼 라이선스");
-        assertThat(dealItem.stage()).isEqualTo("PROPOSAL");
-        assertThat(dealItem.probability()).isEqualTo(70);
-        assertThat(dealItem.amount()).isEqualTo(12345678L);
-
-        // preview: caller team 전달 / mineOnly 미적용(null) / size = 3
-        assertThat(teamCaptor.getValue()).isEqualTo(CURRENT_TEAM_ID);
-        assertThat(mineCaptor.getValue()).isNull();
-        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(3);
-        assertThat(pageableCaptor.getValue().getPageNumber()).isZero();
     }
 
     private void givenCallerWithoutTeam() {
