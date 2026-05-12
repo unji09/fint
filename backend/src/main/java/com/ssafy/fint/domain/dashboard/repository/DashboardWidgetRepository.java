@@ -14,4 +14,6 @@ public interface DashboardWidgetRepository extends JpaRepository<DashboardWidget
     List<DashboardWidget> findByDashboard(Dashboard dashboard);
 
     List<DashboardWidget> findAllByDashboard_DashboardId(Long dashboardId);
+
+    void deleteByDashboard(Dashboard dashboard);
 }

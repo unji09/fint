@@ -550,3 +550,195 @@ class TestTenantIsolation:
         assert "JOIN account_user_assignment" in sql
         assert "JOIN users" in sql
         assert "users.tenant_id" in sql
+
+
+class TestCrossTableColumns:
+    def test_filter_on_joined_table_column(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title", "amount"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            filters=[FilterCondition(column="accounts.name", operator=FilterOperator.LIKE, value="%삼성%")],
+        )
+        sql, params = build_query(spec, tenant_id=1)
+
+        assert "accounts.name LIKE" in sql
+        assert "%삼성%" in params.values()
+
+    def test_select_joined_table_column(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "amount"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "accounts.name" in sql
+
+    def test_group_by_joined_table_column(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "SUM(amount)"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            group_by=["accounts.name"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "GROUP BY accounts.name" in sql
+
+    def test_order_by_joined_table_column(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "amount"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            order_by=[OrderSpec(column="accounts.name")],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "ORDER BY accounts.name" in sql
+
+    def test_main_table_dot_notation(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["deals.title", "amount"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "deals.title" in sql
+
+    def test_aggregate_on_joined_table(self):
+        spec = QuerySpec(
+            table="activities",
+            columns=["deals.title", "COUNT(*)"],
+            joins=[JoinSpec(table="deals", on_self="deal_id", on_other="deal_id")],
+            group_by=["deals.title"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "deals.title" in sql
+        assert "GROUP BY deals.title" in sql
+
+    def test_filter_on_non_filterable_joined_column_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            joins=[JoinSpec(table="activities", on_self="deal_id", on_other="deal_id")],
+            filters=[FilterCondition(column="activities.attendees", operator=FilterOperator.EQ, value="test")],
+        )
+        with pytest.raises(QueryBuildError, match="필터링할 수 없는 컬럼"):
+            build_query(spec, tenant_id=1)
+
+    def test_unjoined_table_column_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "amount"],
+        )
+        with pytest.raises(QueryBuildError):
+            build_query(spec, tenant_id=1)
+
+    def test_invalid_table_in_dot_notation_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["users.password_hash"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+        )
+        with pytest.raises(QueryBuildError):
+            build_query(spec, tenant_id=1)
+
+    def test_invalid_column_in_dot_notation_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.fake_col"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+        )
+        with pytest.raises(QueryBuildError, match="허용되지 않은 컬럼"):
+            build_query(spec, tenant_id=1)
+
+    def test_filter_on_unjoined_table_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[FilterCondition(column="accounts.name", operator=FilterOperator.EQ, value="test")],
+        )
+        with pytest.raises(QueryBuildError):
+            build_query(spec, tenant_id=1)
+
+
+class TestAliasSanitization:
+    def test_aggregate_with_alias_stripped(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["SUM(amount) as total_amount"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "SUM(deals.amount)" in sql
+
+    def test_date_trunc_with_alias_stripped(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', created_at) AS month"],
+            group_by=["DATE_TRUNC('month', created_at) AS month"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "DATE_TRUNC('month', deals.created_at)" in sql
+        assert "GROUP BY DATE_TRUNC('month', deals.created_at)" in sql
+
+    def test_plain_column_without_alias_unchanged(self):
+        spec = QuerySpec(
+            table="accounts",
+            columns=["name", "industry"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "accounts.name" in sql
+        assert "accounts.industry" in sql
+
+    def test_mixed_alias_and_plain_columns(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "SUM(amount) AS total"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            group_by=["accounts.name"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "accounts.name" in sql
+        assert "SUM(deals.amount)" in sql
+
+
+class TestOrderByExpressions:
+    def test_order_by_date_trunc(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', created_at)", "COUNT(*)"],
+            group_by=["DATE_TRUNC('month', created_at)"],
+            order_by=[OrderSpec(column="DATE_TRUNC('month', created_at)")],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "ORDER BY DATE_TRUNC('month', deals.created_at)" in sql
+
+    def test_order_by_aggregate(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["accounts.name", "SUM(amount)"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            group_by=["accounts.name"],
+            order_by=[OrderSpec(column="SUM(amount)", direction=OrderDirection.DESC)],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "ORDER BY SUM(deals.amount) DESC" in sql
+
+    def test_order_by_with_alias_stripped(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', created_at) AS month", "COUNT(*)"],
+            group_by=["DATE_TRUNC('month', created_at) AS month"],
+            order_by=[OrderSpec(column="DATE_TRUNC('month', created_at) AS month")],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+
+        assert "ORDER BY DATE_TRUNC('month', deals.created_at)" in sql

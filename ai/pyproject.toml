@@ -17,10 +17,8 @@ dependencies = [
     "instructor>=1.0",
     "boto3>=1.35.0",
     "python-jose[cryptography]>=3.3",
-    "rapidocr>=3.8",
     "onnxruntime>=1.18",
     "tokenizers>=0.21",
-    "opencv-python-headless>=4.8",
 ]
 
 [dependency-groups]
@@ -42,11 +40,6 @@ batch = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-override-dependencies = [
-    "opencv-python>=4.8; sys_platform == 'never'",
-    "opencv-python-headless>=4.8",
-]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
@@ -55,6 +48,9 @@ packages = ["app"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "real_gpu: 실제 GPU 서버가 필요한 E2E 테스트 (GPU_SERVER_URL 환경변수 필요)",
+]
 
 [tool.ruff]
 target-version = "py312"

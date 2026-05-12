@@ -67,6 +67,9 @@ public class SecurityConfig {
                 .requestMatchers(
                     path.matcher("/internal/**")
                 ).permitAll()
+                .requestMatchers(
+                    path.matcher("/api/v1/dashboards/queries/*/stream")
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(

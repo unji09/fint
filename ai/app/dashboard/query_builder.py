@@ -14,15 +14,75 @@ from app.dashboard.schema_context import (
 )
 from app.schemas.dashboard import FilterOperator, QuerySpec
 
-_AGG_PATTERN = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\((\*|\w+)\)$", re.IGNORECASE)
-_DATE_TRUNC_PATTERN = re.compile(r"^DATE_TRUNC\('(\w+)',\s*(\w+)\)$", re.IGNORECASE)
+_AGG_PATTERN = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\((\*|\w+(?:\.\w+)?)\)$", re.IGNORECASE)
+_DATE_TRUNC_PATTERN = re.compile(r"^DATE_TRUNC\('(\w+)',\s*(\w+(?:\.\w+)?)\)$", re.IGNORECASE)
+_DOT_COL_PATTERN = re.compile(r"^(\w+)\.(\w+)$")
+_ALIAS_PATTERN = re.compile(r"\s+[Aa][Ss]\s+\w+$")
 
 
 class QueryBuildError(Exception):
     pass
 
 
+def _get_available_tables(spec: QuerySpec) -> set[str]:
+    tables = {spec.table}
+    for join in spec.joins:
+        tables.add(join.table)
+    table_meta = ALLOWED_TABLES.get(spec.table)
+    if table_meta and table_meta.tenant_path:
+        for join_table, _, _ in table_meta.tenant_path.joins:
+            tables.add(join_table)
+    return tables
+
+
+def _resolve_column(col: str, spec: QuerySpec) -> tuple[str, str]:
+    dot_match = _DOT_COL_PATTERN.match(col)
+    if dot_match:
+        table, column = dot_match.group(1), dot_match.group(2)
+        available = _get_available_tables(spec)
+        if table not in available:
+            allowed_tables = get_allowed_table_names()
+            if table not in allowed_tables:
+                raise QueryBuildError(f"허용되지 않은 테이블: {table}")
+            raise QueryBuildError(f"JOIN되지 않은 테이블: {table} (joins에 추가 필요)")
+        cols = get_allowed_columns(table)
+        if column not in cols:
+            raise QueryBuildError(f"허용되지 않은 컬럼: {table}.{column}")
+        return table, column
+    cols = get_allowed_columns(spec.table)
+    if col not in cols:
+        raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{col}")
+    return spec.table, col
+
+
+def _strip_alias(col: str) -> str:
+    return _ALIAS_PATTERN.sub("", col).strip()
+
+
+def _sanitize_spec(spec: QuerySpec) -> QuerySpec:
+    updates: dict = {}
+    cleaned_cols = [_strip_alias(c) for c in spec.columns]
+    if cleaned_cols != spec.columns:
+        updates["columns"] = cleaned_cols
+    if spec.group_by:
+        cleaned_gb = [_strip_alias(c) for c in spec.group_by]
+        if cleaned_gb != spec.group_by:
+            updates["group_by"] = cleaned_gb
+    if spec.order_by:
+        cleaned_ob = [
+            o.model_copy(update={"column": _strip_alias(o.column)})
+            if _strip_alias(o.column) != o.column else o
+            for o in spec.order_by
+        ]
+        if any(a.column != b.column for a, b in zip(cleaned_ob, spec.order_by)):
+            updates["order_by"] = cleaned_ob
+    if updates:
+        spec = spec.model_copy(update=updates)
+    return spec
+
+
 def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
+    spec = _sanitize_spec(spec)
     if spec.columns == ["*"]:
         cols = get_allowed_columns(spec.table)
         if cols:
@@ -48,11 +108,14 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
             func, arg = agg_match.group(1).upper(), agg_match.group(2)
             if arg == "*":
                 return f'{func}(*) AS "{col}"'
-            return f'{func}({spec.table}.{arg}) AS "{col}"'
+            tbl, c = _resolve_column(arg, spec)
+            return f'{func}({tbl}.{c}) AS "{col}"'
         if dt_match:
             interval, column = dt_match.group(1), dt_match.group(2)
-            return f"DATE_TRUNC('{interval}', {spec.table}.{column}) AS \"{col}\""
-        return f"{spec.table}.{col}"
+            tbl, c = _resolve_column(column, spec)
+            return f"DATE_TRUNC('{interval}', {tbl}.{c}) AS \"{col}\""
+        tbl, c = _resolve_column(col, spec)
+        return f"{tbl}.{c}"
 
     select_exprs: list[str] = [_qualify_expr(col) for col in spec.columns]
 
@@ -91,7 +154,8 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
 
     # 사용자 필터
     for f in spec.filters:
-        col_ref = f"{spec.table}.{f.column}"
+        f_tbl, f_col = _resolve_column(f.column, spec)
+        col_ref = f"{f_tbl}.{f_col}"
         if f.operator in (FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL):
             sql_parts.append(f"AND {col_ref} {f.operator.value}")
         elif f.operator == FilterOperator.IN:
@@ -110,11 +174,20 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
             sql_parts.append(f"AND {col_ref} {f.operator.value} {placeholder}")
 
     def _qualify_ref(col: str) -> str:
+        agg_match = _AGG_PATTERN.match(col)
         dt_match = _DATE_TRUNC_PATTERN.match(col)
+        if agg_match:
+            func, arg = agg_match.group(1).upper(), agg_match.group(2)
+            if arg == "*":
+                return f"{func}(*)"
+            tbl, c = _resolve_column(arg, spec)
+            return f"{func}({tbl}.{c})"
         if dt_match:
             interval, column = dt_match.group(1), dt_match.group(2)
-            return f"DATE_TRUNC('{interval}', {spec.table}.{column})"
-        return f"{spec.table}.{col}"
+            tbl, c = _resolve_column(column, spec)
+            return f"DATE_TRUNC('{interval}', {tbl}.{c})"
+        tbl, c = _resolve_column(col, spec)
+        return f"{tbl}.{c}"
 
     # GROUP BY
     if spec.group_by:
@@ -138,47 +211,7 @@ def _validate_spec(spec: QuerySpec) -> None:
     if spec.table not in allowed_tables:
         raise QueryBuildError(f"허용되지 않은 테이블: {spec.table}")
 
-    allowed_cols = get_allowed_columns(spec.table)
-    filterable_cols = get_filterable_columns(spec.table)
-
-    for col in spec.columns:
-        agg_match = _AGG_PATTERN.match(col)
-        dt_match = _DATE_TRUNC_PATTERN.match(col)
-        if agg_match:
-            func, arg = agg_match.group(1).upper(), agg_match.group(2)
-            if func not in ALLOWED_AGGREGATES:
-                raise QueryBuildError(f"허용되지 않은 집계 함수: {func}")
-            if arg == "*" and func != "COUNT":
-                raise QueryBuildError(f"{func}(*)는 허용되지 않습니다. *는 COUNT에서만 사용 가능합니다")
-            if arg != "*" and arg not in allowed_cols:
-                raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{arg}")
-        elif dt_match:
-            column = dt_match.group(2)
-            if column not in allowed_cols:
-                raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{column}")
-        elif col not in allowed_cols:
-            raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{col}")
-
-    for f in spec.filters:
-        if f.column not in filterable_cols:
-            if f.column in allowed_cols:
-                raise QueryBuildError(f"필터링할 수 없는 컬럼: {spec.table}.{f.column}")
-            raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{f.column}")
-
-    if spec.order_by:
-        for o in spec.order_by:
-            if o.column not in allowed_cols:
-                raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{o.column}")
-
-    if spec.group_by:
-        for col in spec.group_by:
-            dt_match = _DATE_TRUNC_PATTERN.match(col)
-            if dt_match:
-                if dt_match.group(2) not in allowed_cols:
-                    raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{dt_match.group(2)}")
-            elif col not in allowed_cols:
-                raise QueryBuildError(f"허용되지 않은 컬럼: {spec.table}.{col}")
-
+    # JOIN 검증을 먼저 수행 (이후 _resolve_column에서 available tables 참조)
     allowed_joins = get_allowed_join_targets(spec.table)
     for join in spec.joins:
         if join.table not in allowed_joins:
@@ -189,3 +222,49 @@ def _validate_spec(spec: QuerySpec) -> None:
                 f"허용되지 않은 JOIN 컬럼: {join.on_self}={join.on_other}, "
                 f"허용된 경로: {expected.self_column}={expected.target_column}"
             )
+
+    for col in spec.columns:
+        agg_match = _AGG_PATTERN.match(col)
+        dt_match = _DATE_TRUNC_PATTERN.match(col)
+        if agg_match:
+            func, arg = agg_match.group(1).upper(), agg_match.group(2)
+            if func not in ALLOWED_AGGREGATES:
+                raise QueryBuildError(f"허용되지 않은 집계 함수: {func}")
+            if arg == "*" and func != "COUNT":
+                raise QueryBuildError(f"{func}(*)는 허용되지 않습니다. *는 COUNT에서만 사용 가능합니다")
+            if arg != "*":
+                _resolve_column(arg, spec)
+        elif dt_match:
+            _resolve_column(dt_match.group(2), spec)
+        else:
+            _resolve_column(col, spec)
+
+    for f in spec.filters:
+        tbl, col = _resolve_column(f.column, spec)
+        filterable = get_filterable_columns(tbl)
+        if col not in filterable:
+            all_cols = get_allowed_columns(tbl)
+            if col in all_cols:
+                raise QueryBuildError(f"필터링할 수 없는 컬럼: {tbl}.{col}")
+            raise QueryBuildError(f"허용되지 않은 컬럼: {tbl}.{col}")
+
+    if spec.order_by:
+        for o in spec.order_by:
+            agg_match = _AGG_PATTERN.match(o.column)
+            dt_match = _DATE_TRUNC_PATTERN.match(o.column)
+            if agg_match:
+                arg = agg_match.group(2)
+                if arg != "*":
+                    _resolve_column(arg, spec)
+            elif dt_match:
+                _resolve_column(dt_match.group(2), spec)
+            else:
+                _resolve_column(o.column, spec)
+
+    if spec.group_by:
+        for col in spec.group_by:
+            dt_match = _DATE_TRUNC_PATTERN.match(col)
+            if dt_match:
+                _resolve_column(dt_match.group(2), spec)
+            else:
+                _resolve_column(col, spec)

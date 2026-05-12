@@ -33,6 +33,10 @@ _SYSTEM_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
   rejection_reason에 안내 메시지를 넣으세요.
 - SQL을 직접 작성하지 마세요. QuerySpec 구조로만 응답하세요.
 - 집계가 필요하면 columns에 "COUNT(*)", "SUM(column)" 등을 사용하세요.
+- columns에 별칭(AS)을 사용하지 마세요. "SUM(amount)"처럼 순수 표현식만 작성하세요.
+- 다른 테이블의 컬럼을 참조할 때는 반드시 joins에 해당 테이블을 추가하고,
+  컬럼명을 "table.column" 형식으로 작성하세요. 메인 테이블 접두사는 불필요합니다.
+  예: deals 조회 시 고객사명 필터링 → joins에 accounts 추가, filter column에 "accounts.name"
 
 {schema}
 """
@@ -44,7 +48,7 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 - 핵심 발견을 3~5개로 요약하세요.
 - 위젯 타입은 데이터 특성에 맞게 선택하세요:
   - BAR_CHART: 카테고리별 비교
-  - LINE: 시계열 추이
+  - LINE_CHART: 시계열 추이
   - PIE: 비율/구성
   - KPI: 단일 핵심 지표
   - TABLE: 상세 목록
