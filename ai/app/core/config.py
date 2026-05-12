@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_PATH: str = "model/e5-small"
 
     # ─────────────────────────────────────────────
+    # Naver Open API
+    # ─────────────────────────────────────────────
+
+    NAVER_CLIENT_ID: str = ""
+    NAVER_CLIENT_SECRET: str = ""
+
+    # ─────────────────────────────────────────────
     # GPU OCR Server
     # ─────────────────────────────────────────────
 
