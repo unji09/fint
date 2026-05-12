@@ -53,7 +53,6 @@ public class AccountService {
 
     private static final int DEFAULT_SIGNAL_SIZE = 20;
     private static final int DEFAULT_SEARCHABLE_SIZE = 10;
-    private static final int DETAIL_DEAL_PREVIEW_SIZE = 3;
 
     private final AccountRepository accountRepository;
     private final AccountUserAssignmentRepository accountUserAssignmentRepository;
@@ -273,22 +272,11 @@ public class AccountService {
                         c.getContactId(), c.getName(), c.getTitle(), c.getPhone(), c.getEmail()))
                 .toList();
 
-        List<AccountDetailResponse.DealItem> deals = dealRepository
-                .findByAccountAndScope(
-                        accountId, callerTeamId, null,
-                        PageRequest.of(0, DETAIL_DEAL_PREVIEW_SIZE))
-                .stream()
-                .map(d -> new AccountDetailResponse.DealItem(
-                        d.getDealId(), d.getTitle(), d.getCurrentPipeline(),
-                        toIntegerOrNull(d.getProbability()),
-                        toLongOrNull(d.getAmount())))
-                .toList();
-
         return new AccountDetailResponse(
                 account.getAccountId(), account.getName(), account.getIndustry(),
                 assignedUsers, latestMood,
                 meetingCount, lastContactAt,
-                contacts, deals
+                contacts
         );
     }
 
