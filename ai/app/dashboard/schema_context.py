@@ -50,7 +50,6 @@ def _build_schema() -> dict[str, TableMeta]:
         description="고객사/거래처",
         columns=[
             ColumnMeta("account_id", "BIGINT", "고객사 PK"),
-            ColumnMeta("user_id", "BIGINT", "담당 영업사원 ID"),
             ColumnMeta("name", "VARCHAR", "고객사명"),
             ColumnMeta("industry", "VARCHAR", "업종"),
             ColumnMeta("biz_no", "VARCHAR", "사업자등록번호"),
@@ -62,9 +61,13 @@ def _build_schema() -> dict[str, TableMeta]:
             JoinPath("contacts", "account_id", "account_id"),
             JoinPath("account_external_info", "account_id", "account_id"),
             JoinPath("temperature_history", "account_id", "account_id"),
-            JoinPath("users", "user_id", "user_id"),
         ],
-        tenant_path=TenantPath(joins=[("users", "user_id", "user_id")]),
+        tenant_path=TenantPath(
+            joins=[
+                ("account_user_assignment", "account_id", "account_id"),
+                ("users", "user_id", "user_id"),
+            ]
+        ),
         has_soft_delete=True,
     )
 
@@ -91,10 +94,7 @@ def _build_schema() -> dict[str, TableMeta]:
             JoinPath("activities", "deal_id", "deal_id"),
         ],
         tenant_path=TenantPath(
-            joins=[
-                ("accounts", "account_id", "account_id"),
-                ("users", "user_id", "user_id"),
-            ]
+            joins=[("teams", "team_id", "team_id")]
         ),
         has_soft_delete=True,
     )
@@ -149,6 +149,7 @@ def _build_schema() -> dict[str, TableMeta]:
         tenant_path=TenantPath(
             joins=[
                 ("accounts", "account_id", "account_id"),
+                ("account_user_assignment", "account_id", "account_id"),
                 ("users", "user_id", "user_id"),
             ]
         ),
@@ -173,6 +174,7 @@ def _build_schema() -> dict[str, TableMeta]:
         tenant_path=TenantPath(
             joins=[
                 ("accounts", "account_id", "account_id"),
+                ("account_user_assignment", "account_id", "account_id"),
                 ("users", "user_id", "user_id"),
             ]
         ),
@@ -185,7 +187,7 @@ def _build_schema() -> dict[str, TableMeta]:
         columns=[
             ColumnMeta("temperature_history_id", "BIGINT", "온도이력 PK"),
             ColumnMeta("account_id", "BIGINT", "고객사 ID"),
-            ColumnMeta("temperature", "INT", "온도 점수"),
+            ColumnMeta("mood", "VARCHAR", "고객 분위기/온도 상태"),
             ColumnMeta("reason", "TEXT", "변경 사유"),
             ColumnMeta("created_at", "TIMESTAMPTZ", "생성일"),
         ],
@@ -195,6 +197,7 @@ def _build_schema() -> dict[str, TableMeta]:
         tenant_path=TenantPath(
             joins=[
                 ("accounts", "account_id", "account_id"),
+                ("account_user_assignment", "account_id", "account_id"),
                 ("users", "user_id", "user_id"),
             ]
         ),
@@ -265,6 +268,14 @@ def build_llm_schema_prompt() -> str:
     lines.append("## 집계 함수")
     lines.append("GROUP BY 사용 시 다음 집계 함수를 columns에 포함할 수 있습니다:")
     lines.append(f"  - {', '.join(sorted(ALLOWED_AGGREGATES))}(column_name) 또는 COUNT(*)")
+    lines.append("")
+
+    lines.append("## Cross-Table Column Reference")
+    lines.append("JOIN된 테이블의 컬럼을 참조할 때는 `table.column` 형식을 사용하세요.")
+    lines.append("예: deals 테이블에서 고객사명으로 필터링할 때")
+    lines.append('  - joins에 {"table": "accounts", "on_self": "account_id", "on_other": "account_id"} 추가')
+    lines.append('  - filters의 column에 "accounts.name" 으로 지정')
+    lines.append('  - columns에도 "accounts.name" 형식으로 사용 가능')
     lines.append("")
 
     return "\n".join(lines)

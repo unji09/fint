@@ -15,6 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -35,6 +36,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        PathPatternRequestMatcher.Builder path = PathPatternRequestMatcher.withDefaults();
+
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
@@ -45,21 +48,24 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                    "/swagger-ui/**",
-                    "/v3/api-docs/**",
-                    "/swagger-ui.html"
+                    path.matcher("/swagger-ui/**"),
+                    path.matcher("/v3/api-docs/**"),
+                    path.matcher("/swagger-ui.html")
                 ).permitAll()
                 .requestMatchers(
-                    "/actuator/health",
-                    "/actuator/info",
-                    "/actuator/prometheus"
+                    path.matcher("/actuator/health"),
+                    path.matcher("/actuator/info"),
+                    path.matcher("/actuator/prometheus")
                 ).permitAll()
                 .requestMatchers(
-                    "/api/v1/auth/login",
-                    "/api/v1/auth/reissue"
+                    path.matcher("/api/v1/auth/login"),
+                    path.matcher("/api/v1/auth/reissue")
                 ).permitAll()
                 .requestMatchers(
-                    "/api/v1/files/**"
+                    path.matcher("/api/v1/files/**")
+                ).permitAll()
+                .requestMatchers(
+                    path.matcher("/api/v1/dashboards/queries/*/stream")
                 ).permitAll()
                 .anyRequest().authenticated()
             )

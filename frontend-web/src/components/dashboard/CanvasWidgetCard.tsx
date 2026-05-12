@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import type { CanvasWidget } from '@/types/dashboard';
-import { BarChartSvg, LineChartSvg, SegmentChart } from './ChartWidgets';
+import { BarChartSvg, LineChartSvg, SegmentChart, KpiCard, TableWidget } from './ChartWidgets';
 
 const RESIZE_HANDLES: { dir: string; style: React.CSSProperties }[] = [
   { dir: 'nw', style: { top: -5, left: -5, cursor: 'nw-resize' } },
@@ -83,9 +83,14 @@ export default function CanvasWidgetCard({ w, onUpdate, onTitleChange }: Props) 
           const data = (w.result?.data as Record<string, unknown> | undefined) ?? {};
           const labels = Array.isArray(data.labels) ? (data.labels as string[]) : undefined;
           const values = Array.isArray(data.values) ? (data.values as number[]) : undefined;
-          if (w.widgetType === 'LINE_CHART') return <LineChartSvg values={values} />;
-          if (w.widgetType === 'SEGMENT') return <SegmentChart />;
-          return <BarChartSvg values={values} labels={labels} />;
+          const cfg = (w.config ?? {}) as Record<string, unknown>;
+          const xLabel = cfg.x_label as string | undefined;
+          const yLabel = cfg.y_label as string | undefined;
+          if (w.widgetType === 'LINE_CHART') return <LineChartSvg values={values} labels={labels} xLabel={xLabel} yLabel={yLabel} />;
+          if (w.widgetType === 'PIE' || w.widgetType === 'SEGMENT') return <SegmentChart labels={labels} values={values} />;
+          if (w.widgetType === 'KPI') return <KpiCard value={values?.[0]} label={labels?.[0]} />;
+          if (w.widgetType === 'TABLE') return <TableWidget data={data} />;
+          return <BarChartSvg values={values} labels={labels} xLabel={xLabel} yLabel={yLabel} />;
         })()}
       </div>
       {RESIZE_HANDLES.map(h => (

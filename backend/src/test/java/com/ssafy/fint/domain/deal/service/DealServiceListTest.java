@@ -59,13 +59,13 @@ class DealServiceListTest {
 
     @Mock private DealRepository dealRepository;
     @Mock private DealContactRepository dealContactRepository;
-    @Mock private ActivityRepository activityRepository;
     @Mock private UserRepository userRepository;
 
     @Mock @SuppressWarnings("unused") private AccountRepository accountRepository;
     @Mock @SuppressWarnings("unused") private ContactService contactService;
     @Mock @SuppressWarnings("unused") private TeamRepository teamRepository;
     @Mock @SuppressWarnings("unused") private PipelineStageRepository pipelineStageRepository;
+    @Mock @SuppressWarnings("unused") private ActivityRepository activityRepository;
 
     @InjectMocks
     private DealService dealService;
