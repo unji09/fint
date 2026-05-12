@@ -126,8 +126,6 @@ export default function DashboardDetailPage() {
                 ph: 260,
               };
           setCanvasWidgets((prev) => [...prev, newW]);
-          setChatOpen(false);
-          setChatDone(false);
         }
       };
       window.addEventListener('mousemove', onMove);
