@@ -4,11 +4,13 @@ import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.entity.Contact;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.service.ContactService;
+import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
 import com.ssafy.fint.domain.deal.dto.DealListResponse;
+import com.ssafy.fint.domain.deal.dto.DealStageResponse;
 import com.ssafy.fint.domain.deal.dto.DealListResponse.DealAssignee;
 import com.ssafy.fint.domain.deal.dto.DealListResponse.DealSummary;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
@@ -51,8 +53,8 @@ import java.util.stream.Collectors;
 public class DealService {
 
     // TODO(수정 : DEAL-LLM): LLM 기반 수주 확률 계산 도입 시 이 상수를 LLM 호출 결과로 교체.
-    // TODO(수정 : DEAL-새 담당자): 화면 및 진행흐름 결정될 경우, 기존 담당자 아닐 경우 새 담당자로 추가 로직 완성.
-    private static final short DUMMY_PROBABILITY = 70;
+    // TODO(수정 : DEAL-새 담당자): 화면- 및 진행흐름 결정될 경우, 기존 담당자 아닐 경우 새 담당자로 추가 로직 완성.
+    private static final short DUMMY_PROBABILITY = 84;
 
     private final DealRepository dealRepository;
     private final DealContactRepository dealContactRepository;
@@ -139,11 +141,14 @@ public class DealService {
         return DealUpdateResponse.from(deal);
     }
 
+    @Transactional
     public DealDetailResponse findDetail(CustomUserDetails me, Long dealId) {
         Long tenantId = me.getTenantId();
 
         Deal deal = dealRepository.findByIdAndTenantId(dealId, tenantId)
                 .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
+
+        resolveCurrentStage(deal);
 
         long meetingCount = activityRepository.countMeetingsByDealId(deal.getDealId());
 
@@ -207,6 +212,27 @@ public class DealService {
                         LinkedHashMap::new))
                 .values().stream()
                 .toList();
+    }
+
+    @Transactional
+    public DealStageResponse findCurrentStage(CustomUserDetails me, Long dealId) {
+        Deal deal = dealRepository.findByIdAndTenantId(dealId, me.getTenantId())
+                .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
+        return resolveCurrentStage(deal);
+    }
+
+    @Transactional
+    public DealStageResponse resolveCurrentStage(Deal deal) {
+        return activityRepository.findLatestPipelineActivityByDealId(deal.getDealId())
+            .map(Activity::getPipelineStage)
+            .map(stage -> {
+                deal.moveToStage(stage.getName());
+                return new DealStageResponse(stage.getPipelineStageId(), stage.getName());
+            })
+            .orElseGet(() -> {
+                deal.moveToStage(null);
+                return DealStageResponse.EMPTY;
+            });
     }
 
     @Transactional
