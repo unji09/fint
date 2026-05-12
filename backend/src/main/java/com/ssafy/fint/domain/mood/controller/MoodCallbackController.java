@@ -26,7 +26,7 @@ public class MoodCallbackController {
     public void callback(
         @PathVariable Long activityId,
         @RequestBody MoodCallbackRequest request,
-        @RequestHeader("X-Internal-Secret") String secret) {
+        @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
         if(!internalSecret.equals(secret)){
             throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
         }
