@@ -26,10 +26,10 @@ public class NotificationService {
 
     public NotificationListResponse findUnreadNotifications(CustomUserDetails me) {
         List<NotificationItemResponse> items = aiSuggestionRepository
-                .findUnreadByUserId(me.getUserId(), PageRequest.of(0, UNREAD_LIMIT))
-                .stream()
-                .map(NotificationItemResponse::from)
-                .toList();
+            .findUnreadByUserId(me.getUserId(), PageRequest.of(0, UNREAD_LIMIT))
+            .stream()
+            .map(NotificationItemResponse::from)
+            .toList();
         return new NotificationListResponse(items);
     }
 
@@ -42,8 +42,8 @@ public class NotificationService {
     @Transactional
     public void markAsRead(Long notificationId, CustomUserDetails me) {
         AiSuggestion suggestion = aiSuggestionRepository
-                .findByIdAndUserId(notificationId, me.getUserId())
-                .orElseThrow(() -> new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));
+            .findByIdAndUserId(notificationId, me.getUserId())
+            .orElseThrow(() -> new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));
         suggestion.markAsRead();
     }
 }
