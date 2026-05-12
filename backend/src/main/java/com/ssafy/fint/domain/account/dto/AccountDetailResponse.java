@@ -8,8 +8,7 @@ import java.util.List;
 /**
  * 고객사 상세 조회 응답.
  * meetingCount / lastContactAt 는 "고객사 매핑 Deal 에 속한 Activity 중 type=MEETING" 기준 집계.
- * deals 는 데이터 스코프 정책(팀 있음→팀 deal, 팀 없음→tenant 전체) 적용된 최신 3개 preview.
- * 전체 목록은 GET /accounts/{accountId}/deals 로.
+ * 딜 목록은 GET /accounts/{accountId}/deals 로.
  */
 public record AccountDetailResponse(
         Long accountId,
@@ -19,8 +18,7 @@ public record AccountDetailResponse(
         Mood latestMood,
         Integer meetingCount,
         OffsetDateTime lastContactAt,
-        List<ContactItem> contacts,
-        List<DealItem> deals
+        List<ContactItem> contacts
 ) {
     public record AssignedUser(Long userId, String name) {
     }
@@ -31,15 +29,6 @@ public record AccountDetailResponse(
             String title,
             String phone,
             String email
-    ) {
-    }
-
-    public record DealItem(
-            Long dealId,
-            String title,
-            String stage,
-            Integer probability,
-            Long amount
     ) {
     }
 }

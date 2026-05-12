@@ -1,6 +1,8 @@
 package com.ssafy.fint.domain.activity.dto;
 
 import com.ssafy.fint.domain.activity.entity.ActivityType;
+import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -28,6 +30,9 @@ public record ActivityCreateRequest(
 
         Long pipelineStageId,
 
-        String memo
+        String memo,
+
+        @Valid
+        DealCreateRequest newDeal
 ) {
 }
