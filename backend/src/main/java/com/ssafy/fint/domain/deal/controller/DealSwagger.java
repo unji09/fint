@@ -30,8 +30,10 @@ public interface DealSwagger {
         description = "현재 사용자의 권한 범위 내 영업건 목록을 최근 등록순(createdAt desc, dealId desc)으로 조회한다. "
             + "정렬 기준은 서버 고정 — 클라이언트의 sort 쿼리는 무시된다. "
             + "ADMIN 은 같은 테넌트 전체, MANAGER/MEMBER 는 본인 소속 팀(team_id 일치)의 딜만 반환한다. "
+            + "accountId 를 지정하면 해당 고객사의 딜만, contactId 를 지정하면 해당 담당자가 연결된 딜만 필터링한다. "
+            + "두 파라미터는 AND 조건으로 동시에 적용 가능하다."
     )
-    ApiResponse<DealListResponse> findList(CustomUserDetails me, Long accountId, Pageable pageable);
+    ApiResponse<DealListResponse> findList(CustomUserDetails me, Long accountId, Long contactId, Pageable pageable);
 
     @Operation(
         summary = "딜 상세 조회",

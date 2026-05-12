@@ -18,6 +18,8 @@ public interface TemperatureHistoryRepository extends JpaRepository<TemperatureH
      */
     Optional<TemperatureHistory> findFirstByAccount_AccountIdOrderByCreatedAtDesc(Long accountId);
 
+    Optional<TemperatureHistory> findTopByActivity_ActivityIdOrderByCreatedAtDesc(Long activityId);
+
     @Query("""
             select th.account.accountId as accountId, th.mood as mood
             from TemperatureHistory th

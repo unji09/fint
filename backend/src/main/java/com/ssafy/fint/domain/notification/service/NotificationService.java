@@ -5,7 +5,7 @@ import com.ssafy.fint.domain.ai.repository.AiSuggestionRepository;
 import com.ssafy.fint.domain.notification.dto.NotificationItemResponse;
 import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
 import com.ssafy.fint.domain.notification.dto.NotificationReadAllResponse;
-import com.ssafy.fint.domain.notification.exception.NotificationErrorCode;
+import com.ssafy.fint.global.exception.NotificationErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;

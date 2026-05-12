@@ -13,7 +13,7 @@ import pytest_asyncio
 from app.clients.gpu import GpuServerClient
 from app.core.config import get_settings
 from app.core.errors import BusinessException
-from tests.conftest import IMAGE_BYTES
+IMAGE_BYTES = b"fake-image-bytes"
 
 settings = get_settings()
 

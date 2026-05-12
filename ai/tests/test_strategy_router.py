@@ -4,12 +4,23 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.clients import get_llm_client
 from app.main import create_app
+
+
+class _StubLLM:
+    async def chat(self, messages: list[dict], *, model: str | None = None) -> str:
+        return "{}"
+
+    async def chat_structured(self, messages, response_model, *, model=None):
+        return response_model.model_validate({})
 
 
 @pytest.fixture
 def app():
-    return create_app()
+    application = create_app()
+    application.dependency_overrides[get_llm_client] = _StubLLM
+    return application
 
 
 @pytest.fixture

@@ -123,16 +123,16 @@ class DealServiceListTest {
             User caller = callerWithTeam(CURRENT_TEAM_ID);
             Deal deal = dealMock(1L);
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, ACCOUNT_ID, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, ACCOUNT_ID, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(deal), 1L));
             given(dealContactRepository.findAllByDealIdIn(anyList())).willReturn(List.of());
 
-            DealListResponse response = dealService.findList(me("ADMIN"), ACCOUNT_ID, DEFAULT_PAGEABLE);
+            DealListResponse response = dealService.findList(me("ADMIN"), ACCOUNT_ID, null, DEFAULT_PAGEABLE);
 
             assertThat(response.data()).hasSize(1);
             assertThat(response.totalElements()).isEqualTo(1L);
-            verify(dealRepository).findAllByTenant(CURRENT_TENANT_ID, ACCOUNT_ID, DEFAULT_PAGEABLE);
-            verify(dealRepository, never()).findAllByTeam(anyLong(), any(), any(Pageable.class));
+            verify(dealRepository).findAllByTenant(CURRENT_TENANT_ID, ACCOUNT_ID, null, DEFAULT_PAGEABLE);
+            verify(dealRepository, never()).findAllByTeam(anyLong(), any(), any(), any(Pageable.class));
         }
 
         @Test
@@ -141,14 +141,14 @@ class DealServiceListTest {
             User caller = callerWithTeam(CURRENT_TEAM_ID);
             Deal deal = dealMock(1L);
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTeam(CURRENT_TEAM_ID, ACCOUNT_ID, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTeam(CURRENT_TEAM_ID, ACCOUNT_ID, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(deal), 1L));
             given(dealContactRepository.findAllByDealIdIn(anyList())).willReturn(List.of());
 
-            dealService.findList(me("MEMBER"), ACCOUNT_ID, DEFAULT_PAGEABLE);
+            dealService.findList(me("MEMBER"), ACCOUNT_ID, null, DEFAULT_PAGEABLE);
 
-            verify(dealRepository).findAllByTeam(CURRENT_TEAM_ID, ACCOUNT_ID, DEFAULT_PAGEABLE);
-            verify(dealRepository, never()).findAllByTenant(anyLong(), any(), any(Pageable.class));
+            verify(dealRepository).findAllByTeam(CURRENT_TEAM_ID, ACCOUNT_ID, null, DEFAULT_PAGEABLE);
+            verify(dealRepository, never()).findAllByTenant(anyLong(), any(), any(), any(Pageable.class));
         }
 
         @Test
@@ -156,13 +156,46 @@ class DealServiceListTest {
         void member_team_없으면_tenant_전체_조회() {
             User caller = callerWithTeam(null);
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(), 0L));
 
-            dealService.findList(me("MEMBER"), null, DEFAULT_PAGEABLE);
+            dealService.findList(me("MEMBER"), null, null, DEFAULT_PAGEABLE);
 
-            verify(dealRepository).findAllByTenant(CURRENT_TENANT_ID, null, DEFAULT_PAGEABLE);
-            verify(dealRepository, never()).findAllByTeam(anyLong(), any(), any(Pageable.class));
+            verify(dealRepository).findAllByTenant(CURRENT_TENANT_ID, null, null, DEFAULT_PAGEABLE);
+            verify(dealRepository, never()).findAllByTeam(anyLong(), any(), any(), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("contactId 지정 시 findAllByTenant 호출에 contactId 가 그대로 전달된다")
+        void contactId_지정시_tenant_쿼리에_전달() {
+            Long contactId = 77L;
+            User caller = callerWithTeam(null);
+            Deal deal = dealMock(1L);
+            given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, contactId, DEFAULT_PAGEABLE))
+                    .willReturn(pageOf(List.of(deal), 1L));
+            given(dealContactRepository.findAllByDealIdIn(anyList())).willReturn(List.of());
+
+            DealListResponse response = dealService.findList(me("ADMIN"), null, contactId, DEFAULT_PAGEABLE);
+
+            assertThat(response.data()).hasSize(1);
+            verify(dealRepository).findAllByTenant(CURRENT_TENANT_ID, null, contactId, DEFAULT_PAGEABLE);
+        }
+
+        @Test
+        @DisplayName("contactId 지정 시 findAllByTeam 호출에 contactId 가 그대로 전달된다")
+        void contactId_지정시_team_쿼리에_전달() {
+            Long contactId = 88L;
+            User caller = callerWithTeam(CURRENT_TEAM_ID);
+            Deal deal = dealMock(2L);
+            given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
+            given(dealRepository.findAllByTeam(CURRENT_TEAM_ID, ACCOUNT_ID, contactId, DEFAULT_PAGEABLE))
+                    .willReturn(pageOf(List.of(deal), 1L));
+            given(dealContactRepository.findAllByDealIdIn(anyList())).willReturn(List.of());
+
+            dealService.findList(me("MEMBER"), ACCOUNT_ID, contactId, DEFAULT_PAGEABLE);
+
+            verify(dealRepository).findAllByTeam(CURRENT_TEAM_ID, ACCOUNT_ID, contactId, DEFAULT_PAGEABLE);
         }
     }
 
@@ -180,12 +213,12 @@ class DealServiceListTest {
             DealContact dcOther = dealContactMock(1L, 11L, "이몽룡");
 
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(deal), 1L));
             given(dealContactRepository.findAllByDealIdIn(List.of(1L)))
                     .willReturn(List.of(dcFirst, dcSecond, dcOther));
 
-            DealListResponse response = dealService.findList(me("MEMBER"), null, DEFAULT_PAGEABLE);
+            DealListResponse response = dealService.findList(me("MEMBER"), null, null, DEFAULT_PAGEABLE);
 
             List<DealListResponse.DealAssignee> assignees = response.data().get(0).assignees();
             assertThat(assignees)
@@ -205,12 +238,12 @@ class DealServiceListTest {
             DealContact dc = dealContactMock(1L, 10L, "홍길동");
 
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(deal1, deal2), 2L));
             given(dealContactRepository.findAllByDealIdIn(List.of(1L, 2L)))
                     .willReturn(List.of(dc));
 
-            DealListResponse response = dealService.findList(me("MEMBER"), null, DEFAULT_PAGEABLE);
+            DealListResponse response = dealService.findList(me("MEMBER"), null, null, DEFAULT_PAGEABLE);
 
             DealListResponse.DealSummary deal2Summary = response.data().stream()
                     .filter(s -> s.dealId().equals(2L))
@@ -230,11 +263,11 @@ class DealServiceListTest {
             User caller = callerWithTeam(null);
             Deal deal = dealMock(1L);
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(deal), 137L));
             given(dealContactRepository.findAllByDealIdIn(anyList())).willReturn(List.of());
 
-            DealListResponse response = dealService.findList(me("ADMIN"), null, DEFAULT_PAGEABLE);
+            DealListResponse response = dealService.findList(me("ADMIN"), null, null, DEFAULT_PAGEABLE);
 
             assertThat(response.data()).hasSize(1);
             assertThat(response.totalElements()).isEqualTo(137L);
@@ -251,12 +284,12 @@ class DealServiceListTest {
             given(deal.getExpectedClose()).willReturn(LocalDate.of(2026, 12, 31));
 
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(deal), 1L));
             given(dealContactRepository.findAllByDealIdIn(List.of(7L)))
                     .willReturn(List.of());
 
-            DealListResponse response = dealService.findList(me("ADMIN"), null, DEFAULT_PAGEABLE);
+            DealListResponse response = dealService.findList(me("ADMIN"), null, null, DEFAULT_PAGEABLE);
 
             DealListResponse.DealSummary s = response.data().get(0);
             assertThat(s.dealId()).isEqualTo(7L);
@@ -275,10 +308,10 @@ class DealServiceListTest {
         void deal_0건이면_contact_조회_안함() {
             User caller = callerWithTeam(null);
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
-            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, DEFAULT_PAGEABLE))
+            given(dealRepository.findAllByTenant(CURRENT_TENANT_ID, null, null, DEFAULT_PAGEABLE))
                     .willReturn(pageOf(List.of(), 0L));
 
-            DealListResponse response = dealService.findList(me("ADMIN"), null, DEFAULT_PAGEABLE);
+            DealListResponse response = dealService.findList(me("ADMIN"), null, null, DEFAULT_PAGEABLE);
 
             assertThat(response.data()).isEmpty();
             assertThat(response.totalElements()).isZero();
@@ -290,7 +323,7 @@ class DealServiceListTest {
         void 사용자_조회_실패시_INVALID_TOKEN() {
             given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> dealService.findList(me("ADMIN"), null, DEFAULT_PAGEABLE))
+            assertThatThrownBy(() -> dealService.findList(me("ADMIN"), null, null, DEFAULT_PAGEABLE))
                     .isInstanceOf(BusinessException.class)
                     .extracting("errorCode")
                     .isEqualTo(AuthErrorCode.INVALID_TOKEN);
