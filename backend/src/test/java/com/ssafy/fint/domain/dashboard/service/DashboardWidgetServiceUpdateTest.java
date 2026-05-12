@@ -13,10 +13,10 @@ import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -48,20 +48,12 @@ class DashboardWidgetServiceUpdateTest {
     @Mock private DashboardRepository dashboardRepository;
     @Mock private DashboardWidgetRepository dashboardWidgetRepository;
 
-    private DashboardWidgetService dashboardWidgetService;
+    @InjectMocks private DashboardWidgetService dashboardWidgetService;
 
     private final CustomUserDetails owner =
             new CustomUserDetails(OWNER_USER_ID, TENANT_ID, "MEMBER");
     private final CustomUserDetails stranger =
             new CustomUserDetails(STRANGER_USER_ID, TENANT_ID, "MEMBER");
-
-    @BeforeEach
-    void setUp() {
-        dashboardWidgetService = new DashboardWidgetService(
-                dashboardRepository,
-                dashboardWidgetRepository
-        );
-    }
 
     @Test
     @DisplayName("title 만 입력 시 widget 의 title 만 변경된다.")
