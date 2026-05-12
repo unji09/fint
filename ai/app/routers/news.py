@@ -1,4 +1,4 @@
-"""POST /ai/news/collect — 외부 뉴스 데이터 수집 엔드포인트."""
+"""POST /ai/signals/collect — 외부 데이터(뉴스/공시) 수집 엔드포인트."""
 import logging
 
 from fastapi import APIRouter, Depends, Header
@@ -16,10 +16,10 @@ from app.schemas.news import NewsCollectRequest, NewsCollectResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/ai", tags=["news"])
+router = APIRouter(prefix="/ai", tags=["signals"])
 
 
-@router.post("/news/collect")
+@router.post("/signals/collect")
 async def collect_news_endpoint(
     body: NewsCollectRequest,
     tenant_id: int = Depends(get_tenant_id),
