@@ -5,12 +5,10 @@ import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
-import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.deal.repository.DealRepository;
 import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
-import com.ssafy.fint.domain.deal.service.DealService;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
@@ -39,7 +37,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -68,9 +65,6 @@ class ActivityServiceCreateTest {
 
     @Mock
     private UserRepository userRepository;
-
-    @Mock
-    private DealService dealService;
 
     @InjectMocks
     private ActivityService activityService;
@@ -138,51 +132,6 @@ class ActivityServiceCreateTest {
         ArgumentCaptor<Activity> captor = ArgumentCaptor.forClass(Activity.class);
         verify(activityRepository).save(captor.capture());
         assertThat(captor.getValue().getUser().getUserId()).isEqualTo(CURRENT_USER_ID);
-
-        // dealId 와 pipelineStageId 가 모두 있을 때, 활동 저장 후 딜 단계 갱신이 호출된다.
-        ArgumentCaptor<DealUpdateRequest> dealReqCaptor = ArgumentCaptor.forClass(DealUpdateRequest.class);
-        verify(dealService).update(any(CustomUserDetails.class), eq(3L), dealReqCaptor.capture());
-        DealUpdateRequest dealReq = dealReqCaptor.getValue();
-        assertThat(dealReq.pipelineStageId()).isEqualTo(5L);
-        assertThat(dealReq.title()).isNull();
-        assertThat(dealReq.amount()).isNull();
-        assertThat(dealReq.expectedClose()).isNull();
-        assertThat(dealReq.lostReason()).isNull();
-        assertThat(dealReq.wonAt()).isNull();
-        assertThat(dealReq.lostAt()).isNull();
-    }
-
-    @Test
-    @DisplayName("dealId 만 있고 pipelineStageId 가 없으면 딜 단계 갱신은 호출되지 않는다.")
-    void skipsDealStageUpdateWhenPipelineStageMissing() {
-        OffsetDateTime start = OffsetDateTime.now();
-        OffsetDateTime end = start.plusHours(1);
-
-        when(dealRepository.findByIdAndTenantId(3L, CURRENT_TENANT_ID))
-                .thenReturn(Optional.of(newDeal(3L)));
-        when(userRepository.getReferenceById(CURRENT_USER_ID))
-                .thenReturn(stubUser(CURRENT_USER_ID, CURRENT_TENANT_ID));
-        when(activityRepository.save(any(Activity.class)))
-                .thenAnswer(invocation -> {
-                    Activity a = invocation.getArgument(0);
-                    ReflectionTestUtils.setField(a, "activityId", 200L);
-                    return a;
-                });
-
-        ActivityCreateRequest req = new ActivityCreateRequest(
-                3L,
-                ActivityType.MEETING,
-                "단계 미지정",
-                start,
-                end,
-                null,
-                null,
-                null
-        );
-
-        activityService.create(req);
-
-        verify(dealService, never()).update(any(), any(), any());
     }
 
     @Test

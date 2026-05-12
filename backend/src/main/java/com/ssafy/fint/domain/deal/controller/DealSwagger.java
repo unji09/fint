@@ -4,6 +4,7 @@ import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
 import com.ssafy.fint.domain.deal.dto.DealListResponse;
+import com.ssafy.fint.domain.deal.dto.DealStageResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.global.ApiResponse;
@@ -38,6 +39,13 @@ public interface DealSwagger {
             + "연결된 고객사 담당자(contacts) 목록과 해당 딜의 미팅 수(meetingCount, ActivityType=MEETING)를 함께 반환한다."
     )
     ApiResponse<DealDetailResponse> findDetail(CustomUserDetails me, Long dealId);
+
+    @Operation(
+        summary = "딜 파이프라인 단계 조회",
+        description = "해당 딜의 일정 중 시작일이 현재 이하인 것 가운데 가장 최근 일정의 파이프라인 단계를 반환한다. "
+            + "해당하는 일정이 없으면 stageId/stageName 모두 null 이다."
+    )
+    ApiResponse<DealStageResponse> findCurrentStage(CustomUserDetails me, Long dealId);
 
     @Operation(
         summary = "딜 수정",
