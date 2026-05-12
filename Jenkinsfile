@@ -84,7 +84,7 @@ pipeline {
                         dir('ai') {
                             sh '''
                                 docker build --target test -t ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} .
-                                docker run --rm -e PYTHONPATH=/app ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} /app/.venv/bin/python -m pytest --tb=long -q
+                                docker run --rm ${AI_IMAGE_NAME}:ci-${BUILD_NUMBER} uv run pytest --tb=short -q
                             '''
                             script {
                                 if (env.gitlabMergeRequestId != null) {
