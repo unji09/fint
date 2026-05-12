@@ -7,6 +7,6 @@ public record DashboardUpdateRequest(
         String title,
 
         @Size(max = 300)
-        String thumbnailUrl
+        String thumbnailKey
 ) {
 }

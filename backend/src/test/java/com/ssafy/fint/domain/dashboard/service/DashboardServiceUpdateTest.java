@@ -56,20 +56,20 @@ class DashboardServiceUpdateTest {
     }
 
     @Test
-    @DisplayName("thumbnailUrl 만 전달 시 썸네일만 변경된다.")
-    void updateOnlyThumbnailUrl() {
+    @DisplayName("thumbnailKey 만 전달 시 썸네일만 변경된다.")
+    void updateOnlyThumbnailKey() {
         Dashboard dashboard = newDashboard(OWNER_USER_ID, "제목");
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
 
         dashboardService.update(owner, DASHBOARD_ID,
-                new DashboardUpdateRequest(null, "https://s3.example.com/thumb.png"));
+                new DashboardUpdateRequest(null, "thumbnails/5/20260512_153000000_abc.png"));
 
         assertThat(dashboard.getTitle()).isEqualTo("제목");
-        assertThat(dashboard.getThumbnailUrl()).isEqualTo("https://s3.example.com/thumb.png");
+        assertThat(dashboard.getThumbnailKey()).isEqualTo("thumbnails/5/20260512_153000000_abc.png");
     }
 
     @Test
-    @DisplayName("title 과 thumbnailUrl 모두 null 이면 INVALID_INPUT 으로 차단된다.")
+    @DisplayName("title 과 thumbnailKey 모두 null 이면 INVALID_INPUT 으로 차단된다.")
     void allFieldsNullRejected() {
         assertThatThrownBy(() -> dashboardService.update(
                 owner, DASHBOARD_ID, new DashboardUpdateRequest(null, null)))
