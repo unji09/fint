@@ -1,8 +1,11 @@
 package com.ssafy.fint.domain.notification.service;
 
+import com.ssafy.fint.domain.ai.entity.AiSuggestion;
 import com.ssafy.fint.domain.ai.repository.AiSuggestionRepository;
 import com.ssafy.fint.domain.notification.dto.NotificationItemResponse;
 import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
+import com.ssafy.fint.domain.notification.exception.NotificationErrorCode;
+import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -27,5 +30,13 @@ public class NotificationService {
                 .map(NotificationItemResponse::from)
                 .toList();
         return new NotificationListResponse(items);
+    }
+
+    @Transactional
+    public void markAsRead(Long notificationId, CustomUserDetails me) {
+        AiSuggestion suggestion = aiSuggestionRepository
+                .findByIdAndUserId(notificationId, me.getUserId())
+                .orElseThrow(() -> new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND));
+        suggestion.markAsRead();
     }
 }
