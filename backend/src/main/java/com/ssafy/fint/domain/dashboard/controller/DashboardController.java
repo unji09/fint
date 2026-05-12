@@ -101,4 +101,15 @@ public class DashboardController implements DashboardSwagger {
         dashboardWidgetService.update(me, dashboardId, widgetId, request);
         return ResponseEntity.noContent().build();
     }
+
+    @Override
+    @DeleteMapping("/{dashboardId}/widgets/{widgetId}")
+    public ResponseEntity<Void> deleteWidget(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId,
+            @PathVariable Long widgetId
+    ) {
+        dashboardWidgetService.delete(me, dashboardId, widgetId);
+        return ResponseEntity.noContent().build();
+    }
 }
