@@ -64,6 +64,9 @@ public class SecurityConfig {
                 .requestMatchers(
                     path.matcher("/api/v1/files/**")
                 ).permitAll()
+                .requestMatchers(
+                    path.matcher("/internal/**")
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(
