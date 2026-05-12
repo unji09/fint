@@ -19,6 +19,7 @@ public enum FileErrorCode implements ErrorCode {
     EMPTY_PARTS(HttpStatus.BAD_REQUEST, "FL005", "완료할 파트 정보가 비어있습니다."),
     MULTIPART_AUDIO_ONLY(HttpStatus.BAD_REQUEST, "FL006", "Multipart 업로드는 AUDIO 타입만 지원합니다."),
     MISSING_MEETING_ID(HttpStatus.BAD_REQUEST, "FL007", "MEETING_RECORD 업로드에는 meetingId 가 필요합니다."),
+    MISSING_DASHBOARD_ID(HttpStatus.BAD_REQUEST, "FL008", "THUMBNAIL 업로드에는 dashboardId 가 필요합니다."),
     INVALID_PURPOSE_FOR_TYPE(HttpStatus.BAD_REQUEST, "FL009", "fileType 과 purpose 조합이 올바르지 않습니다."),
     INVALID_FILE_KEY(HttpStatus.BAD_REQUEST, "FL010", "유효하지 않은 fileKey 입니다."),
 

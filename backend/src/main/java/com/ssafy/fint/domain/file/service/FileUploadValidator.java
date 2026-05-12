@@ -29,7 +29,7 @@ public class FileUploadValidator {
     public void validateTypePurpose(FileType type, FilePurpose purpose) {
         boolean ok = switch (purpose) {
             case MEETING_RECORD -> type == FileType.AUDIO;
-            case OCR            -> type == FileType.IMAGE;
+            case OCR, THUMBNAIL -> type == FileType.IMAGE;
         };
         if (!ok) {
             throw new BusinessException(FileErrorCode.INVALID_PURPOSE_FOR_TYPE,
@@ -57,9 +57,11 @@ public class FileUploadValidator {
      * 별도의 null 검증은 수행하지 않는다.
      */
     public void validateSize(FilePurpose purpose, long fileSize) {
-        long max = (purpose == FilePurpose.OCR)
-                ? props.upload().maxOcrSize()
-                : props.upload().maxSingleSize();
+        long max = switch (purpose) {
+            case OCR -> props.upload().maxOcrSize();
+            case THUMBNAIL -> props.upload().maxThumbnailSize();
+            case MEETING_RECORD -> props.upload().maxSingleSize();
+        };
         if (fileSize > max) {
             throw new BusinessException(FileErrorCode.FILE_TOO_LARGE,
                     "fileSize=" + fileSize + " > max=" + max + " (purpose=" + purpose + ")");
@@ -93,7 +95,10 @@ public class FileUploadValidator {
 
         String meetingPrefix = props.upload().keyPrefix().meeting();
         String cardPrefix = props.upload().keyPrefix().businessCard();
-        if (!fileKey.startsWith(meetingPrefix) && !fileKey.startsWith(cardPrefix)) {
+        String thumbnailPrefix = props.upload().keyPrefix().thumbnail();
+        if (!fileKey.startsWith(meetingPrefix)
+                && !fileKey.startsWith(cardPrefix)
+                && !fileKey.startsWith(thumbnailPrefix)) {
             throw new BusinessException(FileErrorCode.INVALID_FILE_KEY,
                     "허용되지 않은 fileKey prefix 입니다.");
         }

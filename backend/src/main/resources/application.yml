@@ -82,9 +82,13 @@ aws:
       max-single-size: 104857600   # 100MB
       # OCR(명함) 전용 최대 크기. 규칙 §4: 5MB 이하 권장.
       max-ocr-size: 5242880        # 5MB
+      # THUMBNAIL 전용 최대 크기. 규칙 §5: 5MB 이하.
+      max-thumbnail-size: 5242880  # 5MB
       key-prefix:
         # MEETING_RECORD → meetings/{meetingId}/{uuid}.{ext}
         meeting: meetings/
         # OCR → business-cards/{contactId}/{uuid}.{ext}
         business-card: business-cards/
+        # THUMBNAIL → thumbnails/{dashboardId}/{yyyyMMddHHmmssSSS}_{uuid}.{ext}
+        thumbnail: thumbnails/
 
