@@ -64,6 +64,11 @@ public interface DealRepository extends JpaRepository<Deal, Long> {
                   and aua.user.isDeleted = false
             )
               and (:accountId is null or d.account.accountId = :accountId)
+              and (:contactId is null
+                   or exists (
+                       select 1 from DealContact dc
+                       where dc.deal = d and dc.contact.contactId = :contactId
+                   ))
             """,
             countQuery = """
             select count(d) from Deal d
@@ -74,22 +79,39 @@ public interface DealRepository extends JpaRepository<Deal, Long> {
                   and aua.user.isDeleted = false
             )
               and (:accountId is null or d.account.accountId = :accountId)
+              and (:contactId is null
+                   or exists (
+                       select 1 from DealContact dc
+                       where dc.deal = d and dc.contact.contactId = :contactId
+                   ))
             """)
     Page<Deal> findAllByTenant(@Param("tenantId") Long tenantId,
                                @Param("accountId") Long accountId,
+                               @Param("contactId") Long contactId,
                                Pageable pageable);
 
     @Query(value = """
             select d from Deal d
             where d.team.teamId = :teamId
               and (:accountId is null or d.account.accountId = :accountId)
+              and (:contactId is null
+                   or exists (
+                       select 1 from DealContact dc
+                       where dc.deal = d and dc.contact.contactId = :contactId
+                   ))
             """,
             countQuery = """
             select count(d) from Deal d
             where d.team.teamId = :teamId
               and (:accountId is null or d.account.accountId = :accountId)
+              and (:contactId is null
+                   or exists (
+                       select 1 from DealContact dc
+                       where dc.deal = d and dc.contact.contactId = :contactId
+                   ))
             """)
     Page<Deal> findAllByTeam(@Param("teamId") Long teamId,
                              @Param("accountId") Long accountId,
+                             @Param("contactId") Long contactId,
                              Pageable pageable);
 }

@@ -118,6 +118,12 @@ class Settings(BaseSettings):
             f"{self.REDIS_HOST}:"
             f"{self.REDIS_PORT}/0"
         )
+    # ─────────────────────────────────────────────
+    # Spring Internal
+    # ─────────────────────────────────────────────
+
+    SPRING_BASE_URL: str = "http://localhost:8080"
+    INTERNAL_SECRET: str = ""
 
 
 @lru_cache

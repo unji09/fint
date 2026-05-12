@@ -16,7 +16,7 @@ from app.core.errors import (
 )
 from app.core.redis import get_redis
 from app.core.security import get_tenant_id
-from tests.conftest import (
+from tests.routers.conftest import (
     IMAGE_BYTES,
     SAMPLE_RESPONSE,
 )

@@ -10,5 +10,13 @@ public enum Mood {
     SUNNY,
     CLOUDY,
     RAINY,
-    THUNDER
+    THUNDER;
+
+    public static Mood from(int score) {
+        if (score >= 80) return RAINBOW;
+        if (score >= 60) return SUNNY;
+        if (score >= 40) return CLOUDY;
+        if (score >= 20) return RAINY;
+        return THUNDER;
+    }
 }

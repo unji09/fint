@@ -4,6 +4,7 @@ import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealDetailResponse;
 import com.ssafy.fint.domain.deal.dto.DealListResponse;
+import com.ssafy.fint.domain.deal.dto.DealStageResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.dto.DealUpdateResponse;
 import com.ssafy.fint.domain.deal.service.DealService;
@@ -54,11 +55,21 @@ public class DealController implements DealSwagger {
     public ApiResponse<DealListResponse> findList(
             @AuthenticationPrincipal CustomUserDetails me,
             @RequestParam(required = false) Long accountId,
+            @RequestParam(required = false) Long contactId,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         int cappedSize = Math.min(pageable.getPageSize(), DEAL_LIST_MAX_PAGE_SIZE);
         Pageable sorted = PageRequest.of(pageable.getPageNumber(), cappedSize, DEAL_LIST_SORT);
-        return ApiResponse.ok(dealService.findList(me, accountId, sorted));
+        return ApiResponse.ok(dealService.findList(me, accountId, contactId, sorted));
+    }
+
+    @Override
+    @GetMapping("/{dealId}/stage")
+    public ApiResponse<DealStageResponse> findCurrentStage(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dealId
+    ) {
+        return ApiResponse.ok(dealService.findCurrentStage(me, dealId));
     }
 
     @Override
