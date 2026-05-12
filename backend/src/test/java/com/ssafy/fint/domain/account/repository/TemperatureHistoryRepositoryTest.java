@@ -84,6 +84,7 @@ class TemperatureHistoryRepositoryTest {
                 .account(account)
                 .mood(mood)
                 .reason(reason)
+                .moodScore(50)
                 .build();
         em.persist(h);
         em.flush();
