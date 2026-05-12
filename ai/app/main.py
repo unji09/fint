@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.clients import warmup_embedder_client, warmup_ocr_client
+from app.clients import warmup_embedder_client
 from app.core.config import get_settings
 from app.core.db import close_db, init_db
 from app.core.errors import register_exception_handlers
@@ -19,7 +19,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logging.basicConfig(level=settings.LOG_LEVEL, force=True)
     init_db(settings.database_url)
     init_redis(settings.redis_url)
-    await warmup_ocr_client().warmup()
 
     from pathlib import Path
 
