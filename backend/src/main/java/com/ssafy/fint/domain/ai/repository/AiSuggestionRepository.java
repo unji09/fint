@@ -3,6 +3,7 @@ package com.ssafy.fint.domain.ai.repository;
 import com.ssafy.fint.domain.ai.entity.AiSuggestion;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -71,4 +72,16 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
             @Param("suggestionId") Long suggestionId,
             @Param("userId") Long userId
     );
+
+    @Modifying
+    @Query("""
+            update AiSuggestion s set s.isRead = true
+            where s.isRead = false
+              and s.account in (
+                  select aua.account from AccountUserAssignment aua
+                  where aua.user.userId = :userId
+                    and aua.user.isDeleted = false
+              )
+            """)
+    int markAllAsReadByUserId(@Param("userId") Long userId);
 }

@@ -6,12 +6,13 @@ import com.ssafy.fint.domain.ai.entity.AiSuggestionRelatedType;
 import com.ssafy.fint.domain.ai.repository.AiSuggestionRepository;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
+import com.ssafy.fint.domain.notification.dto.NotificationReadAllResponse;
+import com.ssafy.fint.domain.notification.exception.NotificationErrorCode;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.entity.UserRole;
-import com.ssafy.fint.global.security.CustomUserDetails;
-import com.ssafy.fint.domain.notification.exception.NotificationErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
+import com.ssafy.fint.global.security.CustomUserDetails;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -39,8 +40,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 알림 목록 조회(GET /notifications) 단위 테스트.
- * 데이터 소스는 ai_suggestions. 로그인 user 가 owner 인 account 의 unread suggestion 최신순 10건.
+ * NotificationService 단위 테스트.
+ * 알림 목록 조회 / 전체 읽음 / 개별 읽음 세 기능을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
@@ -192,6 +193,34 @@ class NotificationServiceTest {
                 .build();
         ReflectionTestUtils.setField(stage, "pipelineStageId", 10L);
         return stage;
+    }
+
+    @Nested
+    @DisplayName("알림 전체 읽음 (PATCH /notifications/read-all)")
+    class MarkAllAsRead {
+
+        @Test
+        @DisplayName("미읽은 알림이 있으면 읽음 처리 후 변경 건수를 반환한다.")
+        void markAllAsRead_returnsUpdatedCount() {
+            when(aiSuggestionRepository.markAllAsReadByUserId(USER_ID))
+                    .thenReturn(5);
+
+            NotificationReadAllResponse res = notificationService.markAllAsRead(me);
+
+            assertThat(res.updatedCount()).isEqualTo(5);
+            verify(aiSuggestionRepository).markAllAsReadByUserId(USER_ID);
+        }
+
+        @Test
+        @DisplayName("미읽은 알림이 없으면 updatedCount 가 0 으로 반환된다.")
+        void markAllAsRead_zeroWhenNoneUnread() {
+            when(aiSuggestionRepository.markAllAsReadByUserId(USER_ID))
+                    .thenReturn(0);
+
+            NotificationReadAllResponse res = notificationService.markAllAsRead(me);
+
+            assertThat(res.updatedCount()).isZero();
+        }
     }
 
     @Nested
