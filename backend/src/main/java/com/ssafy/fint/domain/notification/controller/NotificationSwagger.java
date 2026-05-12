@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.notification.controller;
 
 import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
+import com.ssafy.fint.domain.notification.dto.NotificationReadAllResponse;
 import com.ssafy.fint.global.ApiResponse;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,6 +16,12 @@ public interface NotificationSwagger {
                     + "데이터 소스는 ai_suggestions 테이블이다."
     )
     ApiResponse<NotificationListResponse> findUnread(CustomUserDetails me);
+
+    @Operation(
+            summary = "알림 전체 읽음",
+            description = "사용자의 모든 미읽은 알림을 읽음 상태로 변경한다."
+    )
+    ApiResponse<NotificationReadAllResponse> markAllAsRead(CustomUserDetails me);
 
     @Operation(
             summary = "알림 읽음 처리",

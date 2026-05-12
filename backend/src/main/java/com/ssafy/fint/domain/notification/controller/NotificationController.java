@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.notification.controller;
 
 import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
+import com.ssafy.fint.domain.notification.dto.NotificationReadAllResponse;
 import com.ssafy.fint.domain.notification.service.NotificationService;
 import com.ssafy.fint.global.ApiResponse;
 import com.ssafy.fint.global.security.CustomUserDetails;
@@ -25,6 +26,14 @@ public class NotificationController implements NotificationSwagger {
             @AuthenticationPrincipal CustomUserDetails me
     ) {
         return ApiResponse.ok(notificationService.findUnreadNotifications(me));
+    }
+
+    @Override
+    @PatchMapping("/read-all")
+    public ApiResponse<NotificationReadAllResponse> markAllAsRead(
+            @AuthenticationPrincipal CustomUserDetails me
+    ) {
+        return ApiResponse.ok(notificationService.markAllAsRead(me));
     }
 
     @Override
