@@ -17,6 +17,7 @@ from app.schemas.dashboard import FilterOperator, QuerySpec
 _AGG_PATTERN = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\((\*|\w+(?:\.\w+)?)\)$", re.IGNORECASE)
 _DATE_TRUNC_PATTERN = re.compile(r"^DATE_TRUNC\('(\w+)',\s*(\w+(?:\.\w+)?)\)$", re.IGNORECASE)
 _DOT_COL_PATTERN = re.compile(r"^(\w+)\.(\w+)$")
+_ALIAS_PATTERN = re.compile(r"\s+[Aa][Ss]\s+\w+$")
 
 
 class QueryBuildError(Exception):
@@ -54,7 +55,34 @@ def _resolve_column(col: str, spec: QuerySpec) -> tuple[str, str]:
     return spec.table, col
 
 
+def _strip_alias(col: str) -> str:
+    return _ALIAS_PATTERN.sub("", col).strip()
+
+
+def _sanitize_spec(spec: QuerySpec) -> QuerySpec:
+    updates: dict = {}
+    cleaned_cols = [_strip_alias(c) for c in spec.columns]
+    if cleaned_cols != spec.columns:
+        updates["columns"] = cleaned_cols
+    if spec.group_by:
+        cleaned_gb = [_strip_alias(c) for c in spec.group_by]
+        if cleaned_gb != spec.group_by:
+            updates["group_by"] = cleaned_gb
+    if spec.order_by:
+        cleaned_ob = [
+            o.model_copy(update={"column": _strip_alias(o.column)})
+            if _strip_alias(o.column) != o.column else o
+            for o in spec.order_by
+        ]
+        if any(a.column != b.column for a, b in zip(cleaned_ob, spec.order_by)):
+            updates["order_by"] = cleaned_ob
+    if updates:
+        spec = spec.model_copy(update=updates)
+    return spec
+
+
 def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
+    spec = _sanitize_spec(spec)
     if spec.columns == ["*"]:
         cols = get_allowed_columns(spec.table)
         if cols:
@@ -146,7 +174,14 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
             sql_parts.append(f"AND {col_ref} {f.operator.value} {placeholder}")
 
     def _qualify_ref(col: str) -> str:
+        agg_match = _AGG_PATTERN.match(col)
         dt_match = _DATE_TRUNC_PATTERN.match(col)
+        if agg_match:
+            func, arg = agg_match.group(1).upper(), agg_match.group(2)
+            if arg == "*":
+                return f"{func}(*)"
+            tbl, c = _resolve_column(arg, spec)
+            return f"{func}({tbl}.{c})"
         if dt_match:
             interval, column = dt_match.group(1), dt_match.group(2)
             tbl, c = _resolve_column(column, spec)
@@ -215,7 +250,16 @@ def _validate_spec(spec: QuerySpec) -> None:
 
     if spec.order_by:
         for o in spec.order_by:
-            _resolve_column(o.column, spec)
+            agg_match = _AGG_PATTERN.match(o.column)
+            dt_match = _DATE_TRUNC_PATTERN.match(o.column)
+            if agg_match:
+                arg = agg_match.group(2)
+                if arg != "*":
+                    _resolve_column(arg, spec)
+            elif dt_match:
+                _resolve_column(dt_match.group(2), spec)
+            else:
+                _resolve_column(o.column, spec)
 
     if spec.group_by:
         for col in spec.group_by:

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 class WidgetType(StrEnum):
     BAR = "BAR_CHART"
-    LINE = "LINE"
+    LINE = "LINE_CHART"
     PIE = "PIE"
     KPI = "KPI"
     TABLE = "TABLE"
