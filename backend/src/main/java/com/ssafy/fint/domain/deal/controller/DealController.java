@@ -92,6 +92,18 @@ public class DealController implements DealSwagger {
     }
 
     @Override
+    @DeleteMapping("/{dealId}/contacts/{contactId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public ApiResponse<Void> unlinkContact(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dealId,
+            @PathVariable Long contactId
+    ) {
+        dealService.unlinkContact(me, dealId, contactId);
+        return ApiResponse.ok();
+    }
+
+    @Override
     @DeleteMapping("/{dealId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void softDelete(

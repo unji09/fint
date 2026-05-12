@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface DealContactRepository extends JpaRepository<DealContact, Long> {
 
@@ -22,4 +23,6 @@ public interface DealContactRepository extends JpaRepository<DealContact, Long> 
             where dc.deal.dealId in :dealIds
             """)
     List<DealContact> findAllByDealIdIn(@Param("dealIds") List<Long> dealIds);
+
+    Optional<DealContact> findByDeal_DealIdAndContact_ContactId(Long dealId, Long contactId);
 }

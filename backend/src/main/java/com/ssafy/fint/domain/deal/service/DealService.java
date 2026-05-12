@@ -236,6 +236,21 @@ public class DealService {
     }
 
     @Transactional
+    public void unlinkContact(CustomUserDetails me, Long dealId, Long contactId) {
+        Long tenantId = me.getTenantId();
+
+        dealRepository.findByIdAndTenantId(dealId, tenantId)
+                .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_NOT_FOUND));
+
+        DealContact dealContact = dealContactRepository
+                .findByDeal_DealIdAndContact_ContactId(dealId, contactId)
+                .orElseThrow(() -> new BusinessException(DealErrorCode.DEAL_CONTACT_NOT_FOUND));
+
+        dealContactRepository.delete(dealContact);
+        log.debug("[DealUnlinkContact] dealId={} contactId={} tenantId={}", dealId, contactId, tenantId);
+    }
+
+    @Transactional
     public void softDelete(CustomUserDetails me, Long dealId) {
         Long tenantId = me.getTenantId();
 
