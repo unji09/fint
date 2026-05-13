@@ -238,13 +238,14 @@ export default function WeekGrid({
     >
       {/* ── sticky 헤더 블록 ─────────────────────────────────────── */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#fff' }}>
-        {/* 파이프라인: 시간컬럼 + 7컬럼, boxShadow 구분선 */}
+        {/* 파이프라인: 시간컬럼 + 7컬럼. 월간 뷰와 동일한 셀 스타일(높이·폰트·dot·배지) */}
         {pipeline && (
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: `${WEEK_TIME_COL}px repeat(7, 1fr)`,
               borderBottom: `1px solid ${BORDER}`,
+              height: 44, // 월간 뷰 파이프라인과 동일
             }}
           >
             <div style={{ borderRight: `1px solid ${BORDER}` }} />
@@ -255,7 +256,7 @@ export default function WeekGrid({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  padding: '6px 10px',
+                  padding: '0 16px',
                   boxShadow: dividerShadow(i),
                   overflow: 'hidden',
                   minWidth: 0,
@@ -263,8 +264,8 @@ export default function WeekGrid({
               >
                 <span
                   style={{
-                    width: 7,
-                    height: 7,
+                    width: 8,
+                    height: 8,
                     borderRadius: '50%',
                     backgroundColor: s.dot,
                     flexShrink: 0,
@@ -272,7 +273,7 @@ export default function WeekGrid({
                 />
                 <span
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: 500,
                     color: '#1F2126',
                     whiteSpace: 'nowrap',
@@ -286,10 +287,10 @@ export default function WeekGrid({
                 <span
                   style={{
                     fontSize: 11,
-                    fontWeight: 700,
+                    fontWeight: 600,
                     color: s.cTxt,
                     backgroundColor: s.cBg,
-                    padding: '1px 6px',
+                    padding: '2px 7px',
                     borderRadius: 10,
                     flexShrink: 0,
                   }}
