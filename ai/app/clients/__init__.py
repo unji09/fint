@@ -3,6 +3,7 @@ from functools import lru_cache
 from fastapi import Depends
 
 from app.clients.anthropic import AnthropicClient
+from app.clients.dart import DartClient
 from app.clients.embedder import OnnxEmbedderClient
 from app.clients.gpu import GpuServerClient
 from app.clients.llm import LLMClient
@@ -163,6 +164,21 @@ def get_naver_client(
         settings.NAVER_CLIENT_ID,
         settings.NAVER_CLIENT_SECRET,
     )
+
+
+@lru_cache
+def _dart_client(
+    api_key: str,
+) -> DartClient:
+    return DartClient(api_key=api_key)
+
+
+def get_dart_client(
+    settings: Settings = Depends(get_settings),
+) -> DartClient | None:
+    if not settings.DART_API_KEY:
+        return None
+    return _dart_client(settings.DART_API_KEY)
 
 
 _embedder: OnnxEmbedderClient | None = None

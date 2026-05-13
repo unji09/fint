@@ -21,6 +21,8 @@ interface Props {
   selectedEvent: CalendarEvent | null;
   onEventClick: (e: CalendarEvent) => void;
   onTimeClick?: (dateWithTime: Date) => void;
+  /** 드래그로 시간 범위 선택 시 호출 (start < end). 짧은 드래그면 호출 안 되고 onTimeClick 만 호출. */
+  onTimeRangeSelect?: (start: Date, end: Date) => void;
   pipeline?: readonly PipelineItem[] | PipelineItem[];
 }
 
@@ -194,11 +196,22 @@ export default function WeekGrid({
   selectedEvent,
   onEventClick,
   onTimeClick,
+  onTimeRangeSelect,
   pipeline,
 }: Props) {
   const [now, setNow] = useState(new Date());
   const [scrollTop, setST] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ─── 드래그 상태 ─────────────────────────────────────────
+  // colIdx: 어느 요일 컬럼, startY / currentY: 컬럼 내부 픽셀 좌표 (스크롤 포함)
+  const [drag, setDrag] = useState<{
+    colIdx: number;
+    day: Date;
+    startY: number;
+    currentY: number;
+    moved: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
@@ -212,17 +225,70 @@ export default function WeekGrid({
   const weekDays = getWeekDays(currentDate);
   const redTop = (now.getHours() - START + now.getMinutes() / 60) * HOUR_H;
 
-  const handleColClick = (e: React.MouseEvent<HTMLDivElement>, day: Date) => {
+  // ─── 픽셀 → 시간 변환 (15분 스냅) ────────────────────────
+  // 컬럼 내부 y(px) → Date 객체 (해당 요일의 시각).
+  const yToDate = (y: number, day: Date): Date => {
+    const clampedY = Math.max(0, Math.min(y, TOTAL));
+    const totalMinutes = (clampedY / HOUR_H) * 60;
+    const snapped = Math.round(totalMinutes / 15) * 15; // 15분 단위 스냅
+    const d = new Date(day);
+    const totalFromStart = START * 60 + snapped;
+    d.setHours(Math.floor(totalFromStart / 60), totalFromStart % 60, 0, 0);
+    return d;
+  };
+
+  // ─── 마우스 다운: 드래그 시작 ─────────────────────────────
+  const handleColMouseDown = (e: React.MouseEvent<HTMLDivElement>, colIdx: number, day: Date) => {
     if ((e.target as HTMLElement).closest('[data-event="true"]')) return;
-    if (!onTimeClick) return;
+    if (e.button !== 0) return; // 좌클릭만
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top + scrollTop;
-    const h = Math.min(Math.floor(y / HOUR_H) + START, 23);
-    const rawM = Math.round(((y % HOUR_H) / HOUR_H) * 4) * 15;
-    const d = new Date(day);
-    d.setHours(h, rawM >= 60 ? 45 : rawM, 0, 0);
-    onTimeClick(d);
+    setDrag({ colIdx, day, startY: y, currentY: y, moved: false });
   };
+
+  // ─── 전역 mousemove / mouseup ────────────────────────────
+  useEffect(() => {
+    if (!drag) return;
+
+    const onMove = (e: MouseEvent) => {
+      const colEl = scrollRef.current?.querySelector<HTMLDivElement>(`[data-week-col="${drag.colIdx}"]`);
+      if (!colEl) return;
+      const rect = colEl.getBoundingClientRect();
+      const y = e.clientY - rect.top + scrollTop;
+      const moved = drag.moved || Math.abs(y - drag.startY) > 4;
+      setDrag({ ...drag, currentY: y, moved });
+    };
+
+    const onUp = () => {
+      if (!drag) return;
+      const { startY, currentY, day, moved } = drag;
+      const top = Math.min(startY, currentY);
+      const bot = Math.max(startY, currentY);
+
+      if (!moved) {
+        // 단순 클릭 — onTimeClick
+        onTimeClick?.(yToDate(top, day));
+      } else {
+        // 드래그 — onTimeRangeSelect. 최소 15분 보장.
+        const startD = yToDate(top, day);
+        let endD = yToDate(bot, day);
+        if (endD.getTime() - startD.getTime() < 15 * 60_000) {
+          endD = new Date(startD.getTime() + 15 * 60_000);
+        }
+        if (onTimeRangeSelect) onTimeRangeSelect(startD, endD);
+        else onTimeClick?.(startD);
+      }
+      setDrag(null);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag, scrollTop]);
 
   return (
     <div
@@ -238,13 +304,14 @@ export default function WeekGrid({
     >
       {/* ── sticky 헤더 블록 ─────────────────────────────────────── */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#fff' }}>
-        {/* 파이프라인: 시간컬럼 + 7컬럼, boxShadow 구분선 */}
+        {/* 파이프라인: 시간컬럼 + 7컬럼. 월간 뷰와 동일한 셀 스타일(높이·폰트·dot·배지) */}
         {pipeline && (
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: `${WEEK_TIME_COL}px repeat(7, 1fr)`,
               borderBottom: `1px solid ${BORDER}`,
+              height: 44, // 월간 뷰 파이프라인과 동일
             }}
           >
             <div style={{ borderRight: `1px solid ${BORDER}` }} />
@@ -255,7 +322,7 @@ export default function WeekGrid({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  padding: '6px 10px',
+                  padding: '0 16px',
                   boxShadow: dividerShadow(i),
                   overflow: 'hidden',
                   minWidth: 0,
@@ -263,8 +330,8 @@ export default function WeekGrid({
               >
                 <span
                   style={{
-                    width: 7,
-                    height: 7,
+                    width: 8,
+                    height: 8,
                     borderRadius: '50%',
                     backgroundColor: s.dot,
                     flexShrink: 0,
@@ -272,7 +339,7 @@ export default function WeekGrid({
                 />
                 <span
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: 500,
                     color: '#1F2126',
                     whiteSpace: 'nowrap',
@@ -286,10 +353,10 @@ export default function WeekGrid({
                 <span
                   style={{
                     fontSize: 11,
-                    fontWeight: 700,
+                    fontWeight: 600,
                     color: s.cTxt,
                     backgroundColor: s.cBg,
-                    padding: '1px 6px',
+                    padding: '2px 7px',
                     borderRadius: 10,
                     flexShrink: 0,
                   }}
@@ -401,19 +468,25 @@ export default function WeekGrid({
           ))}
         </div>
 
-        {/* 7 요일 컬럼: boxShadow(-1px) → 파이프라인·요일헤더와 완벽 정렬 */}
+        {/* 7 요일 컬럼: boxShadow(-1px) → 파이프라인·요일헤더와 완벽 정렬
+            드래그로 시간 범위 선택 가능 (구글 캘린더 패턴). */}
         {weekDays.map((day, colIdx) => {
           const dayEvs = events.filter((ev) => sameDay(ev, day));
+          const isDragCol = drag?.colIdx === colIdx;
+          const dragTop = isDragCol ? Math.min(drag.startY, drag.currentY) : 0;
+          const dragH = isDragCol ? Math.abs(drag.currentY - drag.startY) : 0;
           return (
             <div
               key={colIdx}
-              onClick={(e) => handleColClick(e, day)}
+              data-week-col={colIdx}
+              onMouseDown={(e) => handleColMouseDown(e, colIdx, day)}
               style={{
                 flex: 1,
-                boxShadow: dividerShadow(colIdx), // ← borderLeft 대신
+                boxShadow: dividerShadow(colIdx),
                 position: 'relative',
                 minWidth: 0,
-                cursor: 'default',
+                cursor: 'crosshair',
+                userSelect: 'none',
               }}
             >
               {HOURS.map((h) => (
@@ -436,6 +509,39 @@ export default function WeekGrid({
                   )}
                 </div>
               ))}
+
+              {/* 드래그 highlight overlay */}
+              {isDragCol && drag.moved && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: dragTop,
+                    left: 1,
+                    right: 1,
+                    height: Math.max(dragH, 1),
+                    backgroundColor: 'rgba(6, 182, 212, 0.18)',
+                    border: '1px solid #06B6D4',
+                    borderRadius: 6,
+                    zIndex: 3,
+                    pointerEvents: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: dragH < 36 ? 'center' : 'flex-start',
+                    padding: '4px 6px',
+                    gap: 2,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#06B6D4' }}>
+                    {(() => {
+                      const s = yToDate(Math.min(drag.startY, drag.currentY), day);
+                      const e = yToDate(Math.max(drag.startY, drag.currentY), day);
+                      const fmt = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                      return `${fmt(s)} – ${fmt(e)}`;
+                    })()}
+                  </span>
+                </div>
+              )}
 
               {/* 현재 시각 표시기 */}
               {isToday(day) && redTop >= 0 && redTop <= TOTAL && (

@@ -35,3 +35,17 @@ async def get_tenant_id(request: Request) -> int:
             raise BusinessException(CommonErrorCode.UNAUTHORIZED, "Invalid X-Tenant-Id")
 
     raise BusinessException(CommonErrorCode.UNAUTHORIZED)
+
+
+def decode_tenant_id(token: str) -> int:
+    secret = get_settings().JWT_SECRET
+    if not secret:
+        raise BusinessException(CommonErrorCode.UNAUTHORIZED, "JWT secret not configured")
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        tenant_id = payload.get("tenant_id")
+        if tenant_id is None:
+            raise BusinessException(CommonErrorCode.UNAUTHORIZED, "Missing tenant_id in token")
+        return _validate_tenant_id(int(tenant_id))
+    except (JWTError, ValueError, KeyError):
+        raise BusinessException(CommonErrorCode.UNAUTHORIZED, "Invalid token")

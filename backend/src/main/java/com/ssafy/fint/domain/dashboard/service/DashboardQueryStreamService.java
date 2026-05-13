@@ -66,6 +66,7 @@ public class DashboardQueryStreamService {
      * 내부에서 Redis polling 을 시작한다.
      */
     public SseEmitter subscribe(String traceId) {
+        log.info("[SSE] subscribe traceId={}", traceId);
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         AtomicReference<AiQueryStatus> lastStatus = new AtomicReference<>();
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
@@ -77,9 +78,16 @@ public class DashboardQueryStreamService {
         );
         futureRef.set(future);
 
-        emitter.onCompletion(() -> future.cancel(false));
-        emitter.onError(e -> future.cancel(false));
+        emitter.onCompletion(() -> {
+            log.info("[SSE] connection closed traceId={}", traceId);
+            future.cancel(false);
+        });
+        emitter.onError(e -> {
+            log.warn("[SSE] connection error traceId={}", traceId, e);
+            future.cancel(false);
+        });
         emitter.onTimeout(() -> {
+            log.warn("[SSE] emitter timeout traceId={}", traceId);
             future.cancel(false);
             sendErrorSilently(emitter, null, "처리 시간이 초과되었습니다.");
             emitter.complete();
@@ -95,6 +103,7 @@ public class DashboardQueryStreamService {
                       long deadline) {
         try {
             if (System.currentTimeMillis() > deadline) {
+                log.warn("[SSE] poll timeout traceId={}", traceId);
                 String message = "처리 시간이 초과되었습니다.";
                 markFailedSilently(traceId, message);
                 sendErrorSilently(emitter, null, message);
@@ -104,6 +113,7 @@ public class DashboardQueryStreamService {
 
             String json = redisTemplate.opsForValue().get(REDIS_KEY_PREFIX + traceId);
             if (json == null) {
+                log.warn("[SSE] redis key not found traceId={}", traceId);
                 sendErrorSilently(emitter, null, "유효하지 않은 traceId 입니다.");
                 cancelAndComplete(emitter, futureRef);
                 return;
@@ -115,16 +125,19 @@ public class DashboardQueryStreamService {
             if (status == lastStatus.get()) {
                 return;
             }
+            log.info("[SSE] status changed traceId={} {} -> {}", traceId, lastStatus.get(), status);
             lastStatus.set(status);
 
             switch (status) {
                 case INTENT_PARSING, DATA_QUERYING, COMPONENT_BUILDING, STYLING -> sendProgress(emitter, status);
                 case COMPLETED -> {
                     sendComplete(emitter, payload);
+                    log.info("[SSE] completed traceId={}", traceId);
                     cancelAndComplete(emitter, futureRef);
                 }
                 case FAILED -> {
                     String message = (String) payload.getOrDefault(FIELD_ERROR, "처리에 실패했습니다.");
+                    log.warn("[SSE] failed traceId={} message={}", traceId, message);
                     sendErrorSilently(emitter, null, message);
                     cancelAndComplete(emitter, futureRef);
                 }

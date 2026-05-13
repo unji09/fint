@@ -5,16 +5,28 @@ import PipelineProgress from './PipelineProgress';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import type { Deal } from '@/types/customer';
 
+// 백엔드 DealDetailResponse 와 1:1 매칭
 interface DealDetail {
   dealId: number;
   title: string;
   amount: number | null;
   probability: number | null;
   expectedClose: string | null;
-  currentPipelineStage: string | null;
   wonAt: string | null;
   lostAt: string | null;
-  contacts: { contactId: number; name: string; title: string | null }[];
+  lostReason: string | null;
+  currentPipelineStage: string | null;
+  meetingCount: number;
+  contacts: ContactDetail[];
+}
+
+interface ContactDetail {
+  contactId: number;
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  personality: string | null;
 }
 
 interface Activity {
@@ -25,7 +37,8 @@ interface Activity {
   memo: string | null;
 }
 
-const PIPELINE_LABELS = ['첫 미팅 준비', '니즈 파악', '제안서 작성', '제안 발표', '협상 중', '계약 검토', '성사 / 실패'];
+// DB pipeline_stages 와 1:1 매칭 (한글 7단계)
+const PIPELINE_LABELS = ['발굴', '가치 제안', '솔루션 설계', '제안 제출', '협상', '계약 대기', '수주'];
 const CONTACT_COLORS = ['#7c3aed', '#0891b2', '#059669', '#dc2626', '#d97706'];
 
 function fmtAmount(n: number | null): string {
@@ -40,7 +53,7 @@ function fmtDate(s: string | null): string {
 
 function pipelineIndex(stage: string | null): number {
   if (!stage) return 0;
-  const idx = PIPELINE_LABELS.findIndex((l) => l === stage || stage.includes(l));
+  const idx = PIPELINE_LABELS.indexOf(stage);
   return idx >= 0 ? idx : 0;
 }
 
@@ -63,7 +76,14 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
       fetchWithAuth(`/activities?dealId=${deal.dealId}&size=5`).then((r) => r.json()),
     ]).then(([detailRes, actRes]) => {
       if (detailRes.status === 'fulfilled') setDetail(detailRes.value.data);
-      if (actRes.status === 'fulfilled') setActivities(actRes.value.data?.content ?? actRes.value.data ?? []);
+      if (actRes.status === 'fulfilled') {
+        const ad = actRes.value.data;
+        const list =
+          (Array.isArray(ad?.data) ? ad.data : null) ??
+          ad?.content ??
+          (Array.isArray(ad) ? ad : []);
+        setActivities(list);
+      }
       setLoading(false);
     });
   }, [deal.dealId]);
@@ -130,14 +150,28 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
             <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={async () => {
                 if (!window.confirm('이 딜을 완료 처리할까요?')) return;
-                try { await fetchWithAuth(`/deals/${deal.dealId}`, { method: 'PATCH', body: JSON.stringify({ stage: '수주' }) }); onDealChanged?.(); } catch { /* */ }
+                // DealUpdateRequest: pipelineStageId(7=수주) + wonAt 동시 갱신
+                try {
+                  await fetchWithAuth(`/deals/${deal.dealId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ pipelineStageId: 7, wonAt: new Date().toISOString() }),
+                  });
+                  onDealChanged?.();
+                } catch { /* */ }
               }} style={{ flex: 1, padding: '7px 0', borderRadius: 6, border: '1px solid #86efac', backgroundColor: '#f0fdf4', color: '#166534', fontFamily: 'Pretendard,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 딜 완료
               </button>
               <button onClick={async () => {
                 const reason = window.prompt('실주 사유를 입력하세요 (선택)');
                 if (reason === null) return;
-                try { await fetchWithAuth(`/deals/${deal.dealId}`, { method: 'PATCH', body: JSON.stringify({ lostReason: reason || '실패 처리' }) }); onDealChanged?.(); } catch { /* */ }
+                // lostAt 도 함께 갱신 (백엔드가 자동 갱신하지 않을 수 있어 명시)
+                try {
+                  await fetchWithAuth(`/deals/${deal.dealId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ lostReason: reason || '실패 처리', lostAt: new Date().toISOString() }),
+                  });
+                  onDealChanged?.();
+                } catch { /* */ }
               }} style={{ flex: 1, padding: '7px 0', borderRadius: 6, border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#991b1b', fontFamily: 'Pretendard,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 딜 실패
               </button>

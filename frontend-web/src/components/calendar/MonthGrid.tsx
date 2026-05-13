@@ -12,6 +12,7 @@
 // 시간: Inter SemiBold 10px #737880  / 제목: Inter SemiBold 12px #1f2126
 // Cat pill: bg-white rounded-8px px-6px py-2px gap-3px, dot 5px
 
+import { useEffect, useState } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG } from './types';
 import { getCalendarDays, isToday, isSameDay } from './utils';
@@ -23,6 +24,18 @@ interface Props {
   onDayClick: (d: Date) => void;
   onEventClick: (e: CalendarEvent) => void;
   onMoreClick?: (d: Date) => void;
+  /** 여러 날짜 드래그 시 호출 (start <= end, 각각 자정 기준). 단일 셀 클릭은 onDayClick 사용. */
+  onDayRangeSelect?: (start: Date, end: Date) => void;
+}
+
+function dayKey(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+function isInRange(d: Date, a: Date, b: Date) {
+  const [lo, hi] = a.getTime() <= b.getTime() ? [a, b] : [b, a];
+  const t = d.getTime();
+  return t >= new Date(lo.getFullYear(), lo.getMonth(), lo.getDate()).getTime()
+    && t <= new Date(hi.getFullYear(), hi.getMonth(), hi.getDate(), 23, 59, 59).getTime();
 }
 
 // Figma: font-family/font-5 = Segoe UI Bold (달력 날짜)
@@ -108,11 +121,43 @@ export default function MonthGrid({
   onDayClick,
   onEventClick,
   onMoreClick,
+  onDayRangeSelect,
 }: Props) {
   const flat = getCalendarDays(currentDate.getFullYear(), currentDate.getMonth());
   const weeks = Array.from({ length: 6 }, (_, i) => flat.slice(i * 7, i * 7 + 7));
   const active = weeks.filter((w) => w.some((d) => d !== null));
   const cm = currentDate.getMonth();
+
+  // 드래그 상태 — 다일 선택 (구글 캘린더 월간 뷰 패턴)
+  const [drag, setDrag] = useState<{ start: Date; current: Date; moved: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!drag) return;
+    const onUp = () => {
+      if (!drag) return;
+      const { start, current, moved } = drag;
+      if (!moved || dayKey(start) === dayKey(current)) {
+        onDayClick(start);
+      } else {
+        const [a, b] = start.getTime() <= current.getTime() ? [start, current] : [current, start];
+        onDayRangeSelect?.(a, b);
+      }
+      setDrag(null);
+    };
+    window.addEventListener('mouseup', onUp);
+    return () => window.removeEventListener('mouseup', onUp);
+  }, [drag, onDayClick, onDayRangeSelect]);
+
+  const handleCellMouseDown = (e: React.MouseEvent<HTMLDivElement>, day: Date) => {
+    if ((e.target as HTMLElement).closest('[data-event="true"]')) return;
+    if (e.button !== 0) return;
+    setDrag({ start: day, current: day, moved: false });
+  };
+  const handleCellMouseEnter = (day: Date) => {
+    if (!drag) return;
+    if (dayKey(drag.current) === dayKey(day)) return;
+    setDrag({ ...drag, current: day, moved: true });
+  };
 
   return (
     <div
@@ -197,25 +242,30 @@ export default function MonthGrid({
                 );
               });
 
+              const inDragRange = drag && drag.moved && isInRange(day, drag.start, drag.current);
+
               return (
                 <div
                   key={di}
-                  onClick={() => onDayClick(day)}
+                  onMouseDown={(e) => handleCellMouseDown(e, day)}
+                  onMouseEnter={() => handleCellMouseEnter(day)}
                   style={{
-                    // Figma: border-b border-r 1px solid #d6d6d6
                     borderRight: di < 6 ? `1px solid ${BORDER_CELL}` : 'none',
-                    // Figma: bg-[#f5f7fa] opacity-50 for other month / bg-white for current
-                    backgroundColor: otherMonth ? '#F5F7FA' : '#FFFFFF',
+                    backgroundColor: inDragRange ? 'rgba(6, 182, 212, 0.10)' : otherMonth ? '#F5F7FA' : '#FFFFFF',
                     opacity: otherMonth ? 0.5 : 1,
-                    // Figma: pt-[6px] pl-[6px] pr-[7px] pb-[7px] min-h-[100px]
                     padding: '6px 7px 7px 6px',
                     overflow: 'hidden',
-                    cursor: 'pointer',
+                    cursor: drag ? 'crosshair' : 'pointer',
+                    userSelect: 'none',
                     display: 'flex',
                     flexDirection: 'column',
-                    // 선택 셀 하이라이트
-                    // 피그마: .overlayshadow = box-shadow: 0px 0px 0px 1.5px #06b6d4 inset
-                    boxShadow: selected ? 'inset 0 0 0 1.5px #06B6D4' : 'none',
+                    // 선택 셀 또는 드래그 중인 셀 하이라이트
+                    boxShadow: selected
+                      ? 'inset 0 0 0 1.5px #06B6D4'
+                      : inDragRange
+                      ? 'inset 0 0 0 1px #06B6D4'
+                      : 'none',
+                    transition: 'background-color 0.08s',
                   }}
                 >
                   {/* 날짜 숫자: Figma size-[24px] rounded-[12px] */}

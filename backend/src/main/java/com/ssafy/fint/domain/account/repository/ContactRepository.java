@@ -25,4 +25,10 @@ public interface ContactRepository extends JpaRepository<Contact, Long> {
     List<Contact> findAllByAccount_AccountId(Long accountId);
 
     Optional<Contact> findByContactId(Long contactId);
+
+    Optional<Contact> findFirstByAccount_AccountIdAndEmail(Long accountId, String email);
+
+    Optional<Contact> findFirstByAccount_AccountIdAndPhone(Long accountId, String phone);
+
+    Optional<Contact> findFirstByAccount_AccountIdAndName(Long accountId, String name);
 }

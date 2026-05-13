@@ -77,6 +77,7 @@ export default function DashboardDetailPage() {
   const [querying, setQuerying] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatDone, setChatDone] = useState(false);
+  const [queryErrorMsg, setQueryErrorMsg] = useState<string | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
   const [userQuery, setUserQuery] = useState('');
   const [queryInput, setQueryInput] = useState('');
@@ -465,6 +466,7 @@ export default function DashboardDetailPage() {
       setQuerying(true);
       setChatOpen(true);
       setChatDone(false);
+      setQueryErrorMsg(null);
       setQueryInput('');
       setPendingWidget(null);
 
@@ -531,6 +533,7 @@ export default function DashboardDetailPage() {
               }
               if (ev.event === 'error') {
                 console.error('Query error:', data.message);
+                setQueryErrorMsg(data.message ?? '쿼리 처리에 실패했습니다.');
                 setQuerying(false);
                 setChatDone(true);
                 ctrl.abort();
@@ -840,6 +843,7 @@ export default function DashboardDetailPage() {
                 query={userQuery}
                 isLoading={querying}
                 isDone={chatDone}
+                errorMessage={queryErrorMsg}
                 widgetTitle={widgetTitle}
                 widgetType={pendingType}
                 result={pendingWidget?.result}
