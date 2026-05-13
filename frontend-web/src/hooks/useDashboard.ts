@@ -26,15 +26,21 @@ export function useDashboardList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const applyTitleOverrides = (list: Dashboard[]): Dashboard[] => {
+    let map: Record<string, string> = {};
+    try { map = JSON.parse(localStorage.getItem('fint:dashboardTitles') ?? '{}'); } catch { /* ignore */ }
+    return list.map((d) => (map[String(d.dashboardId)] ? { ...d, title: map[String(d.dashboardId)] } : d));
+  };
+
   const fetch = useCallback(async () => {
     try {
       setLoading(true);
       const data = await fetchWithAuth<Dashboard[]>('/dashboards');
-      setDashboards(data);
+      setDashboards(applyTitleOverrides(data ?? []));
     } catch (e) {
       setError('대시보드 목록을 불러오지 못했습니다.');
-      // 개발 중 mock 데이터
-      setDashboards([
+      // 개발 중 mock 데이터 (사용자가 바꾼 이름이 있으면 그것도 머지)
+      setDashboards(applyTitleOverrides([
         {
           dashboardId: 1,
           title: '기본',
@@ -47,7 +53,7 @@ export function useDashboardList() {
           thumbnailUrl: null,
           lastAccessedAt: new Date(Date.now() - 3600000).toISOString(),
         },
-      ]);
+      ]));
     } finally {
       setLoading(false);
     }
@@ -111,11 +117,22 @@ export function useUpdateWidget() {
     async (dashboardId: number, widgetId: number, req: Record<string, unknown>) => {
       setLoading(true);
       try {
-        await fetchWithAuth(`/dashboards/${dashboardId}/widgets/${widgetId}`, {
-          method: 'PATCH',
-          body: JSON.stringify(req),
-        });
-        return true;
+        // 공통 fetchWithAuth 는 res.json() 강제 호출하므로 204 No Content 응답에서 throw 됨.
+        // 위젯 PATCH 는 본문 없을 수 있어 직접 fetch 로 처리해 res.ok 만 본다.
+        const token =
+          typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        const res = await fetch(
+          `${API_BASE}/dashboards/${dashboardId}/widgets/${widgetId}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(req),
+          },
+        );
+        return res.ok;
       } catch {
         return false;
       } finally {
@@ -126,6 +143,34 @@ export function useUpdateWidget() {
   );
 
   return { update, loading };
+}
+
+// ─── 위젯 삭제 ─────────────────────────────────────────────────────────────
+
+export function useDeleteWidget() {
+  const [loading, setLoading] = useState(false);
+
+  const remove = useCallback(async (dashboardId: number, widgetId: number) => {
+    setLoading(true);
+    try {
+      const token =
+        typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const res = await fetch(
+        `${API_BASE}/dashboards/${dashboardId}/widgets/${widgetId}`,
+        {
+          method: 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        },
+      );
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { remove, loading };
 }
 
 // ─── 대시보드 쿼리 (SSE 스트림) ──────────────────────────────────────────────
@@ -192,6 +237,62 @@ export function useDashboardQuery() {
   return { startQuery, streamResults, traceId, loading };
 }
 
+// ─── 대시보드 이름 변경 ─────────────────────────────────────────────────────
+
+export function useRenameDashboard() {
+  const [loading, setLoading] = useState(false);
+
+  const rename = useCallback(async (dashboardId: number, title: string) => {
+    setLoading(true);
+    try {
+      const token =
+        typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const res = await fetch(`${API_BASE}/dashboards/${dashboardId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ title }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { rename, loading };
+}
+
+// ─── 대시보드 삭제 ───────────────────────────────────────────────────────────
+
+export function useDeleteDashboard() {
+  const [loading, setLoading] = useState(false);
+
+  const remove = useCallback(async (dashboardId: number) => {
+    setLoading(true);
+    try {
+      // DELETE 응답은 204 No Content가 일반적이라 res.json() 호출하지 않는다.
+      // 공통 fetchWithAuth 헬퍼는 항상 json 파싱을 시도해 빈 본문에서 실패함.
+      const token =
+        typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const res = await fetch(`${API_BASE}/dashboards/${dashboardId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { remove, loading };
+}
+
 // ─── 대시보드 생성 ───────────────────────────────────────────────────────────
 
 export function useCreateDashboard() {
@@ -202,12 +303,32 @@ export function useCreateDashboard() {
     async (req: CreateDashboardRequest) => {
       setLoading(true);
       try {
-        const data = await fetchWithAuth<{ dashboardId: number; traceId: string | null }>(
-          '/dashboards',
-          { method: 'POST', body: JSON.stringify(req) },
-        );
-        router.push(`/dashboard/${data.dashboardId}`);
-        return data;
+        const token =
+          typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        const res = await fetch(`${API_BASE}/dashboards`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(req),
+        });
+        console.log('[FINT] POST /dashboards', { status: res.status, req });
+        if (res.status === 401) throw new Error('UNAUTHORIZED');
+        if (!res.ok) throw new Error(`HTTP_${res.status}`);
+        // 응답 본문이 비었거나 JSON이 아닐 수 있으니 안전 파싱
+        let data: { dashboardId?: number; traceId?: string | null } = {};
+        try {
+          const text = await res.text();
+          if (text) {
+            const json = JSON.parse(text);
+            data = json.data ?? json ?? {};
+          }
+        } catch { /* ignore parse error */ }
+        if (data.dashboardId) {
+          router.push(`/dashboard/${data.dashboardId}`);
+        }
+        return data as { dashboardId: number; traceId: string | null };
       } finally {
         setLoading(false);
       }

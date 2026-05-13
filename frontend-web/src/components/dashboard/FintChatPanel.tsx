@@ -46,12 +46,18 @@ export default function FintChatPanel({
   return (
     <div
       style={{
-        background: 'rgba(248,250,255,0.72)',
-        backdropFilter: 'blur(16px) saturate(180%) brightness(1.05)',
-        WebkitBackdropFilter: 'blur(16px) saturate(180%) brightness(1.05)',
-        border: '1px solid rgba(255,255,255,0.9)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,1)',
-        borderRadius: 16,
+        background:
+          'linear-gradient(180deg, rgba(255,255,255,0.85) 0%, rgba(244,249,255,0.78) 100%)',
+        backdropFilter: 'blur(20px) saturate(180%) brightness(1.06)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%) brightness(1.06)',
+        border: '1px solid rgba(255,255,255,0.95)',
+        boxShadow:
+          '0 1px 0 rgba(255,255,255,0.9) inset, ' +
+          '0 -1px 0 rgba(6,182,212,0.06) inset, ' +
+          '0 2px 6px rgba(15,23,42,0.04), ' +
+          '0 12px 32px rgba(15,23,42,0.10), ' +
+          '0 24px 48px -12px rgba(6,182,212,0.12)',
+        borderRadius: 20,
         width: 390,
         marginBottom: 10,
         overflow: 'hidden',
@@ -63,8 +69,10 @@ export default function FintChatPanel({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '11px 16px',
-          borderBottom: '1px solid rgba(255,255,255,0.6)',
+          padding: '12px 16px',
+          background:
+            'linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%)',
+          borderBottom: '1px solid rgba(226,232,240,0.6)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -215,7 +223,7 @@ export default function FintChatPanel({
               {insightText}
             </p>
             <div
-              onMouseDown={onDragStart}
+              onMouseDown={(e) => { e.stopPropagation(); onDragStart(e); }}
               style={{
                 background: 'rgba(255,255,255,0.85)',
                 border: '1.5px solid rgba(6,182,212,0.4)',
