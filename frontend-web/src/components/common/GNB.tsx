@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { UserIcon } from '@/components/common/Icon';
 import LoginModal from '@/components/common/LoginModal';
+import NotificationPanel, { type NotificationItem } from '@/components/common/NotificationPanel';
 import { fetchWithAuth } from '@/hooks/useAuth';
 
 const F = "'Pretendard', -apple-system, sans-serif";
@@ -14,7 +15,6 @@ const NAV = [
 ] as const;
 
 interface SearchResult { type: 'account' | 'contact' | 'deal'; id: number; label: string; sub: string; href: string }
-interface Notification { notificationId: number; message: string; type: string; createdAt: string }
 
 export default function GNB() {
   const pathname = usePathname();
@@ -29,9 +29,8 @@ export default function GNB() {
 
   // 알림
   const [notiOpen, setNotiOpen] = useState(false);
-  const [notis, setNotis] = useState<Notification[]>([]);
+  const [notis, setNotis] = useState<NotificationItem[]>([]);
   const [notiCount, setNotiCount] = useState(0);
-  const notiRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
@@ -50,32 +49,38 @@ export default function GNB() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // 외부 클릭
+  // 외부 클릭 (검색만 — 알림은 NotificationPanel 자체 backdrop 으로 처리)
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
-      if (notiRef.current && !notiRef.current.contains(e.target as Node)) setNotiOpen(false);
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  // 알림 로드
+  // 알림 로드 — GET /notifications
+  // 백엔드 응답: { data: { content: NotificationItemResponse[] } }
+  // findUnreadNotifications 이므로 응답은 항상 "읽지 않은" 항목만 (최대 10개).
+  // 따라서 unreadCount = content.length.
   const loadNotis = async () => {
     try {
       const res = await fetchWithAuth('/notifications');
-      if (res.ok) {
-        const j = await res.json();
-        const list = j.data?.notifications ?? j.data ?? [];
-        setNotis(Array.isArray(list) ? list : []);
-        setNotiCount(j.data?.unreadCount ?? list.length ?? 0);
-      }
-    } catch { /* */ }
+      if (!res.ok) return;
+      const j = await res.json();
+      const list: NotificationItem[] = Array.isArray(j?.data?.content) ? j.data.content : [];
+      setNotis(list);
+      setNotiCount(list.length);
+    } catch {
+      /* ignore */
+    }
   };
+
+  // 페이지 진입 시 한 번 미리 로드 (배지 개수용)
+  useEffect(() => { loadNotis(); }, []);
 
   const handleNotiClick = () => {
     if (!notiOpen) loadNotis();
-    setNotiOpen(v => !v);
+    setNotiOpen((v) => !v);
   };
 
   return (
@@ -134,38 +139,22 @@ export default function GNB() {
             )}
           </div>
 
-          {/* 알림 */}
-          <div ref={notiRef} style={{ position: 'relative' }}>
-            <button onClick={handleNotiClick}
-              style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', transition: 'background-color 0.12s, border-color 0.12s' }}
-              onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
-              onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                <path d="M10 2a5 5 0 00-5 5v3l-1.3 2.6a.5.5 0 00.45.7h11.7a.5.5 0 00.45-.7L15 10V7a5 5 0 00-5-5z" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M8 15a2 2 0 004 0" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-              {notiCount > 0 && (
-                <span style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {notiCount > 9 ? '9+' : notiCount}
-                </span>
-              )}
-            </button>
-            {notiOpen && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, width: 320, zIndex: 200, backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', marginTop: 6, maxHeight: 360, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', fontFamily: F, fontSize: 13, fontWeight: 600, color: '#1e293b' }}>알림</div>
-                <div style={{ flex: 1, overflowY: 'auto' }}>
-                  {notis.length > 0 ? notis.map((n) => (
-                    <div key={n.notificationId} style={{ padding: '10px 14px', borderBottom: '1px solid #f8fafc', fontSize: 13, color: '#475569', fontFamily: F }}>
-                      <div>{n.message}</div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{new Date(n.createdAt).toLocaleString('ko-KR')}</div>
-                    </div>
-                  )) : (
-                    <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 13, color: '#94a3b8', fontFamily: F }}>알림이 없습니다.</div>
-                  )}
-                </div>
-              </div>
+          {/* 알림 — 우측 슬라이드 오버 패널 (NotificationPanel) */}
+          <button onClick={handleNotiClick}
+            aria-label="알림"
+            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', transition: 'background-color 0.12s, border-color 0.12s' }}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+              <path d="M10 2a5 5 0 00-5 5v3l-1.3 2.6a.5.5 0 00.45.7h11.7a.5.5 0 00.45-.7L15 10V7a5 5 0 00-5-5z" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M8 15a2 2 0 004 0" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            {notiCount > 0 && (
+              <span style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {notiCount > 9 ? '9+' : notiCount}
+              </span>
             )}
-          </div>
+          </button>
 
           {/* 프로필 */}
           <div onClick={() => setShowLogin((prev) => !prev)}
@@ -178,6 +167,13 @@ export default function GNB() {
       </header>
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+
+      <NotificationPanel
+        open={notiOpen}
+        onClose={() => setNotiOpen(false)}
+        notifications={notis}
+        onChanged={loadNotis}
+      />
     </>
   );
 }

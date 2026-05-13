@@ -5,6 +5,29 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 let refreshPromise: Promise<boolean> | null = null;
 
 /**
+ * 로그아웃 / 세션 만료 시 호출. 인증 토큰 + 'fint:' 프리픽스 클라이언트 캐시
+ * (메모 / 위젯 / 대시보드 제목 등) 를 모두 제거한다.
+ * 공용 PC 에서 사용자 전환 시 이전 사용자 데이터가 남는 걸 막기 위함.
+ */
+export function clearAuthAndCache(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    // fint:* 프리픽스 키 일괄 삭제 (localStorage + sessionStorage)
+    for (const storage of [localStorage, sessionStorage]) {
+      const removeKeys: string[] = [];
+      for (let i = 0; i < storage.length; i++) {
+        const k = storage.key(i);
+        if (k && k.startsWith('fint:')) removeKeys.push(k);
+      }
+      removeKeys.forEach((k) => storage.removeItem(k));
+    }
+  } catch { /* ignore */ }
+}
+
+/**
  * accessToken이 만료(401)되었을 때 refreshToken으로 재발급 시도.
  * 동시 호출 시 하나의 요청만 보내고 나머지는 대기.
  */
@@ -23,10 +46,8 @@ export async function refreshAccessToken(): Promise<boolean> {
       });
 
       if (!res.ok) {
-        // refresh 실패 → 로그인 페이지로
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
+        // refresh 실패 → 토큰 + 클라이언트 캐시 모두 정리 후 로그인 페이지로
+        clearAuthAndCache();
         window.location.href = '/login';
         return false;
       }

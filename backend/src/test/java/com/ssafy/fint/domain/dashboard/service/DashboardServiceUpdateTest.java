@@ -3,9 +3,11 @@ package com.ssafy.fint.domain.dashboard.service;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.entity.Dashboard;
 import com.ssafy.fint.domain.dashboard.repository.DashboardRepository;
+import com.ssafy.fint.domain.file.service.FilePresignedService;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.entity.UserRole;
+import com.ssafy.fint.global.config.properties.AwsS3Properties;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
@@ -36,6 +38,8 @@ class DashboardServiceUpdateTest {
     private static final long DASHBOARD_ID = 5L;
 
     @Mock private DashboardRepository dashboardRepository;
+    @Mock private FilePresignedService filePresignedService;
+    @Mock private AwsS3Properties awsS3Properties;
 
     @InjectMocks private DashboardService dashboardService;
 
@@ -56,20 +60,25 @@ class DashboardServiceUpdateTest {
     }
 
     @Test
-    @DisplayName("thumbnailUrl 만 전달 시 썸네일만 변경된다.")
-    void updateOnlyThumbnailUrl() {
+    @DisplayName("thumbnailKey 만 전달 시 썸네일만 변경된다.")
+    void updateOnlyThumbnailKey() {
         Dashboard dashboard = newDashboard(OWNER_USER_ID, "제목");
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
 
+        var keyPrefix = new AwsS3Properties.Upload.KeyPrefix("meetings/", "business-cards/", "thumbnails/");
+        var upload = new AwsS3Properties.Upload(104857600L, 10485760L, 5242880L, keyPrefix);
+        when(awsS3Properties.upload()).thenReturn(upload);
+        when(filePresignedService.existsOnS3("thumbnails/5/20260512_153000000_abc.png")).thenReturn(true);
+
         dashboardService.update(owner, DASHBOARD_ID,
-                new DashboardUpdateRequest(null, "https://s3.example.com/thumb.png"));
+                new DashboardUpdateRequest(null, "thumbnails/5/20260512_153000000_abc.png"));
 
         assertThat(dashboard.getTitle()).isEqualTo("제목");
-        assertThat(dashboard.getThumbnailUrl()).isEqualTo("https://s3.example.com/thumb.png");
+        assertThat(dashboard.getThumbnailKey()).isEqualTo("thumbnails/5/20260512_153000000_abc.png");
     }
 
     @Test
-    @DisplayName("title 과 thumbnailUrl 모두 null 이면 INVALID_INPUT 으로 차단된다.")
+    @DisplayName("title 과 thumbnailKey 모두 null 이면 INVALID_INPUT 으로 차단된다.")
     void allFieldsNullRejected() {
         assertThatThrownBy(() -> dashboardService.update(
                 owner, DASHBOARD_ID, new DashboardUpdateRequest(null, null)))

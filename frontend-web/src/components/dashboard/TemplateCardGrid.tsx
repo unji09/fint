@@ -247,27 +247,34 @@ export default function TemplateCardGrid({ templates, onSelect, loading }: Templ
                   onClick={() => onSelect(tpl.templateId)}
                   style={{
                     background: '#ffffff',
-                    border: '1px solid #e5e7eb',
+                    border: '1px solid rgba(226,232,240,0.8)',
                     borderRadius: 12,
                     overflow: 'hidden',
-                    boxShadow: '0px 2px 4px rgba(0,0,0,0.04)',
+                    boxShadow:
+                      '0 1px 0 rgba(255,255,255,0.9) inset, ' +
+                      '0 1px 2px rgba(15,23,42,0.04), ' +
+                      '0 6px 16px rgba(15,23,42,0.06)',
                     display: 'flex',
                     flexDirection: 'column',
                     textAlign: 'left',
                     cursor: 'pointer',
                     padding: 1,
-                    transition: 'box-shadow 0.2s, border-color 0.2s',
+                    transition: 'box-shadow 0.18s, border-color 0.18s, transform 0.18s',
                     height: '100%' /* 그리드 행을 꽉 채움 */,
                   }}
                   onMouseEnter={(e) => {
                     const el = e.currentTarget;
-                    el.style.borderColor = '#06b6d4';
-                    el.style.boxShadow = '0px 4px 12px rgba(6,182,212,0.2)';
+                    el.style.borderColor = 'rgba(6,182,212,0.5)';
+                    el.style.boxShadow =
+                      '0 1px 0 rgba(255,255,255,0.9) inset, 0 2px 4px rgba(15,23,42,0.06), 0 14px 32px rgba(6,182,212,0.16)';
+                    el.style.transform = 'translateY(-2px)';
                   }}
                   onMouseLeave={(e) => {
                     const el = e.currentTarget;
-                    el.style.borderColor = '#e5e7eb';
-                    el.style.boxShadow = '0px 2px 4px rgba(0,0,0,0.04)';
+                    el.style.borderColor = 'rgba(226,232,240,0.8)';
+                    el.style.boxShadow =
+                      '0 1px 0 rgba(255,255,255,0.9) inset, 0 1px 2px rgba(15,23,42,0.04), 0 6px 16px rgba(15,23,42,0.06)';
+                    el.style.transform = 'translateY(0)';
                   }}
                 >
                   <div

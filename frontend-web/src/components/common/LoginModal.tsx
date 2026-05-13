@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { clearAuthAndCache } from '@/hooks/useAuth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -73,7 +74,13 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.message ?? '로그인 실패');
+        // 백엔드 raw 메시지 그대로 노출 금지 — 상태 코드별 정형 메시지로 변환.
+        // (내부 클래스명 / 스택 / DB 제약 위반 메시지가 사용자에게 노출되는 것 방지)
+        if (res.status === 401 || res.status === 403) setError('아이디 또는 비밀번호가 올바르지 않습니다.');
+        else if (res.status === 400) setError('입력 정보를 다시 확인해주세요.');
+        else if (res.status >= 500) setError('일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요.');
+        else setError('로그인에 실패했습니다.');
+        console.error('[Login] failed', { status: res.status, message: json?.message });
         return;
       }
 
@@ -98,7 +105,9 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});
     }
-    localStorage.clear();
+    // 토큰 + fint:* 캐시 일괄 정리. (localStorage.clear() 는 도메인의 다른 라이브러리
+    //  키까지 지워버려 부작용 위험이 있어 fint 프리픽스만 선별 삭제)
+    clearAuthAndCache();
     onClose();
     window.location.reload();
   };

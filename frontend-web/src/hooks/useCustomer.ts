@@ -57,13 +57,19 @@ function mapApiSignal(s: ApiSignal): Signal {
   };
 }
 
-function mapApiDeal(d: ApiDeal): Deal {
+function mapApiDeal(d: ApiDeal & Record<string, unknown>): Deal {
+  // 백엔드 DealDetailResponse: currentPipelineStage (한글 stage 이름)
+  // DealListResponse: currentPipeline 또는 동일 키
+  const stage =
+    (d.currentPipelineStage as string | undefined) ??
+    (d.currentPipeline as string | undefined) ??
+    null;
   return {
     dealId: d.dealId,
     title: d.title,
-    assignee: d.stage ?? '-',
-    expectedAmount: d.amount ?? 0,
-    expectedCloseDate: d.expectedClose ?? undefined,
+    assignee: stage ?? '-',
+    expectedAmount: (d.amount as number | null) ?? 0,
+    expectedCloseDate: (d.expectedClose as string | undefined) ?? undefined,
   };
 }
 
@@ -224,26 +230,102 @@ export function useAccountDetail(accountId: string | number | null) {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     if (!accountId) return;
     setSignals([]);
     setContacts([]);
     setDeals([]);
     setLoading(true);
 
-    Promise.allSettled([
-      fetchWithAuth(`/accounts/${accountId}/signals`)
-        .then((r) => r.json())
-        .then((j) => setSignals((j.data ?? []).map(mapApiSignal))),
+    // 백엔드 응답 wrapper 종류가 다양 — 가능한 배열 위치를 모두 시도해서 추출.
+    const extractList = <T,>(j: unknown): T[] => {
+      if (!j || typeof j !== 'object') return [];
+      const obj = j as Record<string, unknown>;
+      // 후보 1: j.data 직접 배열
+      if (Array.isArray(obj.data)) return obj.data as T[];
+      // 후보 2~7: j.data.data / signals / contacts / deals / items / content
+      const inner = obj.data as Record<string, unknown> | undefined;
+      if (inner && typeof inner === 'object') {
+        for (const key of ['data', 'signals', 'contacts', 'deals', 'items', 'content', 'results']) {
+          if (Array.isArray(inner[key])) return inner[key] as T[];
+        }
+      }
+      // 후보 8: 응답 최상위가 배열
+      if (Array.isArray(j)) return j as unknown as T[];
+      return [];
+    };
 
-      fetchWithAuth(`/accounts/${accountId}/contacts`)
-        .then((r) => r.json())
-        .then((j) => setContacts((j.data ?? []).map(mapApiContact))),
+    try {
+      // 1) signals + contacts 병렬
+      const [sigRes, conRes] = await Promise.allSettled([
+        fetchWithAuth(`/accounts/${accountId}/signals`).then((r) => r.json()),
+        fetchWithAuth(`/accounts/${accountId}/contacts`).then((r) => r.json()),
+      ]);
 
-      fetchWithAuth(`/accounts/${accountId}`)
-        .then((r) => r.json())
-        .then((j) => setDeals((j.data?.deals ?? []).map(mapApiDeal))),
-    ]).finally(() => setLoading(false));
+      if (sigRes.status === 'fulfilled') {
+        const sigs = extractList<ApiSignal>(sigRes.value);
+        console.log('[FINT] /signals', { count: sigs.length, raw: sigRes.value });
+        setSignals(sigs.map(mapApiSignal));
+      }
+
+      let accountContacts: ContactInfo[] = [];
+      if (conRes.status === 'fulfilled') {
+        const cons = extractList<ApiContact>(conRes.value);
+        console.log('[FINT] /contacts', { count: cons.length, raw: conRes.value });
+        accountContacts = cons.map(mapApiContact);
+        setContacts(accountContacts);
+      }
+
+      // 2) deals 매칭
+      //    DealListResponse 에 accountId 가 없으므로 deal_contacts 를 통해 매핑한다.
+      //    한 account 의 contactIds 와 각 deal 의 contacts 의 교집합으로 그 account 의 딜 판별.
+      const contactIds = new Set(
+        accountContacts.map((c) => c.contactId).filter((v): v is number => typeof v === 'number'),
+      );
+      if (contactIds.size === 0) {
+        setDeals([]);
+        return;
+      }
+
+      const listRes = await fetchWithAuth('/deals?size=200');
+      if (!listRes.ok) return;
+      const listJson = await listRes.json();
+      const list: { dealId: number }[] = Array.isArray(listJson?.data?.data)
+        ? listJson.data.data
+        : [];
+      console.log('[FINT] /deals returned', {
+        accountId,
+        accountContactIds: Array.from(contactIds),
+        totalDeals: list.length,
+        dealIds: list.map((d) => d.dealId),
+      });
+
+      // 각 deal 상세 받아서 contacts 매칭
+      const detailResults = await Promise.allSettled(
+        list.map(async (d) => {
+          const r = await fetchWithAuth(`/deals/${d.dealId}`);
+          if (!r.ok) return null;
+          const dj = await r.json();
+          const detail = dj.data ?? dj;
+          const dealContacts: { contactId: number }[] = detail?.contacts ?? [];
+          const isAccountDeal = dealContacts.some((c) => contactIds.has(c.contactId));
+          if (!isAccountDeal) return null;
+          // 상세 응답으로 stage 정보까지 보강
+          return { ...d, ...detail };
+        }),
+      );
+
+      const filtered = detailResults
+        .filter(
+          (r): r is PromiseFulfilledResult<Record<string, unknown>> =>
+            r.status === 'fulfilled' && r.value !== null,
+        )
+        .map((r) => r.value);
+
+      setDeals((filtered as unknown as (ApiDeal & Record<string, unknown>)[]).map(mapApiDeal));
+    } finally {
+      setLoading(false);
+    }
   }, [accountId]);
 
   useEffect(() => { load(); }, [load]);

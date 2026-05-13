@@ -1,25 +1,78 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useDashboardList, useDashboardTemplates, useCreateDashboard } from '@/hooks/useDashboard';
+import {
+  useDashboardList,
+  useDashboardTemplates,
+  useCreateDashboard,
+  useDeleteDashboard,
+} from '@/hooks/useDashboard';
 import DashboardHero from '@/components/dashboard/DashboardHero';
 import TemplateCardGrid from '@/components/dashboard/TemplateCardGrid';
 import DashboardList from '@/components/dashboard/DashboardList';
 
 export default function DashboardPage() {
-  const { dashboards, loading: listLoading } = useDashboardList();
+  const { dashboards, loading: listLoading, refetch: refetchList } = useDashboardList();
   const { templates, loading: templatesLoading } = useDashboardTemplates();
   const { create, loading: creating } = useCreateDashboard();
+  const { remove: deleteDashboard, loading: deleting } = useDeleteDashboard();
 
+  // 자연어 검색 — 새 대시보드를 만들어서 그 화면에서 분석을 시작한다.
+  // 502 (LLM/외부 API 장애) 같은 케이스에서는 빈 대시보드 생성으로 fallback,
+  // 사용자는 새 대시보드 화면 진입 후 다시 시도할 수 있다. pendingQuery 도 유지해
+  // dashboard/[id] 마운트 시 자동 재시도된다.
   const handleQuerySubmit = useCallback(
     async (inputText: string) => {
-      await create({ inputText });
+      const trimmed = inputText.trim();
+      if (!trimmed) return;
+      try { sessionStorage.setItem('fint:pendingQuery', trimmed); } catch { /* ignore */ }
+      try { sessionStorage.removeItem('fint:allDashboards'); } catch { /* ignore */ }
+      try {
+        await create({ inputText: trimmed });
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg === 'UNAUTHORIZED') {
+          try { sessionStorage.removeItem('fint:pendingQuery'); } catch { /* ignore */ }
+          window.alert('로그인 세션이 만료되었어요.\n다시 로그인한 뒤 시도해 주세요.');
+          return;
+        }
+        // 502 (외부 API 장애) 또는 그 외 HTTP 에러 → 빈 대시보드 fallback
+        if (msg.startsWith('HTTP_')) {
+          try {
+            await create({ title: '제목없음' });
+            return;
+          } catch { /* fallback도 실패하면 아래 alert */ }
+        }
+        try { sessionStorage.removeItem('fint:pendingQuery'); } catch { /* ignore */ }
+        if (msg.startsWith('HTTP_')) {
+          window.alert(
+            `분석 서버에서 응답을 받지 못했어요. (코드: ${msg.replace('HTTP_', '')})\n` +
+            '잠시 후 다시 시도해 주세요.',
+          );
+        } else {
+          window.alert('서버에 연결할 수 없습니다.\n네트워크 상태를 확인해 주세요.');
+        }
+      }
     },
     [create],
   );
+  // 추천 템플릿 카드 클릭 — 그 템플릿으로 새 대시보드를 생성한다.
   const handleTemplateSelect = useCallback(
     async (templateId: number) => {
-      await create({ templateId });
+      try {
+        try { sessionStorage.removeItem('fint:allDashboards'); } catch { /* ignore */ }
+        await create({ templateId });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg === 'UNAUTHORIZED') {
+          window.alert('로그인 세션이 만료되었어요.\n다시 로그인한 뒤 시도해 주세요.');
+        } else if (msg.startsWith('HTTP_')) {
+          window.alert(`서버에서 응답을 받지 못했어요. (코드: ${msg.replace('HTTP_', '')})`);
+        } else {
+          window.alert('템플릿으로 대시보드를 만들지 못했어요.');
+        }
+      }
     },
     [create],
   );
@@ -27,10 +80,43 @@ export default function DashboardPage() {
     await create({ title: '제목없음' });
   }, [create]);
 
+  const handleDelete = useCallback(
+    async (dashboardId: number, title: string) => {
+      if (deleting) return;
+      const ok = window.confirm(
+        `'${title}' 대시보드를 삭제할까요?\n\n` +
+        `이 대시보드 안의 위젯과 분석 내용이 모두 사라지며,\n` +
+        `한 번 삭제하면 복구할 수 없습니다.`,
+      );
+      if (!ok) return;
+      const success = await deleteDashboard(dashboardId);
+      if (success) {
+        await refetchList();
+        try { sessionStorage.removeItem('fint:allDashboards'); } catch { /* ignore */ }
+        window.alert(`'${title}' 대시보드를 삭제했어요.`);
+      } else {
+        window.alert(`'${title}' 대시보드를 삭제하지 못했습니다.\n잠시 후 다시 시도해 주세요.`);
+      }
+    },
+    [deleteDashboard, deleting, refetchList],
+  );
+
   return (
     <>
-      {/* 전체 배경 — GNB 포함 흰 공간 없이 덮음 */}
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f1f3ff', zIndex: -1 }} />
+      {/* 베이스 — 원래 컨셉 라벤더 */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: -2, backgroundColor: '#f1f3ff' }} />
+      {/* 입체감 — 위쪽 부드러운 highlight + 가장자리 미세한 비네팅 (질감/색 추가 없이) */}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: -1,
+          background:
+            'radial-gradient(ellipse 75% 60% at 50% 10%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 65%),' +
+            'radial-gradient(ellipse 110% 110% at 50% 55%, transparent 60%, rgba(15,23,42,0.06) 100%)',
+          pointerEvents: 'none',
+        }}
+      />
 
       {/*
        * GNB 아래 남은 뷰포트 전체를 flex column으로 채움
@@ -45,20 +131,18 @@ export default function DashboardPage() {
           bottom: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
+          overflowY: 'auto' /* 컨텐츠 합이 뷰포트보다 크면 페이지 스크롤 허용 */,
         }}
       >
         <div
           style={{
-            flex: 1,
-            maxWidth: 1200,
+            maxWidth: 1440,
             width: '100%',
             margin: '0 auto',
-            padding: '28px 32px 24px',
+            padding: '28px 40px 24px',
             display: 'flex',
             flexDirection: 'column',
             gap: 20,
-            minHeight: 0 /* flex child overflow 방지 */,
           }}
         >
           {/* Hero — 고정 높이, shrink 금지 */}
@@ -66,8 +150,15 @@ export default function DashboardPage() {
             <DashboardHero onSubmit={handleQuerySubmit} loading={creating} />
           </div>
 
-          {/* 템플릿 카드 — 남은 공간의 절반 차지 */}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {/* 템플릿 카드 — 최소 320px 확보, 카드 미리보기가 짜부라지지 않도록 */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              flexShrink: 0,
+              minHeight: 320,
+            }}
+          >
             <TemplateCardGrid
               templates={templates}
               onSelect={handleTemplateSelect}
@@ -75,12 +166,14 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 대시보드 목록 — 남은 공간의 절반 차지 */}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {/* 대시보드 목록 — 컨텐츠 기반 높이 + 카드 많아지면 자체 maxHeight 안에서 스크롤 */}
+          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <DashboardList
               dashboards={dashboards}
               loading={listLoading}
               onCreateNew={handleCreateNew}
+              onDelete={handleDelete}
+              deleting={deleting}
             />
           </div>
         </div>
