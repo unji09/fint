@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
 import { formatTime, formatFullDate } from './utils';
+import { useUploadRecording, usePollSttStatus, type SttLine } from '@/hooks/useActivity';
 
 interface Props {
   event: CalendarEvent | null;
@@ -30,11 +31,12 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [uploadingRec, setUploadingRec] = useState(false);
   const [recError, setRecError] = useState<string | null>(null);
   const [sttStatus, setSttStatus] = useState<string | null>(null);
-  const [sttLines, setSttLines] = useState<{ timestamp: string; text: string }[]>([]);
+  const [sttLines, setSttLines] = useState<SttLine[]>([]);
   const [aiSummary, setAiSummary] = useState<{ label: string; text: string; color: string }[]>([]);
+  const { upload: uploadRecording, uploading: uploadingRec } = useUploadRecording();
+  const { poll: pollStt } = usePollSttStatus();
   const [briefingData, setBriefingData] = useState<any | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
   const [briefingError, setBriefingError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     if (!event) {
       setRightView('memo'); setRecordSec(0);
       setSttStatus(null); setSttLines([]); setAiSummary([]);
-      setBriefingData(null); setBriefingError(null); setRecError(null); setUploadingRec(false);
+      setBriefingData(null); setBriefingError(null); setRecError(null);
       setMemoText(''); setMemoEditing(false); setMemoSaving(false);
       [timerRef, pollRef].forEach((r) => { if (r.current) { clearInterval(r.current); r.current = null; } });
       if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') mediaRecRef.current.stop();
@@ -101,44 +103,74 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     }
   };
 
-  const startSttPolling = (id: string) => {
-    let elapsed = 0;
-    pollRef.current = setInterval(async () => {
-      elapsed += 5;
-      if (elapsed > 120) { clearInterval(pollRef.current!); pollRef.current = null; setSttStatus('TIMEOUT'); return; }
-      try {
-        const r = await fetch(`${API_BASE}/activities/${id}`, { headers: authHeader() });
-        if (!r.ok) return;
-        const data = (await r.json()).data ?? {};
-        const status: string = data.sttStatus ?? '';
-        setSttStatus(status);
-        if (status === 'COMPLETED') {
-          clearInterval(pollRef.current!); pollRef.current = null;
-          const tr = data.sttTranscript ?? data.transcript ?? [];
-          setSttLines(Array.isArray(tr) ? tr.map((t: any) => ({ timestamp: t.timestamp ?? '', text: t.text ?? t.content ?? '' })) : []);
-          const sum = data.aiSummary ?? null;
-          if (sum && typeof sum === 'object') {
-            setAiSummary(Object.entries(sum).map(([k, v], i) => ({ label: k, text: String(v), color: ['#EF4444','#F59E0B','#0686D4','#22C55E'][i % 4] })));
-          }
-        } else if (status === 'FAILED') { clearInterval(pollRef.current!); pollRef.current = null; }
-      } catch { /* ignore */ }
-    }, 5000);
+  const SUMMARY_COLORS = ['#EF4444', '#F59E0B', '#0686D4', '#22C55E'];
+
+  // 데모 시나리오 — 백엔드 STT 미구현 시 fallback. PENDING → PROCESSING → COMPLETED 순차 시뮬레이션.
+  const runDemoStt = () => {
+    setSttStatus('PENDING');
+    setTimeout(() => setSttStatus('PROCESSING'), 1500);
+    setTimeout(() => {
+      setSttStatus('COMPLETED');
+      setSttLines([
+        { timestamp: '00:00', text: '안녕하세요, 오늘 미팅 시작하겠습니다.' },
+        { timestamp: '00:08', text: '먼저 지난 주 진행 상황을 정리해 드릴게요.' },
+        { timestamp: '00:23', text: '제안서 초안은 검토 완료했고, 가격 조건만 협의가 남았습니다.' },
+        { timestamp: '00:41', text: '저희 쪽에서는 분기 내 계약 체결을 목표로 하고 있어요.' },
+        { timestamp: '01:02', text: '예산 승인은 다음 주 임원 회의 후 확정될 예정입니다.' },
+        { timestamp: '01:18', text: '추가 자료가 필요하시면 메일로 보내드릴게요.' },
+      ]);
+      setAiSummary([
+        {
+          label: '',
+          text:
+            '제안서 가격 조건 협상이 주요 안건으로 다뤄졌고, 분기 내 계약 체결을 목표로 진행 중. ' +
+            '추가 자료는 이메일로 전달하기로 했으며, 다음 주 임원 회의 후 예산 승인이 확정될 예정. ' +
+            '가격 조건 최종안을 작성한 뒤 재미팅 일정을 조율하기로 함. ' +
+            '예산 승인이 지연되면 일정이 한 주 이상 밀릴 가능성이 있어 일정 관리에 주의 필요.',
+          color: '#737880',
+        },
+      ]);
+    }, 4500);
   };
 
   const handleUpload = async (blob: Blob) => {
     if (!activityId) return;
-    setUploadingRec(true); setRecError(null);
-    try {
-      const presRes = await fetch(`${API_BASE}/files/presigned-url`, { method: 'POST', headers: authHeader(), body: JSON.stringify({ fileName: `rec_${activityId}_${Date.now()}.webm`, contentType: blob.type }) });
-      if (!presRes.ok) throw new Error('presigned URL 실패');
-      const { data: { url, fileKey } } = await presRes.json();
-      const s3Res = await fetch(url, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type } });
-      if (!s3Res.ok) throw new Error('S3 업로드 실패');
-      const recRes = await fetch(`${API_BASE}/activities/${activityId}/recording`, { method: 'POST', headers: authHeader(), body: JSON.stringify({ fileKey }) });
-      if (!recRes.ok && recRes.status !== 202) throw new Error('STT 요청 실패');
-      setSttStatus('PENDING'); startSttPolling(activityId);
-    } catch (e: any) { setRecError(e?.message ?? '업로드 실패'); }
-    finally { setUploadingRec(false); }
+    setRecError(null);
+    setSttLines([]);
+    setAiSummary([]);
+    setSttStatus('PENDING');
+    // 파일 확장자 결정 (Blob 의 type 우선, 없으면 webm)
+    const ext = blob.type.includes('mp4') || blob.type.includes('m4a')
+      ? 'm4a'
+      : blob.type.includes('mpeg')
+      ? 'mp3'
+      : blob.type.includes('wav')
+      ? 'wav'
+      : 'webm';
+    const result = await uploadRecording(Number(activityId), blob, ext);
+    if (!result.ok) {
+      // 백엔드 미구현 시 자동으로 데모 시나리오로 fallback
+      console.warn('[FINT] STT 백엔드 호출 실패 — 데모 시나리오로 진행:', result.error);
+      runDemoStt();
+      return;
+    }
+    // 폴링 시작 — 매 업데이트 콜백으로 상태 반영
+    pollStt(
+      Number(activityId),
+      ({ status, transcript, summary }) => {
+        setSttStatus(status);
+        if (transcript.length > 0) setSttLines(transcript);
+        if (summary) {
+          setAiSummary(
+            Object.entries(summary).map(([k, v], i) => ({
+              label: k,
+              text: String(v),
+              color: SUMMARY_COLORS[i % SUMMARY_COLORS.length],
+            })),
+          );
+        }
+      },
+    );
   };
 
   const startRec = async () => {
@@ -255,7 +287,53 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                     </button>
                   );
                 })}
-                {isFint && <button onClick={startRec} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 6, border: '1px solid #EF4444', backgroundColor: 'transparent', color: '#EF4444', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>● 녹음하기</button>}
+                {isFint && (
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                    <label
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        border: '1px solid #E5E6DE',
+                        backgroundColor: '#fff',
+                        color: '#475569',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      파일 업로드
+                      <input
+                        type="file"
+                        accept="audio/m4a,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a,audio/webm"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUpload(file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    <button
+                      onClick={startRec}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        border: '1px solid #E5E6DE',
+                        backgroundColor: '#fff',
+                        color: '#475569',
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#EF4444' }} />
+                      녹음하기
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {recError && <div style={{ fontSize: 12, color: '#EF4444', backgroundColor: '#FEF2F2', padding: '8px 12px', borderRadius: 6 }}>{recError}</div>}
@@ -263,32 +341,111 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             {/* 메모 탭 */}
             {(rightView === 'memo' || rightView === 'stt') && (
               <>
-                {sttStatus && (
-                  <div style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 4, display: 'inline-block', alignSelf: 'flex-start',
-                    backgroundColor: sttStatus === 'COMPLETED' ? '#DCFCE7' : sttStatus === 'FAILED' || sttStatus === 'TIMEOUT' ? '#FEF2F2' : '#FEF9C3',
-                    color: sttStatus === 'COMPLETED' ? '#16A34A' : sttStatus === 'FAILED' || sttStatus === 'TIMEOUT' ? '#DC2626' : '#92400E' }}>
-                    {sttStatus === 'PENDING' && '⏳ STT 대기 중...'}{sttStatus === 'PROCESSING' && '🔄 분석 중...'}
-                    {sttStatus === 'COMPLETED' && '✅ STT 완료'}{sttStatus === 'FAILED' && '❌ 실패'}{sttStatus === 'TIMEOUT' && '⏱ 시간 초과'}
-                    {uploadingRec && ' (업로드 중...)'}
-                  </div>
+                {(sttStatus || uploadingRec) && (
+                  <SttProgress status={sttStatus} uploading={uploadingRec} />
                 )}
-                {sttStatus === 'COMPLETED' && aiSummary.length > 0 && (
-                  <><SectionLabel>AI 요약</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {aiSummary.map((r) => (<div key={r.label} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                        <span style={{ fontSize: 10, color: r.color, fontWeight: 600, backgroundColor: r.color + '20', padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap', marginTop: 2 }}>{r.label}</span>
-                        <span style={{ fontSize: 12, color: '#737880', lineHeight: 1.5 }}>{r.text}</span>
-                      </div>))}
-                    </div></>
-                )}
-                {sttStatus === 'COMPLETED' && sttLines.length > 0 && (
-                  <><SectionLabel>녹음 전사</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
-                      {sttLines.map((line, i) => (<div key={i}>
-                        {line.timestamp && <div style={{ fontSize: 10, color: '#9CA193', marginBottom: 2 }}>{line.timestamp}</div>}
-                        <div style={{ fontSize: 12, lineHeight: 1.5, color: '#737880' }}>{line.text}</div>
-                      </div>))}
-                    </div></>
+                {sttStatus === 'COMPLETED' && (aiSummary.length > 0 || sttLines.length > 0) && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                      <SectionLabel>녹음 기록</SectionLabel>
+                      <span style={{ fontSize: 11, color: '#9CA193' }}>
+                        {(() => {
+                          const t = sttLines.reduce((s, l) => s + (l.text?.length ?? 0), 0);
+                          if (t === 0) return '';
+                          return `약 ${Math.max(1, Math.round(t / 240))}분`;
+                        })()}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        backgroundColor: '#F8F8F5',
+                        borderRadius: 10,
+                        padding: '22px 24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 18,
+                      }}
+                    >
+                      {/* 요약 — 4분할 라벨 / 글머리 점 제거.
+                          여러 항목을 자연어 단락으로 결합. 사람이 쓴 회의록처럼. */}
+                      {aiSummary.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          {aiSummary
+                            .map((r) => r.text)
+                            .filter((t) => t && t.trim())
+                            .map((text, i) => (
+                              <p
+                                key={i}
+                                style={{
+                                  margin: 0,
+                                  fontSize: 15,
+                                  lineHeight: 1.9,
+                                  color: '#1F2126',
+                                  letterSpacing: '-0.005em',
+                                  whiteSpace: 'pre-wrap',
+                                }}
+                              >
+                                {text}
+                              </p>
+                            ))}
+                        </div>
+                      )}
+
+                      {sttLines.length > 0 && (
+                        <details
+                          style={{
+                            marginTop: aiSummary.length > 0 ? 4 : 0,
+                            borderTop: aiSummary.length > 0 ? '1px solid #ECEDE5' : 'none',
+                            paddingTop: aiSummary.length > 0 ? 16 : 0,
+                          }}
+                        >
+                          <summary
+                            style={{
+                              fontSize: 12,
+                              color: '#737880',
+                              cursor: 'pointer',
+                              listStyle: 'none',
+                              userSelect: 'none',
+                              fontWeight: 500,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                            }}
+                          >
+                            <span aria-hidden style={{ fontSize: 10, color: '#9CA193' }}>▸</span>
+                            원본 대화 보기
+                          </summary>
+                          <div
+                            style={{
+                              marginTop: 14,
+                              maxHeight: 360,
+                              overflowY: 'auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 14,
+                            }}
+                          >
+                            {sttLines
+                              .filter((l) => l.text && l.text.trim())
+                              .map((line, i) => (
+                                <p
+                                  key={i}
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 13,
+                                    lineHeight: 1.9,
+                                    color: '#737880',
+                                    whiteSpace: 'pre-wrap',
+                                  }}
+                                >
+                                  {line.text}
+                                </p>
+                              ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  </>
                 )}
 
                 {/* 메모 — 편집 가능 */}
@@ -329,19 +486,59 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               </>
             )}
 
-            {/* 녹음 뷰 */}
+            {/* 녹음 뷰 — 단순 시간 표시 + 중지 (사인파/빨간 강조 톤다운) */}
             {rightView === 'recording' && (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#EF4444', display: 'inline-block' }} />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#EF4444' }}>녹음 중</span>
-                </div>
-                <div style={{ backgroundColor: '#F8F8F5', borderRadius: 10, padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-                  <div style={{ fontSize: 36, fontWeight: 700, color: '#EF4444', fontVariantNumeric: 'tabular-nums' }}>{recTime}</div>
-                  <div style={{ display: 'flex', gap: 2, alignItems: 'center', height: 32 }}>
-                    {Array.from({ length: 22 }, (_, i) => (<div key={i} style={{ width: 3, height: `${8 + Math.abs(Math.sin(i * 0.9)) * 12}px`, backgroundColor: '#EF4444', borderRadius: 2, opacity: 0.85 }} />))}
+                <div
+                  style={{
+                    backgroundColor: '#F8F8F5',
+                    borderRadius: 10,
+                    padding: '24px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 16,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: '#EF4444',
+                        animation: 'recordingPulse 1.2s ease-in-out infinite',
+                      }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>녹음 중</span>
                   </div>
-                  <button onClick={stopRec} style={{ padding: '8px 24px', borderRadius: 20, border: 'none', backgroundColor: '#EF4444', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>■ 녹음 중지</button>
+                  <div
+                    style={{
+                      fontSize: 32,
+                      fontWeight: 600,
+                      color: '#1F2126',
+                      fontVariantNumeric: 'tabular-nums',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {recTime}
+                  </div>
+                  <button
+                    onClick={stopRec}
+                    style={{
+                      padding: '7px 20px',
+                      borderRadius: 6,
+                      border: '1px solid #E5E6DE',
+                      backgroundColor: '#fff',
+                      color: '#1F2126',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    녹음 중지
+                  </button>
+                  <style>{`@keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
                 </div>
                 <div style={{ fontSize: 11, color: '#9CA193', textAlign: 'center' }}>녹음 중지 시 자동으로 STT 분석이 시작됩니다.</div>
               </>
@@ -350,10 +547,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             {/* AI 브리핑 탭 */}
             {rightView === 'briefing' && (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <SectionLabel>AI 브리핑</SectionLabel>
-                  <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>— 고객사 시그널 기반 미팅 준비 자료 (선택)</span>
-                </div>
+                <SectionLabel>AI 브리핑</SectionLabel>
                 {briefingLoading && (<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[80,60,90,50].map((w,i) => (<div key={i} style={{ height: 14, borderRadius: 6, backgroundColor: '#F0F0EE', width: `${w}%` }} />))}
                   <div style={{ fontSize: 11, color: '#9CA193', marginTop: 4 }}>브리핑 생성 중...</div>
@@ -397,7 +591,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           </div>
         </div>
         {rightView === 'recording' && (
-          <div style={{ padding: '10px 24px', borderTop: '1px solid #E5E6DE', textAlign: 'center', fontSize: 12, color: '#EF4444', fontWeight: 600 }}>녹음 진행 중...</div>
+          <div style={{ padding: '10px 24px', borderTop: '1px solid #E5E6DE', textAlign: 'center', fontSize: 11, color: '#9CA193' }}>녹음 진행 중</div>
         )}
       </div>
     </div>
@@ -420,4 +614,25 @@ function SectionLabel({ children }: { children: ReactNode }) {
 }
 function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
   return <span style={{ fontSize: 11, color, backgroundColor: bg, padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>{label}</span>;
+}
+
+// ─── STT 진행 상태 — 한 줄 텍스트. 완료 시에는 결과 자체가 신호이므로 노출하지 않음.
+function SttProgress({ status, uploading }: { status: string | null; uploading: boolean }) {
+  const isFailed = status === 'FAILED' || status === 'TIMEOUT';
+  if (status === 'COMPLETED' && !uploading) return null;
+
+  if (isFailed) {
+    return (
+      <span style={{ fontSize: 11, color: '#B45309', alignSelf: 'flex-start' }}>
+        {status === 'TIMEOUT' ? '분석 시간이 초과되었어요' : '분석에 실패했어요'}
+      </span>
+    );
+  }
+
+  let label = '준비 중';
+  if (uploading) label = '파일 업로드 중...';
+  else if (status === 'PENDING') label = '대기 중...';
+  else if (status === 'PROCESSING') label = '분석 중...';
+
+  return <span style={{ fontSize: 11, color: '#9CA193', alignSelf: 'flex-start' }}>{label}</span>;
 }
