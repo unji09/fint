@@ -8,6 +8,15 @@ interface Props {
   open: boolean;
   onClose: () => void;
   defaultDate?: Date;
+  /** 드래그로 시간 범위를 선택했을 때 끝 시각. 없으면 시작 +1시간 기본값. */
+  defaultEndDate?: Date;
+  /** 일정 제목 prefill (예: Next Action 에서 일정 추가 시) */
+  defaultTitle?: string;
+  /** 카테고리 prefill ('미팅' | '전화' | '업무' | '이메일'). 없으면 '미팅' */
+  defaultCategory?: string;
+  /** 고객사 prefill (Next Action 에서 호출 시 해당 고객사로 자동 매핑) */
+  defaultAccountId?: number;
+  defaultAccountName?: string;
   onSaved?: () => void;
   editEvent?: CalendarEvent | null;
 }
@@ -125,7 +134,18 @@ interface ContactItem { contactId: number; name: string; title: string | null }
 const EMPTY_NEW_DEAL = { title: '', amount: '', date: '' };
 const EMPTY_NEW_CONTACT = { name: '', title: '', phone: '', email: '' };
 
-export default function AddEventModal({ open, onClose, defaultDate, onSaved, editEvent }: Props) {
+export default function AddEventModal({
+  open,
+  onClose,
+  defaultDate,
+  defaultEndDate,
+  defaultTitle,
+  defaultCategory,
+  defaultAccountId,
+  defaultAccountName,
+  onSaved,
+  editEvent,
+}: Props) {
   const isEdit = !!editEvent;
 
   // ── 기본 필드 ──
@@ -161,16 +181,23 @@ export default function AddEventModal({ open, onClose, defaultDate, onSaved, edi
   const [newContact, setNewContact] = useState(EMPTY_NEW_CONTACT);
 
   // ── 전체 초기화 함수 ──
-  const resetForm = useCallback((date?: Date, ev?: CalendarEvent | null) => {
+  const resetForm = useCallback((date?: Date, ev?: CalendarEvent | null, endDate?: Date, prefill?: {
+    title?: string; category?: string; accountId?: number; accountName?: string;
+  }) => {
     const base = ev ? new Date(ev.startAt) : (date ?? new Date());
-    const endBase = ev ? new Date(ev.endAt) : new Date(base.getTime() + 3600_000);
+    // 우선순위: editEvent.endAt > 드래그로 받은 endDate > base + 1시간
+    const endBase = ev
+      ? new Date(ev.endAt)
+      : endDate
+      ? new Date(endDate)
+      : new Date(base.getTime() + 3600_000);
 
-    setTitle(ev?.title ?? '');
+    setTitle(ev?.title ?? prefill?.title ?? '');
     setStartD(toDateVal(base));
     setStartT(toTimeVal(base));
     setEndD(toDateVal(endBase));
     setEndT(toTimeVal(endBase));
-    setCat(ev?.category ? (TYPE_TO_CAT[ev.category] ?? '미팅') : '미팅');
+    setCat(ev?.category ? (TYPE_TO_CAT[ev.category] ?? '미팅') : (prefill?.category ?? '미팅'));
     setMemo(ev?.memo ?? '');
     setPipe(ev?.pipelineStage?.stageName ?? '');
 
@@ -212,6 +239,28 @@ export default function AddEventModal({ open, onClose, defaultDate, onSaved, edi
           }
         }
       });
+    } else if (prefill?.accountId && prefill.accountName) {
+      // Next Action 등에서 고객사 prefill 받은 신규 모드
+      const acct: AccountItem = { accountId: prefill.accountId, name: prefill.accountName, industry: '' };
+      setSelectedAccount(acct);
+      setSelectedDealId(null);
+      setSelectedContactId(null);
+      const headers = authHeader();
+      Promise.allSettled([
+        fetch(`${API_BASE}/accounts/${prefill.accountId}`, { headers }).then(r => r.json()),
+        fetch(`${API_BASE}/accounts/${prefill.accountId}/contacts`, { headers }).then(r => r.json()),
+      ]).then(([detailRes, contactsRes]) => {
+        if (detailRes.status === 'fulfilled') {
+          setAccountDeals((detailRes.value.data?.deals ?? []).map((d: { dealId: number; title: string; amount?: number; stage?: string }) => ({
+            dealId: d.dealId, title: d.title, amount: d.amount, stage: d.stage,
+          })));
+        }
+        if (contactsRes.status === 'fulfilled') {
+          setAccountContacts((contactsRes.value.data ?? []).map((c: { contactId: number; name: string; title?: string }) => ({
+            contactId: c.contactId, name: c.name, title: c.title,
+          })));
+        }
+      });
     } else {
       setSelectedAccount(null);
       setAccountDeals([]);
@@ -224,7 +273,12 @@ export default function AddEventModal({ open, onClose, defaultDate, onSaved, edi
   // ── open/close 시 상태 관리 ──
   useEffect(() => {
     if (open) {
-      resetForm(defaultDate, editEvent);
+      resetForm(defaultDate, editEvent, defaultEndDate, {
+        title: defaultTitle,
+        category: defaultCategory,
+        accountId: defaultAccountId,
+        accountName: defaultAccountName,
+      });
       document.body.style.overflow = 'hidden';
       requestAnimationFrame(() => setVisible(true));
     } else {
