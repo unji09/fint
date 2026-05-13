@@ -7,6 +7,7 @@ import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
 import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
+import AddEventModal from '@/components/calendar/AddEventModal';
 import { useAccountList, useAccountDetail, useRegisterAccount, useDeleteAccount } from '@/hooks/useCustomer';
 import { useDeleteContact, useUpdateContact } from '@/hooks/useContact';
 import { useCreateDeal } from '@/hooks/useDeal';
@@ -17,6 +18,21 @@ import type { ContactInfo, Deal, StrategyCard } from '@/types/customer';
 const SA = ['#06b6d4', '#cbd5e1', '#fb923c'];
 const F = 'Pretendard,sans-serif';
 const ML: Record<string, string> = { RAINBOW: '🌈', SUNNY: '☀️', CLOUDY: '☁️', RAINY: '🌧️', THUNDER: '⛈️' };
+
+// Next Action category → AddEventModal 카테고리 매핑.
+// NEWS/DART/CRM 같은 시그널 출처는 '미팅'(가장 일반적) 으로, ActivityType 코드면 직접 매핑.
+function mapNextActionCategory(c: string): string {
+  switch (c) {
+    case 'CALL': return '전화';
+    case 'EMAIL': return '이메일';
+    case 'TASK': return '업무';
+    case 'MEETING':
+    case 'NEWS':
+    case 'DART':
+    case 'CRM':
+    default: return '미팅';
+  }
+}
 
 function Av({ name, color, size = 30 }: { name: string; color: string; size?: number }) {
   return <div style={{ width: size, height: size, borderRadius: '50%', background: color, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, fontWeight: 700, color: '#fff', fontFamily: F }}>{name.charAt(0)}</div>;
@@ -36,6 +52,13 @@ export default function CustomerDetailPage() {
   const { create: addDeal, loading: addingD } = useCreateDeal();
 
   const strats: StrategyCard[] = nextActions.map(a => ({ id: a.suggestionId, title: a.title, category: a.category, successRate: a.successRate }));
+
+  // ── AI 추천 → 일정 추가 모달 ────────────────────────────────
+  const [addEventOpen, setAddEventOpen] = useState(false);
+  const [addEventDefaults, setAddEventDefaults] = useState<{
+    title?: string;
+    category?: string;
+  }>({});
 
   const [selContact, setSelContact] = useState<ContactInfo | null>(null);
   const [selDeal, setSelDeal] = useState<Deal | null>(null);
@@ -244,7 +267,12 @@ export default function CustomerDetailPage() {
                     if (expStrat?.id === card.id) { setExpStrat(null); return; }
                     const d = await fetchNextActionDetail(id!, card.id);
                     if (d) setExpStrat({ ...card, isExpanded: true, basisData: d.basisData, aiComment: d.aiComment, warning: d.warning });
-                  }} />
+                  }}
+                  onAddToCalendar={(c) => {
+                    setAddEventDefaults({ title: c.title, category: mapNextActionCategory(c.category) });
+                    setAddEventOpen(true);
+                  }}
+                />
               ))}
             </div>
           )}
@@ -279,6 +307,17 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       )}
+
+      {/* AI 추천 전략 → 일정 추가 모달 */}
+      <AddEventModal
+        open={addEventOpen}
+        onClose={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
+        defaultTitle={addEventDefaults.title}
+        defaultCategory={addEventDefaults.category}
+        defaultAccountId={id ? Number(id) : undefined}
+        defaultAccountName={accounts.find((a) => String(a.accountId) === id)?.name}
+        onSaved={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
+      />
     </>
   );
 }

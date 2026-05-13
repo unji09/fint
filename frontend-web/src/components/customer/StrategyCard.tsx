@@ -73,9 +73,10 @@ interface StrategyCardProps {
   card: StrategyCard;
   index: number;
   onExpand?: () => void;
+  onAddToCalendar?: (card: StrategyCard) => void;
 }
 
-export default function StrategyCardComponent({ card, index, onExpand }: StrategyCardProps) {
+export default function StrategyCardComponent({ card, index, onExpand, onAddToCalendar }: StrategyCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const handleToggle = () => {
@@ -303,6 +304,45 @@ export default function StrategyCardComponent({ card, index, onExpand }: Strateg
                 </div>
               </div>
             </div>
+          )}
+
+          {/* 일정에 추가 버튼 — Next Action 을 캘린더 활동으로 연결 */}
+          {onAddToCalendar && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToCalendar(card);
+              }}
+              style={{
+                marginTop: 2,
+                alignSelf: 'flex-start',
+                padding: '8px 16px',
+                borderRadius: 6,
+                border: '1px solid #06B6D4',
+                backgroundColor: '#fff',
+                color: '#06B6D4',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'Pretendard,sans-serif',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'background-color 0.12s',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#ECFEFF';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#fff';
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                <rect x="1.5" y="2.5" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                <path d="M4.5 1v3M9.5 1v3M1.5 5.5h11M7 7.5v3M5.5 9h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              일정에 추가
+            </button>
           )}
         </div>
       )}
