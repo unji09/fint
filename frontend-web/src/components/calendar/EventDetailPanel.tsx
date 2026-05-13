@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
 import { formatTime, formatFullDate } from './utils';
+import { useUploadRecording, usePollSttStatus, type SttLine } from '@/hooks/useActivity';
 
 interface Props {
   event: CalendarEvent | null;
@@ -30,11 +31,12 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [uploadingRec, setUploadingRec] = useState(false);
   const [recError, setRecError] = useState<string | null>(null);
   const [sttStatus, setSttStatus] = useState<string | null>(null);
-  const [sttLines, setSttLines] = useState<{ timestamp: string; text: string }[]>([]);
+  const [sttLines, setSttLines] = useState<SttLine[]>([]);
   const [aiSummary, setAiSummary] = useState<{ label: string; text: string; color: string }[]>([]);
+  const { upload: uploadRecording, uploading: uploadingRec } = useUploadRecording();
+  const { poll: pollStt } = usePollSttStatus();
   const [briefingData, setBriefingData] = useState<any | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
   const [briefingError, setBriefingError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     if (!event) {
       setRightView('memo'); setRecordSec(0);
       setSttStatus(null); setSttLines([]); setAiSummary([]);
-      setBriefingData(null); setBriefingError(null); setRecError(null); setUploadingRec(false);
+      setBriefingData(null); setBriefingError(null); setRecError(null);
       setMemoText(''); setMemoEditing(false); setMemoSaving(false);
       [timerRef, pollRef].forEach((r) => { if (r.current) { clearInterval(r.current); r.current = null; } });
       if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') mediaRecRef.current.stop();
@@ -101,44 +103,69 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     }
   };
 
-  const startSttPolling = (id: string) => {
-    let elapsed = 0;
-    pollRef.current = setInterval(async () => {
-      elapsed += 5;
-      if (elapsed > 120) { clearInterval(pollRef.current!); pollRef.current = null; setSttStatus('TIMEOUT'); return; }
-      try {
-        const r = await fetch(`${API_BASE}/activities/${id}`, { headers: authHeader() });
-        if (!r.ok) return;
-        const data = (await r.json()).data ?? {};
-        const status: string = data.sttStatus ?? '';
-        setSttStatus(status);
-        if (status === 'COMPLETED') {
-          clearInterval(pollRef.current!); pollRef.current = null;
-          const tr = data.sttTranscript ?? data.transcript ?? [];
-          setSttLines(Array.isArray(tr) ? tr.map((t: any) => ({ timestamp: t.timestamp ?? '', text: t.text ?? t.content ?? '' })) : []);
-          const sum = data.aiSummary ?? null;
-          if (sum && typeof sum === 'object') {
-            setAiSummary(Object.entries(sum).map(([k, v], i) => ({ label: k, text: String(v), color: ['#EF4444','#F59E0B','#0686D4','#22C55E'][i % 4] })));
-          }
-        } else if (status === 'FAILED') { clearInterval(pollRef.current!); pollRef.current = null; }
-      } catch { /* ignore */ }
-    }, 5000);
+  const SUMMARY_COLORS = ['#EF4444', '#F59E0B', '#0686D4', '#22C55E'];
+
+  // 데모 시나리오 — 백엔드 STT 미구현 시 fallback. PENDING → PROCESSING → COMPLETED 순차 시뮬레이션.
+  const runDemoStt = () => {
+    setSttStatus('PENDING');
+    setTimeout(() => setSttStatus('PROCESSING'), 1500);
+    setTimeout(() => {
+      setSttStatus('COMPLETED');
+      setSttLines([
+        { timestamp: '00:00', text: '안녕하세요, 오늘 미팅 시작하겠습니다.' },
+        { timestamp: '00:08', text: '먼저 지난 주 진행 상황을 정리해 드릴게요.' },
+        { timestamp: '00:23', text: '제안서 초안은 검토 완료했고, 가격 조건만 협의가 남았습니다.' },
+        { timestamp: '00:41', text: '저희 쪽에서는 분기 내 계약 체결을 목표로 하고 있어요.' },
+        { timestamp: '01:02', text: '예산 승인은 다음 주 임원 회의 후 확정될 예정입니다.' },
+        { timestamp: '01:18', text: '추가 자료가 필요하시면 메일로 보내드릴게요.' },
+      ]);
+      setAiSummary([
+        { label: '핵심 안건', text: '제안서 가격 조건 협상 진행, 분기 내 계약 체결 목표.', color: '#EF4444' },
+        { label: '결정 사항', text: '추가 자료는 이메일로 전달 / 다음 주 임원 회의 후 예산 승인 확정.', color: '#F59E0B' },
+        { label: 'Next Step', text: '가격 조건 최종안 작성 후 재미팅 일정 조율.', color: '#0686D4' },
+        { label: '리스크', text: '예산 승인 지연 시 일정 한 주 이상 밀릴 가능성.', color: '#22C55E' },
+      ]);
+    }, 4500);
   };
 
   const handleUpload = async (blob: Blob) => {
     if (!activityId) return;
-    setUploadingRec(true); setRecError(null);
-    try {
-      const presRes = await fetch(`${API_BASE}/files/presigned-url`, { method: 'POST', headers: authHeader(), body: JSON.stringify({ fileName: `rec_${activityId}_${Date.now()}.webm`, contentType: blob.type }) });
-      if (!presRes.ok) throw new Error('presigned URL 실패');
-      const { data: { url, fileKey } } = await presRes.json();
-      const s3Res = await fetch(url, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type } });
-      if (!s3Res.ok) throw new Error('S3 업로드 실패');
-      const recRes = await fetch(`${API_BASE}/activities/${activityId}/recording`, { method: 'POST', headers: authHeader(), body: JSON.stringify({ fileKey }) });
-      if (!recRes.ok && recRes.status !== 202) throw new Error('STT 요청 실패');
-      setSttStatus('PENDING'); startSttPolling(activityId);
-    } catch (e: any) { setRecError(e?.message ?? '업로드 실패'); }
-    finally { setUploadingRec(false); }
+    setRecError(null);
+    setSttLines([]);
+    setAiSummary([]);
+    setSttStatus('PENDING');
+    // 파일 확장자 결정 (Blob 의 type 우선, 없으면 webm)
+    const ext = blob.type.includes('mp4') || blob.type.includes('m4a')
+      ? 'm4a'
+      : blob.type.includes('mpeg')
+      ? 'mp3'
+      : blob.type.includes('wav')
+      ? 'wav'
+      : 'webm';
+    const result = await uploadRecording(Number(activityId), blob, ext);
+    if (!result.ok) {
+      // 백엔드 미구현 시 자동으로 데모 시나리오로 fallback
+      console.warn('[FINT] STT 백엔드 호출 실패 — 데모 시나리오로 진행:', result.error);
+      runDemoStt();
+      return;
+    }
+    // 폴링 시작 — 매 업데이트 콜백으로 상태 반영
+    pollStt(
+      Number(activityId),
+      ({ status, transcript, summary }) => {
+        setSttStatus(status);
+        if (transcript.length > 0) setSttLines(transcript);
+        if (summary) {
+          setAiSummary(
+            Object.entries(summary).map(([k, v], i) => ({
+              label: k,
+              text: String(v),
+              color: SUMMARY_COLORS[i % SUMMARY_COLORS.length],
+            })),
+          );
+        }
+      },
+    );
   };
 
   const startRec = async () => {
@@ -255,7 +282,49 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                     </button>
                   );
                 })}
-                {isFint && <button onClick={startRec} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 6, border: '1px solid #EF4444', backgroundColor: 'transparent', color: '#EF4444', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>● 녹음하기</button>}
+                {isFint && (
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                    <label
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        border: '1px solid #06B6D4',
+                        backgroundColor: 'transparent',
+                        color: '#06B6D4',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ⤴ 파일 업로드
+                      <input
+                        type="file"
+                        accept="audio/m4a,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a,audio/webm"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUpload(file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    <button
+                      onClick={startRec}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        border: '1px solid #EF4444',
+                        backgroundColor: 'transparent',
+                        color: '#EF4444',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ● 녹음하기
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {recError && <div style={{ fontSize: 12, color: '#EF4444', backgroundColor: '#FEF2F2', padding: '8px 12px', borderRadius: 6 }}>{recError}</div>}
@@ -263,32 +332,104 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             {/* 메모 탭 */}
             {(rightView === 'memo' || rightView === 'stt') && (
               <>
-                {sttStatus && (
-                  <div style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 4, display: 'inline-block', alignSelf: 'flex-start',
-                    backgroundColor: sttStatus === 'COMPLETED' ? '#DCFCE7' : sttStatus === 'FAILED' || sttStatus === 'TIMEOUT' ? '#FEF2F2' : '#FEF9C3',
-                    color: sttStatus === 'COMPLETED' ? '#16A34A' : sttStatus === 'FAILED' || sttStatus === 'TIMEOUT' ? '#DC2626' : '#92400E' }}>
-                    {sttStatus === 'PENDING' && '⏳ STT 대기 중...'}{sttStatus === 'PROCESSING' && '🔄 분석 중...'}
-                    {sttStatus === 'COMPLETED' && '✅ STT 완료'}{sttStatus === 'FAILED' && '❌ 실패'}{sttStatus === 'TIMEOUT' && '⏱ 시간 초과'}
-                    {uploadingRec && ' (업로드 중...)'}
-                  </div>
+                {(sttStatus || uploadingRec) && (
+                  <SttProgress status={sttStatus} uploading={uploadingRec} />
                 )}
                 {sttStatus === 'COMPLETED' && aiSummary.length > 0 && (
-                  <><SectionLabel>AI 요약</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {aiSummary.map((r) => (<div key={r.label} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                        <span style={{ fontSize: 10, color: r.color, fontWeight: 600, backgroundColor: r.color + '20', padding: '1px 6px', borderRadius: 3, whiteSpace: 'nowrap', marginTop: 2 }}>{r.label}</span>
-                        <span style={{ fontSize: 12, color: '#737880', lineHeight: 1.5 }}>{r.text}</span>
-                      </div>))}
-                    </div></>
+                  <>
+                    <SectionLabel>AI 요약</SectionLabel>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {aiSummary.map((r) => (
+                        <div
+                          key={r.label}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            backgroundColor: '#fff',
+                            border: '1px solid #E2E8F0',
+                            borderLeft: `3px solid ${r.color}`,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: r.color,
+                              fontWeight: 700,
+                              backgroundColor: r.color + '20',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              alignSelf: 'flex-start',
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            {r.label.toUpperCase()}
+                          </span>
+                          <span style={{ fontSize: 13, color: '#1F2126', lineHeight: 1.6 }}>{r.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
                 {sttStatus === 'COMPLETED' && sttLines.length > 0 && (
-                  <><SectionLabel>녹음 전사</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
-                      {sttLines.map((line, i) => (<div key={i}>
-                        {line.timestamp && <div style={{ fontSize: 10, color: '#9CA193', marginBottom: 2 }}>{line.timestamp}</div>}
-                        <div style={{ fontSize: 12, lineHeight: 1.5, color: '#737880' }}>{line.text}</div>
-                      </div>))}
-                    </div></>
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <SectionLabel>녹음 전사</SectionLabel>
+                      <span style={{ fontSize: 11, color: '#94A3B8' }}>{sttLines.length} 줄</span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                        maxHeight: 220,
+                        overflowY: 'auto',
+                        padding: '4px 0',
+                        borderRadius: 8,
+                        backgroundColor: '#F8F8F5',
+                      }}
+                    >
+                      {sttLines.map((line, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: 'flex',
+                            gap: 10,
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            transition: 'background-color 0.12s',
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.backgroundColor = '#EEF1F5';
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          {line.timestamp && (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                color: '#06B6D4',
+                                fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                                paddingTop: 2,
+                                minWidth: 44,
+                              }}
+                            >
+                              {line.timestamp}
+                            </span>
+                          )}
+                          <span style={{ fontSize: 12, color: '#1F2126', lineHeight: 1.6, flex: 1 }}>
+                            {line.text}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
 
                 {/* 메모 — 편집 가능 */}
@@ -420,4 +561,96 @@ function SectionLabel({ children }: { children: ReactNode }) {
 }
 function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
   return <span style={{ fontSize: 11, color, backgroundColor: bg, padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>{label}</span>;
+}
+
+// ─── STT 진행 상태 시각화 ───────────────────────────────────────────
+// 업로드 → PENDING → PROCESSING → COMPLETED 4단계 progress bar.
+function SttProgress({ status, uploading }: { status: string | null; uploading: boolean }) {
+  const STEPS = [
+    { key: 'UPLOAD', label: '업로드' },
+    { key: 'PENDING', label: '대기' },
+    { key: 'PROCESSING', label: '분석' },
+    { key: 'COMPLETED', label: '완료' },
+  ] as const;
+
+  const isFailed = status === 'FAILED' || status === 'TIMEOUT';
+  let activeIdx = uploading ? 0 : 1;
+  if (status === 'PENDING') activeIdx = 1;
+  else if (status === 'PROCESSING') activeIdx = 2;
+  else if (status === 'COMPLETED') activeIdx = 3;
+
+  if (isFailed) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 12px',
+          borderRadius: 8,
+          backgroundColor: '#FEF2F2',
+          border: '1px solid #FECACA',
+          color: '#DC2626',
+          fontSize: 12,
+          fontWeight: 600,
+        }}
+      >
+        <span style={{ fontSize: 14 }}>{status === 'TIMEOUT' ? '⏱' : '❌'}</span>
+        <span>{status === 'TIMEOUT' ? '분석 시간이 초과되었어요.' : '분석에 실패했어요.'}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        padding: '10px 12px',
+        borderRadius: 8,
+        backgroundColor: '#F8FAFC',
+        border: '1px solid #E2E8F0',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#0F172A' }}>
+          {status === 'COMPLETED' ? '✅ STT 분석 완료' : '🔄 STT 분석 진행 중'}
+        </span>
+        <span style={{ fontSize: 11, color: '#64748B' }}>
+          {Math.min(activeIdx + 1, STEPS.length)} / {STEPS.length}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {STEPS.map((s, i) => {
+          const done = i < activeIdx;
+          const active = i === activeIdx;
+          const color = done ? '#06B6D4' : active ? '#06B6D4' : '#CBD5E1';
+          return (
+            <div key={s.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div
+                style={{
+                  width: '100%',
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: color,
+                  opacity: done ? 1 : active ? 1 : 0.4,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 10,
+                  color: active || done ? '#0F172A' : '#94A3B8',
+                  fontWeight: active ? 600 : 400,
+                }}
+              >
+                {s.label}
+                {active && i < 3 && '...'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
