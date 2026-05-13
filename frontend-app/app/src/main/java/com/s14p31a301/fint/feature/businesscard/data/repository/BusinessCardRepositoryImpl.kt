@@ -19,7 +19,7 @@ import java.io.File
  *   1) POST /files/presigned-url  (fileType=IMAGE, purpose=OCR)
  *   2) S3 PUT (Content-Type: image/jpeg, x-amz-server-side-encryption: aws:kms)
  *   3) POST /contacts/ocr         (fileKey)
- *   4) POST /contacts             ("담당자로 저장" 시점)
+ *   4) POST /contacts/ocr/init    ("담당자로 저장" 시점)
  *
  * 명세 참조:
  *  - mydocs/file_api/Presigned URL 발급.md
@@ -75,20 +75,19 @@ class BusinessCardRepositoryImpl(
     override suspend fun registerContact(result: BusinessCardOcrResult): Result<Long> = runCatching {
         val name = result.name?.takeIf { it.isNotBlank() }
             ?: error("name is required")
-        Log.d(TAG, "POST /contacts: name=$name company=${result.company}")
+        val accountName = result.company?.takeIf { it.isNotBlank() }
+            ?: error("company is required")
+        Log.d(TAG, "POST /contacts/ocr/init: name=$name accountName=$accountName")
         val response = api.createContact(
             CreateContactRequestDto(
+                accountName = accountName,
                 name = name,
-                company = result.company,
-                position = result.position,
+                title = result.position,
                 phone = result.phone,
                 email = result.email,
-                address = result.address,
-                sourceFileKey = result.imageFileKey,
-                source = if (result.imageFileKey != null) "BUSINESS_CARD" else "MANUAL",
             )
         ).unwrap()
-        Log.d(TAG, "POST /contacts 응답: contactId=${response.contactId}")
+        Log.d(TAG, "POST /contacts/ocr/init 응답: contactId=${response.contactId} accountId=${response.accountId}")
         response.contactId
     }.onFailure { Log.e(TAG, "registerContact 실패", it) }
         .recoverCatching { throw it.toAppError() }
