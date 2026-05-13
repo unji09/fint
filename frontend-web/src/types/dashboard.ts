@@ -24,7 +24,7 @@ export interface DashboardWidget {
 export interface Dashboard {
   dashboardId: number;
   title: string;
-  thumbnailUrl: string | null;
+  thumbnailKey: string | null;
   lastAccessedAt: string | null;
   widgets?: DashboardWidget[];
 }
@@ -33,7 +33,7 @@ export interface DashboardTemplate {
   templateId: number;
   title: string;
   widgetType: string;
-  thumbnailUrl: string | null;
+  thumbnailKey: string | null;
   config: Record<string, unknown>;
   position: WidgetPosition;
 }

@@ -1,7 +1,32 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Dashboard } from '@/types/dashboard';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+function useThumbnailUrl(thumbnailKey: string | null) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!thumbnailKey) return;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    fetch(`${API_BASE}/files/presigned-download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ fileKey: thumbnailKey, expiresIn: 300 }),
+    })
+      .then((r) => r.json())
+      .then((j) => setUrl(j.data?.downloadUrl ?? null))
+      .catch(() => setUrl(null));
+  }, [thumbnailKey]);
+
+  return url;
+}
 
 interface DashboardListProps {
   dashboards: Dashboard[];
@@ -94,6 +119,8 @@ function DashboardCard({
   deleting?: boolean;
 }) {
   const router = useRouter();
+  const thumbnailUrl = useThumbnailUrl(dashboard.thumbnailKey);
+
   return (
     <div
       onMouseEnter={(e) => {
@@ -112,9 +139,10 @@ function DashboardCard({
         const card = e.currentTarget.firstElementChild as HTMLElement | null;
         if (card) {
           card.style.borderColor = '#e0e0e0';
-          card.style.background = '#fbfbfb';
+          card.style.background = '#ffffff';
           card.style.transform = 'translateY(0)';
-          card.style.boxShadow = 'none';
+          card.style.boxShadow =
+            '0 1px 0 rgba(255,255,255,0.9) inset, 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.06)';
         }
         const del = e.currentTarget.querySelector<HTMLButtonElement>('[data-delete-btn]');
         if (del) del.style.opacity = '0';
@@ -127,35 +155,73 @@ function DashboardCard({
           console.log('[FINT] DashboardCard click → push:', target);
           router.push(target);
         }}
-        style={{ ...CARD_BASE, gap: 6 }}
+        style={{ ...CARD_BASE, gap: 0, justifyContent: 'flex-start', overflow: 'hidden' }}
       >
-        <span
+        <div
           style={{
-            fontFamily: 'Pretendard, sans-serif',
-            fontWeight: 600,
-            fontSize: 17,
-            color: '#1d1a24',
-            letterSpacing: '0.13px',
-            whiteSpace: 'nowrap',
-            maxWidth: 220,
+            width: '100%',
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f3f4f6',
+            borderRadius: '11px 11px 0 0',
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
           }}
         >
-          {dashboard.title}
-        </span>
-        <span
+          {thumbnailUrl ? (
+            <img
+              src={thumbnailUrl}
+              alt={dashboard.title}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="3" width="18" height="18" rx="2" stroke="#d0d5dd" strokeWidth="1.5" />
+              <path d="M3 16l5-5 4 4 3-3 6 6" stroke="#d0d5dd" strokeWidth="1.5" strokeLinejoin="round" />
+              <circle cx="15.5" cy="8.5" r="1.5" fill="#d0d5dd" />
+            </svg>
+          )}
+        </div>
+        <div
           style={{
-            fontFamily: 'Pretendard, sans-serif',
-            fontWeight: 500,
-            fontSize: 12,
-            color: '#6e7590',
-            letterSpacing: '0.13px',
-            whiteSpace: 'nowrap',
+            width: '100%',
+            padding: '10px 16px',
+            flexShrink: 0,
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
           }}
         >
-          {formatRelativeTime(dashboard.lastAccessedAt ?? undefined)}
-        </span>
+          <span
+            style={{
+              fontFamily: 'Pretendard, sans-serif',
+              fontWeight: 600,
+              fontSize: 15,
+              color: '#1d1a24',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              textAlign: 'left',
+            }}
+          >
+            {dashboard.title}
+          </span>
+          <span
+            style={{
+              fontFamily: 'Pretendard, sans-serif',
+              fontWeight: 500,
+              fontSize: 11,
+              color: '#6e7590',
+              whiteSpace: 'nowrap',
+              textAlign: 'left',
+            }}
+          >
+            {formatRelativeTime(dashboard.lastAccessedAt ?? undefined)}
+          </span>
+        </div>
       </button>
 
       {onDelete && (
@@ -235,7 +301,7 @@ export default function DashboardList({ dashboards, loading, onCreateNew, onDele
           background: 'white',
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gridAutoRows: '168px',
+          gridAutoRows: '200px',
           alignContent: 'flex-start',
           padding: '20px 24px',
           gap: 16,
