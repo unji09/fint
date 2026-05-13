@@ -8,6 +8,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   defaultDate?: Date;
+  /** 드래그로 시간 범위를 선택했을 때 끝 시각. 없으면 시작 +1시간 기본값. */
+  defaultEndDate?: Date;
   onSaved?: () => void;
   editEvent?: CalendarEvent | null;
 }
@@ -125,7 +127,7 @@ interface ContactItem { contactId: number; name: string; title: string | null }
 const EMPTY_NEW_DEAL = { title: '', amount: '', date: '' };
 const EMPTY_NEW_CONTACT = { name: '', title: '', phone: '', email: '' };
 
-export default function AddEventModal({ open, onClose, defaultDate, onSaved, editEvent }: Props) {
+export default function AddEventModal({ open, onClose, defaultDate, defaultEndDate, onSaved, editEvent }: Props) {
   const isEdit = !!editEvent;
 
   // ── 기본 필드 ──
@@ -161,9 +163,14 @@ export default function AddEventModal({ open, onClose, defaultDate, onSaved, edi
   const [newContact, setNewContact] = useState(EMPTY_NEW_CONTACT);
 
   // ── 전체 초기화 함수 ──
-  const resetForm = useCallback((date?: Date, ev?: CalendarEvent | null) => {
+  const resetForm = useCallback((date?: Date, ev?: CalendarEvent | null, endDate?: Date) => {
     const base = ev ? new Date(ev.startAt) : (date ?? new Date());
-    const endBase = ev ? new Date(ev.endAt) : new Date(base.getTime() + 3600_000);
+    // 우선순위: editEvent.endAt > 드래그로 받은 endDate > base + 1시간
+    const endBase = ev
+      ? new Date(ev.endAt)
+      : endDate
+      ? new Date(endDate)
+      : new Date(base.getTime() + 3600_000);
 
     setTitle(ev?.title ?? '');
     setStartD(toDateVal(base));
@@ -224,7 +231,7 @@ export default function AddEventModal({ open, onClose, defaultDate, onSaved, edi
   // ── open/close 시 상태 관리 ──
   useEffect(() => {
     if (open) {
-      resetForm(defaultDate, editEvent);
+      resetForm(defaultDate, editEvent, defaultEndDate);
       document.body.style.overflow = 'hidden';
       requestAnimationFrame(() => setVisible(true));
     } else {

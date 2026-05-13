@@ -177,10 +177,16 @@ const A_S = 8; // 00:00부터 전체 시간
 
 function DayTimeView({
   events,
+  selectedDate,
   onEventClick,
+  onTimeClick,
+  onTimeRangeSelect,
 }: {
   events: CalendarEvent[];
+  selectedDate: Date;
   onEventClick: (e: CalendarEvent) => void;
+  onTimeClick?: (d: Date) => void;
+  onTimeRangeSelect?: (start: Date, end: Date) => void;
 }) {
   // SSR 시점의 시각과 client hydration 시점의 시각이 달라 hydration mismatch 가 발생할 수 있다.
   // 따라서 초기엔 null 로 두고 mount 후에만 현재 시각 라인을 렌더한다.
@@ -193,9 +199,101 @@ function DayTimeView({
   const HOURS = Array.from({ length: 13 }, (_, i) => i + A_S); // 08~20시
   const total = HOURS.length * A_H;
   const red = now ? (now.getHours() - A_S + now.getMinutes() / 60) * A_H : -1;
+
+  // ─── 드래그 (WeekGrid 와 동일 패턴, 단일 컬럼) ────────────
+  const [drag, setDrag] = useState<{ startY: number; currentY: number; moved: boolean } | null>(null);
+  const colRef = useRef<HTMLDivElement>(null);
+
+  const yToDate = (y: number): Date => {
+    const clamped = Math.max(0, Math.min(y, total));
+    const totalMinutes = (clamped / A_H) * 60;
+    const snapped = Math.round(totalMinutes / 15) * 15;
+    const d = new Date(selectedDate);
+    const fromStart = A_S * 60 + snapped;
+    d.setHours(Math.floor(fromStart / 60), fromStart % 60, 0, 0);
+    return d;
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('[data-event="true"]')) return;
+    if (e.button !== 0) return;
+    if (!colRef.current) return;
+    const rect = colRef.current.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    setDrag({ startY: y, currentY: y, moved: false });
+  };
+
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: MouseEvent) => {
+      if (!colRef.current) return;
+      const rect = colRef.current.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const moved = drag.moved || Math.abs(y - drag.startY) > 4;
+      setDrag({ ...drag, currentY: y, moved });
+    };
+    const onUp = () => {
+      if (!drag) return;
+      const top = Math.min(drag.startY, drag.currentY);
+      const bot = Math.max(drag.startY, drag.currentY);
+      if (!drag.moved) {
+        onTimeClick?.(yToDate(top));
+      } else {
+        const s = yToDate(top);
+        let ed = yToDate(bot);
+        if (ed.getTime() - s.getTime() < 15 * 60_000) ed = new Date(s.getTime() + 15 * 60_000);
+        if (onTimeRangeSelect) onTimeRangeSelect(s, ed);
+        else onTimeClick?.(s);
+      }
+      setDrag(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag]);
+
+  const dragTop = drag ? Math.min(drag.startY, drag.currentY) : 0;
+  const dragH = drag ? Math.abs(drag.currentY - drag.startY) : 0;
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
-      <div style={{ position: 'relative', height: total }}>
+      <div
+        ref={colRef}
+        onMouseDown={handleMouseDown}
+        style={{ position: 'relative', height: total, cursor: 'crosshair', userSelect: 'none' }}
+      >
+        {/* 드래그 highlight overlay */}
+        {drag && drag.moved && (
+          <div
+            style={{
+              position: 'absolute',
+              top: dragTop,
+              left: 44,
+              right: 6,
+              height: Math.max(dragH, 1),
+              backgroundColor: 'rgba(6, 182, 212, 0.18)',
+              border: '1px solid #06B6D4',
+              borderRadius: 6,
+              zIndex: 3,
+              pointerEvents: 'none',
+              padding: '3px 6px',
+              fontSize: 10,
+              fontWeight: 700,
+              color: '#06B6D4',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {(() => {
+              const s = yToDate(Math.min(drag.startY, drag.currentY));
+              const e = yToDate(Math.max(drag.startY, drag.currentY));
+              const fmt = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+              return `${fmt(s)} – ${fmt(e)}`;
+            })()}
+          </div>
+        )}
         {HOURS.map((h, i) => (
           <div
             key={h}
@@ -391,6 +489,7 @@ export default function CalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [addDate, setAddDate] = useState<Date | undefined>();
+  const [addEndDate, setAddEndDate] = useState<Date | undefined>();
   const [asideOpen, setAsideOpen] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -480,8 +579,9 @@ export default function CalendarPage() {
   };
   const miniWk = getMondayWeek(selectedDate);
 
-  const openAdd = (d: Date) => {
+  const openAdd = (d: Date, endD?: Date) => {
     setAddDate(new Date(d));
+    setAddEndDate(endD ? new Date(endD) : undefined);
     setIsAddOpen(true);
   };
   const onDayClick = (d: Date) => {
@@ -491,6 +591,15 @@ export default function CalendarPage() {
     openAdd(dt);
   };
   const onTimeClick = (d: Date) => openAdd(d);
+  const onTimeRangeSelect = (start: Date, end: Date) => openAdd(start, end);
+  // 월간 드래그 (다일 선택): 첫날 09:00 ~ 끝날 18:00 으로 모달 prefill
+  const onDayRangeSelect = (start: Date, end: Date) => {
+    const s = new Date(start);
+    s.setHours(9, 0, 0, 0);
+    const e = new Date(end);
+    e.setHours(18, 0, 0, 0);
+    openAdd(s, e);
+  };
 
   const mLabel = currentDate.toLocaleDateString('ko-KR', { month: 'long' });
   const yLabel = currentDate.getFullYear();
@@ -635,7 +744,13 @@ export default function CalendarPage() {
                 })}
               </div>
             </div>
-            <DayTimeView events={dayEvs} onEventClick={(ev) => handleEventClick(ev)} />
+            <DayTimeView
+              events={dayEvs}
+              selectedDate={selectedDate}
+              onEventClick={(ev) => handleEventClick(ev)}
+              onTimeClick={onTimeClick}
+              onTimeRangeSelect={onTimeRangeSelect}
+            />
           </aside>
         </div>
 
@@ -898,6 +1013,7 @@ export default function CalendarPage() {
                   setCurrentDate(d);
                   setViewMode('week');
                 }}
+                onDayRangeSelect={onDayRangeSelect}
               />
             ) : (
               <WeekGrid
@@ -909,6 +1025,7 @@ export default function CalendarPage() {
                   handleEventClick(ev);
                 }}
                 onTimeClick={onTimeClick}
+                onTimeRangeSelect={onTimeRangeSelect}
                 pipeline={pipeline}
               />
             )}
@@ -971,6 +1088,7 @@ export default function CalendarPage() {
           setEditEvent(null);
         }}
         defaultDate={addDate}
+        defaultEndDate={addEndDate}
         editEvent={editEvent}
       />
     </div>
