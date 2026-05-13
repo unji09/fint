@@ -1,0 +1,97 @@
+spring:
+  config:
+    import: optional:file:../.env.local[.properties]
+  application:
+    name: fint
+  profiles:
+    active: local
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    clean-disabled: true
+  jpa:
+    properties:
+      hibernate:
+        # N+1 완화: @ManyToOne/@OneToMany lazy 로딩 시 IN 절로 묶어서 fetch
+        default_batch_fetch_size: 100
+  jackson:
+    use-jackson2-defaults: true
+    time-zone: Asia/Seoul
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+internal:
+  secret: your-secret-key-here
+
+# Swagger
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    doc-expansion: none
+  api-docs:
+    path: /v3/api-docs
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 100ms, 300ms, 500ms, 1s
+
+# AWS S3 - 모든 프로필 공통 정책 (bucket/region/credentials 는 프로필별 yml 에서 주입)
+aws:
+  s3:
+    presign:
+      # 단일 PUT presigned URL 만료(초)
+      single-expiration-seconds: 300
+      # multipart 파트별 presigned URL 만료(초)
+      multipart-expiration-seconds: 3600
+      # GET (다운로드) presigned URL 기본 만료(초)
+      download-expiration-seconds: 300
+      # OCR(명함) 업로드 presigned URL 만료(초). 규칙 §4: 5분
+      ocr-upload-expiration-seconds: 300
+    # SSE-KMS (S3 Presigned URL 업로드 규칙 §1: 필수)
+    kms:
+      key-id: ${S3_KMS_KEY_ID:alias/crm-fint-s3-key}
+    upload:
+      # 단일 업로드 최대 허용 크기 (byte). 초과 시 multipart 사용 강제. (AUDIO/MEETING_RECORD 기본)
+      max-single-size: 104857600   # 100MB
+      # OCR(명함) 전용 최대 크기. 규칙 §4: 5MB 이하 권장.
+      max-ocr-size: 5242880        # 5MB
+      # THUMBNAIL 전용 최대 크기. 규칙 §5: 5MB 이하.
+      max-thumbnail-size: 5242880  # 5MB
+      key-prefix:
+        # MEETING_RECORD → meetings/{meetingId}/{uuid}.{ext}
+        meeting: meetings/
+        # OCR → business-cards/{contactId}/{uuid}.{ext}
+        business-card: business-cards/
+        # THUMBNAIL → thumbnails/{dashboardId}/{yyyyMMddHHmmssSSS}_{uuid}.{ext}
+        thumbnail: thumbnails/
+
