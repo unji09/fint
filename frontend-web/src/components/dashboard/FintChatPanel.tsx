@@ -9,6 +9,7 @@ interface Props {
   query: string;
   isLoading: boolean;
   isDone: boolean;
+  errorMessage?: string | null;
   widgetTitle: string;
   widgetType: string;
   result?: WidgetResult | null;
@@ -24,6 +25,7 @@ export default function FintChatPanel({
   query,
   isLoading,
   isDone,
+  errorMessage,
   widgetTitle,
   widgetType,
   result,
@@ -208,8 +210,32 @@ export default function FintChatPanel({
           </div>
         )}
 
+        {/* 에러: 메시지 표시 */}
+        {isDone && errorMessage && (
+          <div
+            style={{
+              background: 'rgba(239,68,68,0.06)',
+              border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: 10,
+              padding: '12px 14px',
+            }}
+          >
+            <p
+              style={{
+                fontFamily: 'Pretendard,sans-serif',
+                fontSize: 13,
+                color: '#dc2626',
+                margin: 0,
+                lineHeight: 1.6,
+              }}
+            >
+              {errorMessage}
+            </p>
+          </div>
+        )}
+
         {/* 완료: 미니 위젯 + 드래그 */}
-        {isDone && (
+        {isDone && !errorMessage && (
           <>
             <p
               style={{
