@@ -182,14 +182,17 @@ function DayTimeView({
   events: CalendarEvent[];
   onEventClick: (e: CalendarEvent) => void;
 }) {
-  const [now, setNow] = useState(new Date());
+  // SSR 시점의 시각과 client hydration 시점의 시각이 달라 hydration mismatch 가 발생할 수 있다.
+  // 따라서 초기엔 null 로 두고 mount 후에만 현재 시각 라인을 렌더한다.
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
   const HOURS = Array.from({ length: 13 }, (_, i) => i + A_S); // 08~20시
   const total = HOURS.length * A_H;
-  const red = (now.getHours() - A_S + now.getMinutes() / 60) * A_H;
+  const red = now ? (now.getHours() - A_S + now.getMinutes() / 60) * A_H : -1;
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
       <div style={{ position: 'relative', height: total }}>
@@ -220,7 +223,7 @@ function DayTimeView({
             <div style={{ flex: 1, height: 1, backgroundColor: BORDER }} />
           </div>
         ))}
-        {red >= 0 && red <= total && (
+        {now && red >= 0 && red <= total && (
           <div
             style={{
               position: 'absolute',
@@ -468,8 +471,10 @@ export default function CalendarPage() {
   const clickedIdRef = useRef<string | null>(null);
   const handleEventClick = async (ev: CalendarEvent) => {
     clickedIdRef.current = ev.eventId;
+    console.log('[handleEventClick] step 1: list event', { eventId: ev.eventId, memo: ev.memo });
     setSelectedEvent(ev); // 즉시 표시
     const detail = await fetchEventDetail(ev.eventId);
+    console.log('[handleEventClick] step 2: detail', { eventId: ev.eventId, memo: detail?.memo, detail });
     // 응답 도착 시 여전히 같은 이벤트를 보고 있는지 확인 (race condition 방지)
     if (detail && clickedIdRef.current === ev.eventId) setSelectedEvent(detail);
   };
@@ -886,7 +891,9 @@ export default function CalendarPage() {
                 onDayClick={onDayClick}
                 onEventClick={(ev) => {
                   setSelectedDate(new Date(ev.startAt));
-                  setSelectedEvent(ev);
+                  // events 배열의 객체는 캘린더 응답 (memo 누락) 이므로
+                  // handleEventClick 으로 활동 상세 API 까지 받아온다.
+                  handleEventClick(ev);
                 }}
                 onMoreClick={(d) => {
                   setCurrentDate(d);

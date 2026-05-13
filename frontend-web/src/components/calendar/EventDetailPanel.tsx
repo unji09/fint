@@ -120,10 +120,15 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
         { timestamp: '01:18', text: '추가 자료가 필요하시면 메일로 보내드릴게요.' },
       ]);
       setAiSummary([
-        { label: '핵심 안건', text: '제안서 가격 조건 협상 진행, 분기 내 계약 체결 목표.', color: '#EF4444' },
-        { label: '결정 사항', text: '추가 자료는 이메일로 전달 / 다음 주 임원 회의 후 예산 승인 확정.', color: '#F59E0B' },
-        { label: 'Next Step', text: '가격 조건 최종안 작성 후 재미팅 일정 조율.', color: '#0686D4' },
-        { label: '리스크', text: '예산 승인 지연 시 일정 한 주 이상 밀릴 가능성.', color: '#22C55E' },
+        {
+          label: '',
+          text:
+            '제안서 가격 조건 협상이 주요 안건으로 다뤄졌고, 분기 내 계약 체결을 목표로 진행 중. ' +
+            '추가 자료는 이메일로 전달하기로 했으며, 다음 주 임원 회의 후 예산 승인이 확정될 예정. ' +
+            '가격 조건 최종안을 작성한 뒤 재미팅 일정을 조율하기로 함. ' +
+            '예산 승인이 지연되면 일정이 한 주 이상 밀릴 가능성이 있어 일정 관리에 주의 필요.',
+          color: '#737880',
+        },
       ]);
     }, 4500);
   };
@@ -288,15 +293,15 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                       style={{
                         padding: '6px 14px',
                         borderRadius: 6,
-                        border: '1px solid #06B6D4',
-                        backgroundColor: 'transparent',
-                        color: '#06B6D4',
-                        fontSize: 13,
-                        fontWeight: 600,
+                        border: '1px solid #E5E6DE',
+                        backgroundColor: '#fff',
+                        color: '#475569',
+                        fontSize: 12,
+                        fontWeight: 500,
                         cursor: 'pointer',
                       }}
                     >
-                      ⤴ 파일 업로드
+                      파일 업로드
                       <input
                         type="file"
                         accept="audio/m4a,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a,audio/webm"
@@ -313,15 +318,19 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                       style={{
                         padding: '6px 14px',
                         borderRadius: 6,
-                        border: '1px solid #EF4444',
-                        backgroundColor: 'transparent',
-                        color: '#EF4444',
-                        fontSize: 13,
-                        fontWeight: 600,
+                        border: '1px solid #E5E6DE',
+                        backgroundColor: '#fff',
+                        color: '#475569',
+                        fontSize: 12,
+                        fontWeight: 500,
                         cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
                       }}
                     >
-                      ● 녹음하기
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#EF4444' }} />
+                      녹음하기
                     </button>
                   </div>
                 )}
@@ -335,99 +344,106 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                 {(sttStatus || uploadingRec) && (
                   <SttProgress status={sttStatus} uploading={uploadingRec} />
                 )}
-                {sttStatus === 'COMPLETED' && aiSummary.length > 0 && (
+                {sttStatus === 'COMPLETED' && (aiSummary.length > 0 || sttLines.length > 0) && (
                   <>
-                    <SectionLabel>AI 요약</SectionLabel>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {aiSummary.map((r) => (
-                        <div
-                          key={r.label}
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: 8,
-                            backgroundColor: '#fff',
-                            border: '1px solid #E2E8F0',
-                            borderLeft: `3px solid ${r.color}`,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 6,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 10,
-                              color: r.color,
-                              fontWeight: 700,
-                              backgroundColor: r.color + '20',
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              alignSelf: 'flex-start',
-                              letterSpacing: '0.04em',
-                            }}
-                          >
-                            {r.label.toUpperCase()}
-                          </span>
-                          <span style={{ fontSize: 13, color: '#1F2126', lineHeight: 1.6 }}>{r.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-                {sttStatus === 'COMPLETED' && sttLines.length > 0 && (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <SectionLabel>녹음 전사</SectionLabel>
-                      <span style={{ fontSize: 11, color: '#94A3B8' }}>{sttLines.length} 줄</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                      <SectionLabel>녹음 기록</SectionLabel>
+                      <span style={{ fontSize: 11, color: '#9CA193' }}>
+                        {(() => {
+                          const t = sttLines.reduce((s, l) => s + (l.text?.length ?? 0), 0);
+                          if (t === 0) return '';
+                          return `약 ${Math.max(1, Math.round(t / 240))}분`;
+                        })()}
+                      </span>
                     </div>
                     <div
                       style={{
+                        backgroundColor: '#F8F8F5',
+                        borderRadius: 10,
+                        padding: '22px 24px',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 2,
-                        maxHeight: 220,
-                        overflowY: 'auto',
-                        padding: '4px 0',
-                        borderRadius: 8,
-                        backgroundColor: '#F8F8F5',
+                        gap: 18,
                       }}
                     >
-                      {sttLines.map((line, i) => (
-                        <div
-                          key={i}
+                      {/* 요약 — 4분할 라벨 / 글머리 점 제거.
+                          여러 항목을 자연어 단락으로 결합. 사람이 쓴 회의록처럼. */}
+                      {aiSummary.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          {aiSummary
+                            .map((r) => r.text)
+                            .filter((t) => t && t.trim())
+                            .map((text, i) => (
+                              <p
+                                key={i}
+                                style={{
+                                  margin: 0,
+                                  fontSize: 15,
+                                  lineHeight: 1.9,
+                                  color: '#1F2126',
+                                  letterSpacing: '-0.005em',
+                                  whiteSpace: 'pre-wrap',
+                                }}
+                              >
+                                {text}
+                              </p>
+                            ))}
+                        </div>
+                      )}
+
+                      {sttLines.length > 0 && (
+                        <details
                           style={{
-                            display: 'flex',
-                            gap: 10,
-                            padding: '8px 12px',
-                            borderRadius: 6,
-                            transition: 'background-color 0.12s',
-                          }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLDivElement).style.backgroundColor = '#EEF1F5';
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
+                            marginTop: aiSummary.length > 0 ? 4 : 0,
+                            borderTop: aiSummary.length > 0 ? '1px solid #ECEDE5' : 'none',
+                            paddingTop: aiSummary.length > 0 ? 16 : 0,
                           }}
                         >
-                          {line.timestamp && (
-                            <span
-                              style={{
-                                fontSize: 10,
-                                color: '#06B6D4',
-                                fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-                                fontWeight: 600,
-                                whiteSpace: 'nowrap',
-                                paddingTop: 2,
-                                minWidth: 44,
-                              }}
-                            >
-                              {line.timestamp}
-                            </span>
-                          )}
-                          <span style={{ fontSize: 12, color: '#1F2126', lineHeight: 1.6, flex: 1 }}>
-                            {line.text}
-                          </span>
-                        </div>
-                      ))}
+                          <summary
+                            style={{
+                              fontSize: 12,
+                              color: '#737880',
+                              cursor: 'pointer',
+                              listStyle: 'none',
+                              userSelect: 'none',
+                              fontWeight: 500,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                            }}
+                          >
+                            <span aria-hidden style={{ fontSize: 10, color: '#9CA193' }}>▸</span>
+                            원본 대화 보기
+                          </summary>
+                          <div
+                            style={{
+                              marginTop: 14,
+                              maxHeight: 360,
+                              overflowY: 'auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 14,
+                            }}
+                          >
+                            {sttLines
+                              .filter((l) => l.text && l.text.trim())
+                              .map((line, i) => (
+                                <p
+                                  key={i}
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 13,
+                                    lineHeight: 1.9,
+                                    color: '#737880',
+                                    whiteSpace: 'pre-wrap',
+                                  }}
+                                >
+                                  {line.text}
+                                </p>
+                              ))}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   </>
                 )}
@@ -470,19 +486,59 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               </>
             )}
 
-            {/* 녹음 뷰 */}
+            {/* 녹음 뷰 — 단순 시간 표시 + 중지 (사인파/빨간 강조 톤다운) */}
             {rightView === 'recording' && (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#EF4444', display: 'inline-block' }} />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#EF4444' }}>녹음 중</span>
-                </div>
-                <div style={{ backgroundColor: '#F8F8F5', borderRadius: 10, padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-                  <div style={{ fontSize: 36, fontWeight: 700, color: '#EF4444', fontVariantNumeric: 'tabular-nums' }}>{recTime}</div>
-                  <div style={{ display: 'flex', gap: 2, alignItems: 'center', height: 32 }}>
-                    {Array.from({ length: 22 }, (_, i) => (<div key={i} style={{ width: 3, height: `${8 + Math.abs(Math.sin(i * 0.9)) * 12}px`, backgroundColor: '#EF4444', borderRadius: 2, opacity: 0.85 }} />))}
+                <div
+                  style={{
+                    backgroundColor: '#F8F8F5',
+                    borderRadius: 10,
+                    padding: '24px 20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 16,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: '#EF4444',
+                        animation: 'recordingPulse 1.2s ease-in-out infinite',
+                      }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>녹음 중</span>
                   </div>
-                  <button onClick={stopRec} style={{ padding: '8px 24px', borderRadius: 20, border: 'none', backgroundColor: '#EF4444', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>■ 녹음 중지</button>
+                  <div
+                    style={{
+                      fontSize: 32,
+                      fontWeight: 600,
+                      color: '#1F2126',
+                      fontVariantNumeric: 'tabular-nums',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {recTime}
+                  </div>
+                  <button
+                    onClick={stopRec}
+                    style={{
+                      padding: '7px 20px',
+                      borderRadius: 6,
+                      border: '1px solid #E5E6DE',
+                      backgroundColor: '#fff',
+                      color: '#1F2126',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    녹음 중지
+                  </button>
+                  <style>{`@keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
                 </div>
                 <div style={{ fontSize: 11, color: '#9CA193', textAlign: 'center' }}>녹음 중지 시 자동으로 STT 분석이 시작됩니다.</div>
               </>
@@ -491,10 +547,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             {/* AI 브리핑 탭 */}
             {rightView === 'briefing' && (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <SectionLabel>AI 브리핑</SectionLabel>
-                  <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>— 고객사 시그널 기반 미팅 준비 자료 (선택)</span>
-                </div>
+                <SectionLabel>AI 브리핑</SectionLabel>
                 {briefingLoading && (<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[80,60,90,50].map((w,i) => (<div key={i} style={{ height: 14, borderRadius: 6, backgroundColor: '#F0F0EE', width: `${w}%` }} />))}
                   <div style={{ fontSize: 11, color: '#9CA193', marginTop: 4 }}>브리핑 생성 중...</div>
@@ -538,7 +591,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           </div>
         </div>
         {rightView === 'recording' && (
-          <div style={{ padding: '10px 24px', borderTop: '1px solid #E5E6DE', textAlign: 'center', fontSize: 12, color: '#EF4444', fontWeight: 600 }}>녹음 진행 중...</div>
+          <div style={{ padding: '10px 24px', borderTop: '1px solid #E5E6DE', textAlign: 'center', fontSize: 11, color: '#9CA193' }}>녹음 진행 중</div>
         )}
       </div>
     </div>
@@ -563,94 +616,23 @@ function Chip({ label, color, bg }: { label: string; color: string; bg: string }
   return <span style={{ fontSize: 11, color, backgroundColor: bg, padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>{label}</span>;
 }
 
-// ─── STT 진행 상태 시각화 ───────────────────────────────────────────
-// 업로드 → PENDING → PROCESSING → COMPLETED 4단계 progress bar.
+// ─── STT 진행 상태 — 한 줄 텍스트. 완료 시에는 결과 자체가 신호이므로 노출하지 않음.
 function SttProgress({ status, uploading }: { status: string | null; uploading: boolean }) {
-  const STEPS = [
-    { key: 'UPLOAD', label: '업로드' },
-    { key: 'PENDING', label: '대기' },
-    { key: 'PROCESSING', label: '분석' },
-    { key: 'COMPLETED', label: '완료' },
-  ] as const;
-
   const isFailed = status === 'FAILED' || status === 'TIMEOUT';
-  let activeIdx = uploading ? 0 : 1;
-  if (status === 'PENDING') activeIdx = 1;
-  else if (status === 'PROCESSING') activeIdx = 2;
-  else if (status === 'COMPLETED') activeIdx = 3;
+  if (status === 'COMPLETED' && !uploading) return null;
 
   if (isFailed) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '8px 12px',
-          borderRadius: 8,
-          backgroundColor: '#FEF2F2',
-          border: '1px solid #FECACA',
-          color: '#DC2626',
-          fontSize: 12,
-          fontWeight: 600,
-        }}
-      >
-        <span style={{ fontSize: 14 }}>{status === 'TIMEOUT' ? '⏱' : '❌'}</span>
-        <span>{status === 'TIMEOUT' ? '분석 시간이 초과되었어요.' : '분석에 실패했어요.'}</span>
-      </div>
+      <span style={{ fontSize: 11, color: '#B45309', alignSelf: 'flex-start' }}>
+        {status === 'TIMEOUT' ? '분석 시간이 초과되었어요' : '분석에 실패했어요'}
+      </span>
     );
   }
 
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        padding: '10px 12px',
-        borderRadius: 8,
-        backgroundColor: '#F8FAFC',
-        border: '1px solid #E2E8F0',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#0F172A' }}>
-          {status === 'COMPLETED' ? '✅ STT 분석 완료' : '🔄 STT 분석 진행 중'}
-        </span>
-        <span style={{ fontSize: 11, color: '#64748B' }}>
-          {Math.min(activeIdx + 1, STEPS.length)} / {STEPS.length}
-        </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {STEPS.map((s, i) => {
-          const done = i < activeIdx;
-          const active = i === activeIdx;
-          const color = done ? '#06B6D4' : active ? '#06B6D4' : '#CBD5E1';
-          return (
-            <div key={s.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div
-                style={{
-                  width: '100%',
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: color,
-                  opacity: done ? 1 : active ? 1 : 0.4,
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 10,
-                  color: active || done ? '#0F172A' : '#94A3B8',
-                  fontWeight: active ? 600 : 400,
-                }}
-              >
-                {s.label}
-                {active && i < 3 && '...'}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  let label = '준비 중';
+  if (uploading) label = '파일 업로드 중...';
+  else if (status === 'PENDING') label = '대기 중...';
+  else if (status === 'PROCESSING') label = '분석 중...';
+
+  return <span style={{ fontSize: 11, color: '#9CA193', alignSelf: 'flex-start' }}>{label}</span>;
 }
