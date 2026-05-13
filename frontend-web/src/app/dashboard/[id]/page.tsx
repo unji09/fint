@@ -251,8 +251,8 @@ export default function DashboardDetailPage() {
       })
       .catch(() =>
         setAllDashboards([
-          { dashboardId: 1, title: '기본', thumbnailUrl: null, lastAccessedAt: null },
-          { dashboardId: 2, title: '제목없음', thumbnailUrl: null, lastAccessedAt: null },
+          { dashboardId: 1, title: '기본', thumbnailKey: null, lastAccessedAt: null },
+          { dashboardId: 2, title: '제목없음', thumbnailKey: null, lastAccessedAt: null },
         ]),
       );
   }, [id, router]);
