@@ -13,6 +13,7 @@ import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DashboardQueryService {
@@ -52,8 +54,10 @@ public class DashboardQueryService {
         }
 
         String traceId = UUID.randomUUID().toString();
+        log.info("[SSE] query start traceId={} dashboardId={} userId={}", traceId, dashboardId, me.getUserId());
         registerPendingState(traceId, dashboardId, request.inputText(), me);
         queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), me));
+        log.info("[SSE] dispatched to FastAPI traceId={}", traceId);
 
         return new QueryStartResponse(traceId);
     }
