@@ -1,18 +1,27 @@
 package com.ssafy.fint.domain.notification.service;
 
 import com.ssafy.fint.domain.account.entity.Account;
+import com.ssafy.fint.domain.account.entity.AccountUserAssignment;
+import com.ssafy.fint.domain.account.repository.AccountRepository;
+import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
 import com.ssafy.fint.domain.ai.entity.AiSuggestion;
 import com.ssafy.fint.domain.ai.entity.AiSuggestionRelatedType;
 import com.ssafy.fint.domain.ai.repository.AiSuggestionRepository;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
+import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
+import com.ssafy.fint.domain.notification.dto.AiSuggestionCallbackRequest;
+import com.ssafy.fint.domain.notification.dto.NotificationItemResponse;
 import com.ssafy.fint.domain.notification.dto.NotificationListResponse;
 import com.ssafy.fint.domain.notification.dto.NotificationReadAllResponse;
+import com.ssafy.fint.global.exception.AccountErrorCode;
+import com.ssafy.fint.global.exception.DealErrorCode;
 import com.ssafy.fint.global.exception.NotificationErrorCode;
 import com.ssafy.fint.domain.tenant.entity.Tenant;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.entity.UserRole;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -50,6 +59,10 @@ class NotificationServiceTest {
     private static final Long USER_ID = 99L;
 
     @Mock private AiSuggestionRepository aiSuggestionRepository;
+    @Mock private AccountRepository accountRepository;
+    @Mock private AccountUserAssignmentRepository accountUserAssignmentRepository;
+    @Mock private PipelineStageRepository pipelineStageRepository;
+    @Mock private SimpMessagingTemplate messagingTemplate;
 
     @InjectMocks
     private NotificationService notificationService;
@@ -269,6 +282,88 @@ class NotificationServiceTest {
             notificationService.markAsRead(1L, me);
 
             assertThat(suggestion.isRead()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("AI 제안 콜백 수신 (POST /internal/notifications/ai/suggestions)")
+    class ReceiveAiSuggestion {
+
+        private static final Long ACCOUNT_ID = 7L;
+        private static final Long STAGE_ID = 10L;
+
+        private final AiSuggestionCallbackRequest request = new AiSuggestionCallbackRequest(
+                ACCOUNT_ID, STAGE_ID, "긴급: 삼성전자 투자 시그널",
+                "2조 규모 반도체 투자 발표", AiSuggestionRelatedType.ACCOUNT,
+                Map.of("activityType", "미팅", "signalSummary", "투자 발표")
+        );
+
+        @Test
+        @DisplayName("정상 — AI 제안을 저장하고 대상 사원들에게 WebSocket 알림을 전송한다.")
+        void success() {
+            Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
+            PipelineStage stage = newStage("제안");
+
+            User user1 = newUser(100L);
+            User user2 = newUser(200L);
+            AccountUserAssignment aua1 = AccountUserAssignment.builder()
+                    .account(account).user(user1).build();
+            AccountUserAssignment aua2 = AccountUserAssignment.builder()
+                    .account(account).user(user2).build();
+
+            when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+            when(pipelineStageRepository.findById(STAGE_ID)).thenReturn(Optional.of(stage));
+            when(aiSuggestionRepository.save(any(AiSuggestion.class)))
+                    .thenAnswer(invocation -> {
+                        AiSuggestion s = invocation.getArgument(0);
+                        ReflectionTestUtils.setField(s, "aiSuggestionId", 1L);
+                        return s;
+                    });
+            when(accountUserAssignmentRepository.findByAccountIdWithUser(ACCOUNT_ID))
+                    .thenReturn(List.of(aua1, aua2));
+
+            notificationService.receiveAiSuggestion(request);
+
+            verify(aiSuggestionRepository).save(any(AiSuggestion.class));
+            verify(messagingTemplate).convertAndSendToUser(
+                    eq("100"), eq("/queue/notifications"), any(NotificationItemResponse.class));
+            verify(messagingTemplate).convertAndSendToUser(
+                    eq("200"), eq("/queue/notifications"), any(NotificationItemResponse.class));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 고객사이면 ACCOUNT_NOT_FOUND 예외가 발생한다.")
+        void accountNotFound() {
+            when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> notificationService.receiveAiSuggestion(request))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 파이프라인 단계이면 PIPELINE_STAGE_NOT_FOUND 예외가 발생한다.")
+        void pipelineStageNotFound() {
+            Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
+            when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(account));
+            when(pipelineStageRepository.findById(STAGE_ID)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> notificationService.receiveAiSuggestion(request))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(DealErrorCode.PIPELINE_STAGE_NOT_FOUND);
+        }
+
+        private User newUser(Long userId) {
+            User user = User.builder()
+                    .tenant(newTenant())
+                    .role(UserRole.MEMBER)
+                    .name("사원" + userId)
+                    .passwordHash("x")
+                    .build();
+            ReflectionTestUtils.setField(user, "userId", userId);
+            return user;
         }
     }
 
