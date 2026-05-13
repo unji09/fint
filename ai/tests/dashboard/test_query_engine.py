@@ -1,3 +1,5 @@
+import asyncio
+
 import numpy as np
 
 from app.dashboard.query_engine import QueryEngine
@@ -483,3 +485,47 @@ class TestQueryEngineSemanticHybrid:
         result = await engine.run(request)
 
         assert result["status"] == "COMPLETED"
+
+
+class TestQueryEngineTimeout:
+    def _make_request(self, **overrides):
+        defaults = {
+            "trace_id": "t",
+            "action": "CREATE",
+            "input_text": "딜 목록 보여줘",
+            "dashboard_id": 1,
+            "tenant_id": 1,
+            "user_id": 1,
+        }
+        defaults.update(overrides)
+        return DashboardQueryRequest(**defaults)
+
+    async def test_intent_timeout_returns_failed(self, monkeypatch):
+        class HangingLLM(FakeLLM):
+            async def chat_structured(self, messages, response_model, *, model=None):
+                if response_model is IntentResult:
+                    await asyncio.sleep(999)
+                return await super().chat_structured(messages, response_model, model=model)
+
+        monkeypatch.setattr("app.dashboard.query_engine.LLM_TIMEOUT_SECONDS", 0.1)
+        engine = QueryEngine(llm=HangingLLM(), db=FakeDB(), context_store=FakeContextStore())
+
+        result = await engine.run(self._make_request())
+
+        assert result["status"] == "FAILED"
+        assert "시간" in result["error"]
+
+    async def test_insight_timeout_returns_failed(self, monkeypatch):
+        class InsightHangLLM(FakeLLM):
+            async def chat_structured(self, messages, response_model, *, model=None):
+                if response_model is InsightResult:
+                    await asyncio.sleep(999)
+                return await super().chat_structured(messages, response_model, model=model)
+
+        monkeypatch.setattr("app.dashboard.query_engine.LLM_TIMEOUT_SECONDS", 0.1)
+        engine = QueryEngine(llm=InsightHangLLM(), db=FakeDB(), context_store=FakeContextStore())
+
+        result = await engine.run(self._make_request())
+
+        assert result["status"] == "FAILED"
+        assert "시간" in result["error"]

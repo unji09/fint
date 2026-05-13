@@ -19,9 +19,19 @@ _DATE_TRUNC_PATTERN = re.compile(r"^DATE_TRUNC\('(\w+)',\s*(\w+(?:\.\w+)?)\)$", 
 _DOT_COL_PATTERN = re.compile(r"^(\w+)\.(\w+)$")
 _ALIAS_PATTERN = re.compile(r"\s+[Aa][Ss]\s+\w+$")
 
+_ALLOWED_DATE_TRUNC_INTERVALS = frozenset({
+    "microsecond", "millisecond", "second", "minute", "hour",
+    "day", "week", "month", "quarter", "year",
+})
+
 
 class QueryBuildError(Exception):
     pass
+
+
+def _validate_date_trunc_interval(interval: str) -> None:
+    if interval.lower() not in _ALLOWED_DATE_TRUNC_INTERVALS:
+        raise QueryBuildError(f"허용되지 않은 DATE_TRUNC 간격: {interval}")
 
 
 def _get_available_tables(spec: QuerySpec) -> set[str]:
@@ -235,6 +245,7 @@ def _validate_spec(spec: QuerySpec) -> None:
             if arg != "*":
                 _resolve_column(arg, spec)
         elif dt_match:
+            _validate_date_trunc_interval(dt_match.group(1))
             _resolve_column(dt_match.group(2), spec)
         else:
             _resolve_column(col, spec)
@@ -257,6 +268,7 @@ def _validate_spec(spec: QuerySpec) -> None:
                 if arg != "*":
                     _resolve_column(arg, spec)
             elif dt_match:
+                _validate_date_trunc_interval(dt_match.group(1))
                 _resolve_column(dt_match.group(2), spec)
             else:
                 _resolve_column(o.column, spec)
@@ -265,6 +277,7 @@ def _validate_spec(spec: QuerySpec) -> None:
         for col in spec.group_by:
             dt_match = _DATE_TRUNC_PATTERN.match(col)
             if dt_match:
+                _validate_date_trunc_interval(dt_match.group(1))
                 _resolve_column(dt_match.group(2), spec)
             else:
                 _resolve_column(col, spec)

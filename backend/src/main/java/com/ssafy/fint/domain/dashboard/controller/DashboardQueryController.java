@@ -38,7 +38,10 @@ public class DashboardQueryController implements DashboardQuerySwagger {
 
     @Override
     @GetMapping(value = "/queries/{traceId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@PathVariable String traceId) {
-        return dashboardQueryStreamService.subscribe(traceId);
+    public SseEmitter stream(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable String traceId
+    ) {
+        return dashboardQueryStreamService.subscribe(traceId, me.getUserId());
     }
 }

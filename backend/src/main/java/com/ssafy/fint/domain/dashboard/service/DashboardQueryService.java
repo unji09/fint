@@ -33,6 +33,7 @@ public class DashboardQueryService {
     private static final String REDIS_KEY_PREFIX = "dashboard:query:";
     private static final Duration PENDING_STATE_TTL = Duration.ofSeconds(600);
     private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_FAILED = "FAILED";
     private final DashboardRepository dashboardRepository;
     private final DashboardWidgetRepository dashboardWidgetRepository;
     private final RedisTemplate<String, String> redisTemplate;
@@ -56,9 +57,16 @@ public class DashboardQueryService {
         String traceId = UUID.randomUUID().toString();
         log.info("[SSE] query start traceId={} dashboardId={} userId={}", traceId, dashboardId, me.getUserId());
         registerPendingState(traceId, dashboardId, request.inputText(), me);
-        queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), me));
-        log.info("[SSE] dispatched to FastAPI traceId={}", traceId);
 
+        try {
+            queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), me));
+        } catch (Exception e) {
+            log.error("[SSE] dispatch failed traceId={}", traceId, e);
+            markDispatchFailed(traceId);
+            throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
+        }
+
+        log.info("[SSE] dispatched to FastAPI traceId={}", traceId);
         return new QueryStartResponse(traceId);
     }
 
@@ -79,6 +87,21 @@ public class DashboardQueryService {
             );
         } catch (JsonProcessingException e) {
             throw new BusinessException(CommonErrorCode.INTERNAL_SERVER_ERROR, "쿼리 상태 직렬화에 실패했습니다.");
+        }
+    }
+
+    private void markDispatchFailed(String traceId) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("status", STATUS_FAILED);
+            payload.put("error", "AI 서비스 연결에 실패했습니다.");
+            redisTemplate.opsForValue().set(
+                    REDIS_KEY_PREFIX + traceId,
+                    objectMapper.writeValueAsString(payload),
+                    PENDING_STATE_TTL
+            );
+        } catch (Exception e) {
+            log.error("[SSE] Redis FAILED 마킹 실패 traceId={}", traceId, e);
         }
     }
 

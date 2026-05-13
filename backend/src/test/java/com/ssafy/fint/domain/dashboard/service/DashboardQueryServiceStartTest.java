@@ -37,8 +37,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -203,6 +205,36 @@ class DashboardQueryServiceStartTest {
                 .isEqualTo(CommonErrorCode.INTERNAL_SERVER_ERROR);
 
         verifyNoInteractions(queryDispatcher);
+    }
+
+    @Test
+    @DisplayName("dispatch 실패 시 Redis 키를 FAILED 상태로 덮어쓰고 EXTERNAL_API_FAILED 예외를 던진다.")
+    void dispatchFailureMarksRedisAsFailed() throws Exception {
+        Dashboard dashboard = newDashboard(OWNER_USER_ID);
+        when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
+        when(dashboardWidgetRepository.findAllByDashboard_DashboardId(DASHBOARD_ID))
+                .thenReturn(List.of());
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        doThrow(new org.springframework.web.client.ResourceAccessException("Connection refused"))
+                .when(queryDispatcher).dispatch(any());
+
+        assertThatThrownBy(() -> dashboardQueryService.start(
+                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.EXTERNAL_API_FAILED);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> valueCaptor = ArgumentCaptor.forClass(String.class);
+        verify(valueOperations, times(2)).set(
+                keyCaptor.capture(),
+                valueCaptor.capture(),
+                any(Duration.class)
+        );
+        String failedPayload = valueCaptor.getAllValues().get(1);
+        Map<String, Object> failedState = objectMapper.readValue(failedPayload, Map.class);
+        assertThat(failedState).containsEntry("status", "FAILED");
+        assertThat(failedState).containsKey("error");
     }
 
     @Test

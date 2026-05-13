@@ -69,9 +69,6 @@ public class SecurityConfig {
                     path.matcher("/error")
                 ).permitAll()
                 .requestMatchers(
-                    path.matcher("/api/v1/dashboards/queries/*/stream")
-                ).permitAll()
-                .requestMatchers(
                     path.matcher("/ws/**")
                 ).permitAll()
                 .anyRequest().authenticated()

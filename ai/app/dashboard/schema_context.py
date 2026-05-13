@@ -118,6 +118,7 @@ def _build_schema() -> dict[str, TableMeta]:
             ColumnMeta("start_at", "TIMESTAMPTZ", "시작 일시"),
             ColumnMeta("end_at", "TIMESTAMPTZ", "종료 일시"),
             ColumnMeta("stt_status", "VARCHAR", "음성인식 상태 (PENDING/PROCESSING/COMPLETED/FAILED)"),
+            ColumnMeta("mood_status", "VARCHAR", "날씨 분석 상태 (PENDING/PROCESSING/COMPLETED/FAILED)"),
             ColumnMeta("attendees", "JSONB", "참석자 정보", filterable=False),
             ColumnMeta("transcript", "JSONB", "음성 기록", filterable=False),
             ColumnMeta("summary", "JSONB", "회의 요약", filterable=False),
@@ -191,12 +192,16 @@ def _build_schema() -> dict[str, TableMeta]:
         columns=[
             ColumnMeta("temperature_history_id", "BIGINT", "온도이력 PK"),
             ColumnMeta("account_id", "BIGINT", "고객사 ID"),
-            ColumnMeta("mood", "VARCHAR", "고객 분위기/온도 상태"),
+            ColumnMeta("mood", "VARCHAR", "고객 분위기 상태 (RAINBOW/SUNNY/CLOUDY/RAINY/THUNDER)"),
             ColumnMeta("reason", "TEXT", "변경 사유"),
+            ColumnMeta("mood_score", "INTEGER", "날씨 점수 (0-100)"),
+            ColumnMeta("activity_id", "BIGINT", "분석 출처 활동 ID", filterable=False),
+            ColumnMeta("key_signals", "JSONB", "핵심 시그널", filterable=False),
             ColumnMeta("created_at", "TIMESTAMPTZ", "생성일"),
         ],
         allowed_joins=[
             JoinPath("accounts", "account_id", "account_id"),
+            JoinPath("activities", "activity_id", "activity_id"),
         ],
         tenant_path=TenantPath(
             joins=[
