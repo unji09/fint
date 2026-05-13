@@ -390,6 +390,9 @@ class TestJoins:
         sql, params = build_query(spec, tenant_id=1)
 
         assert sql.count("JOIN accounts") == 1
+        assert "JOIN account_user_assignment" in sql
+        assert "JOIN users" in sql
+        assert "users.tenant_id" in sql
 
     def test_disallowed_join_raises(self):
         spec = QuerySpec(
@@ -535,12 +538,14 @@ class TestTenantIsolation:
         assert "JOIN users" in sql
         assert "users.tenant_id" in sql
 
-    def test_deals_tenant_via_teams(self):
+    def test_deals_tenant_via_accounts_chain(self):
         spec = QuerySpec(table="deals", columns=["title"])
         sql, _ = build_query(spec, tenant_id=1)
 
-        assert "JOIN teams" in sql
-        assert "teams.tenant_id" in sql
+        assert "JOIN accounts" in sql
+        assert "JOIN account_user_assignment" in sql
+        assert "JOIN users" in sql
+        assert "users.tenant_id" in sql
 
     def test_contacts_tenant_via_accounts_chain(self):
         spec = QuerySpec(table="contacts", columns=["name"])
@@ -631,7 +636,7 @@ class TestCrossTableColumns:
     def test_unjoined_table_column_raises(self):
         spec = QuerySpec(
             table="deals",
-            columns=["accounts.name", "amount"],
+            columns=["contacts.name", "amount"],
         )
         with pytest.raises(QueryBuildError):
             build_query(spec, tenant_id=1)
@@ -658,7 +663,7 @@ class TestCrossTableColumns:
         spec = QuerySpec(
             table="deals",
             columns=["title"],
-            filters=[FilterCondition(column="accounts.name", operator=FilterOperator.EQ, value="test")],
+            filters=[FilterCondition(column="contacts.name", operator=FilterOperator.EQ, value="test")],
         )
         with pytest.raises(QueryBuildError):
             build_query(spec, tenant_id=1)

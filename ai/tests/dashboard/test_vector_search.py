@@ -42,9 +42,9 @@ class TestSemanticSearch:
                 }
             ]
         )
-        spec = SemanticSearchSpec(search_text="삼성전자 반도체", top_k=5)
+        spec = SemanticSearchSpec(search_text="삼성전자 반도체", top_k=5, source_filter="NEWS")
 
-        results = await semantic_search(spec, embedder=embedder, db=db)
+        results = await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
 
         assert len(results) == 1
         assert results[0].document_title == "삼성전자 반도체"
@@ -55,7 +55,7 @@ class TestSemanticSearch:
         db = _mock_db_with_results([])
         spec = SemanticSearchSpec(search_text="test", top_k=5)
 
-        results = await semantic_search(spec, embedder=None, db=db)
+        results = await semantic_search(spec, tenant_id=1, embedder=None, db=db)
 
         assert results == []
 
@@ -65,7 +65,7 @@ class TestSemanticSearch:
         db = _mock_db_with_results([])
         spec = SemanticSearchSpec(search_text="반도체 투자", top_k=10)
 
-        await semantic_search(spec, embedder=embedder, db=db)
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
 
         embedder.embed_query.assert_called_once_with("반도체 투자")
 
@@ -75,7 +75,7 @@ class TestSemanticSearch:
         db = _mock_db_with_results([])
         spec = SemanticSearchSpec(search_text="test", top_k=7)
 
-        await semantic_search(spec, embedder=embedder, db=db)
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
 
         call_args = db.execute.call_args
         sql_text = str(call_args[0][0])
@@ -98,11 +98,129 @@ class TestSemanticSearch:
                 }
             ]
         )
-        spec = SemanticSearchSpec(search_text="test", top_k=5)
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS")
 
-        results = await semantic_search(spec, embedder=embedder, db=db)
+        results = await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
 
         r = results[0]
         assert r.document_title == "테스트 뉴스"
         assert r.source == "매경"
         assert r.chunk_text == "뉴스 요약"
+
+    @pytest.mark.asyncio
+    async def test_tenant_id_passed_to_sql(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5)
+
+        await semantic_search(spec, tenant_id=42, embedder=embedder, db=db)
+
+        call_args = db.execute.call_args
+        params = call_args[0][1]
+        assert params["tenant_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_sql_contains_tenant_filter(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5)
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        call_args = db.execute.call_args
+        sql_text = str(call_args[0][0])
+        assert "tenant_id" in sql_text
+        assert "JOIN" in sql_text.upper()
+
+
+class TestSourceFilter:
+    @pytest.mark.asyncio
+    async def test_news_filter_queries_news_articles(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert "news_articles" in sql_text
+        assert "dart_disclosures" not in sql_text
+
+    @pytest.mark.asyncio
+    async def test_dart_filter_queries_dart_disclosures(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results(
+            [
+                {
+                    "dart_disclosure_id": 1,
+                    "report_nm": "삼성전자 사업보고서",
+                    "content_summary": "사업 요약",
+                    "corp_name": "삼성전자",
+                    "rcept_dt": "20250101",
+                    "rcept_no": "20250101000001",
+                    "title_score": 0.9,
+                    "summary_score": 0.85,
+                }
+            ]
+        )
+        spec = SemanticSearchSpec(search_text="삼성전자", top_k=5, source_filter="DART")
+
+        results = await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert "dart_disclosures" in sql_text
+        assert len(results) == 1
+        assert results[0].document_title == "삼성전자 사업보고서"
+        assert results[0].source == "삼성전자"
+        assert "dart.fss.or.kr" in (results[0].link or "")
+
+    @pytest.mark.asyncio
+    async def test_dart_filter_contains_tenant_filter(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="DART")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert "tenant_id" in sql_text
+        assert "account_dart_disclosures" in sql_text
+
+    @pytest.mark.asyncio
+    async def test_all_filter_queries_both_sources(self):
+        embedder = _mock_embedder()
+        news_result = MagicMock()
+        news_result.mappings.return_value.all.return_value = [
+            {
+                "news_article_id": 1,
+                "title": "뉴스 제목",
+                "content_summary": "뉴스 요약",
+                "publisher": "한경",
+                "published_at": "2025-01-01",
+                "link": "https://example.com/1",
+                "title_score": 0.8,
+                "summary_score": 0.7,
+            }
+        ]
+        dart_result = MagicMock()
+        dart_result.mappings.return_value.all.return_value = [
+            {
+                "dart_disclosure_id": 1,
+                "report_nm": "공시 제목",
+                "content_summary": "공시 요약",
+                "corp_name": "삼성",
+                "rcept_dt": "20250101",
+                "rcept_no": "20250101000001",
+                "title_score": 0.9,
+                "summary_score": 0.85,
+            }
+        ]
+        db = AsyncMock()
+        db.execute.side_effect = [news_result, dart_result]
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="ALL")
+
+        results = await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        assert db.execute.call_count == 2
+        assert len(results) >= 1
+        assert results[0].score >= results[-1].score

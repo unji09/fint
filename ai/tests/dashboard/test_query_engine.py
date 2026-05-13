@@ -407,7 +407,7 @@ class TestQueryEngineSemanticHybrid:
     async def test_semantic_search_returns_news_results(self):
         intent = IntentResult(
             search_type="SEMANTIC",
-            semantic_spec=SemanticSearchSpec(search_text="삼성전자 반도체", top_k=5),
+            semantic_spec=SemanticSearchSpec(search_text="삼성전자 반도체", top_k=5, source_filter="NEWS"),
             suggested_title="삼성전자 반도체 뉴스",
         )
         db = FakeDB(
@@ -448,7 +448,7 @@ class TestQueryEngineSemanticHybrid:
         intent = IntentResult(
             search_type="HYBRID",
             query_spec=QuerySpec(table="deals", columns=["title", "amount"]),
-            semantic_spec=SemanticSearchSpec(search_text="반도체 투자", top_k=5),
+            semantic_spec=SemanticSearchSpec(search_text="반도체 투자", top_k=5, source_filter="NEWS"),
             suggested_title="반도체 투자 분석",
         )
 
