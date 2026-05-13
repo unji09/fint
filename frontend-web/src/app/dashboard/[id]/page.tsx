@@ -17,7 +17,9 @@ import {
   useRenameDashboard,
   useUpdateWidget,
   useDeleteWidget,
+  useThumbnailUpload,
 } from '@/hooks/useDashboard';
+import html2canvas from 'html2canvas';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 const STEP_LABELS = ['사용자 의도 파악', '데이터 조회', '컴포넌트 조합 완료', '스타일링 중...'];
@@ -42,6 +44,34 @@ export default function DashboardDetailPage() {
   }, []);
   const [canvasWidgets, setCanvasWidgets] = useState<CanvasWidget[]>([]);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  /* 썸네일 캡처 & 업로드 — 위젯 CUD 시 5분 throttle */
+  const { upload: uploadThumbnail } = useThumbnailUpload();
+  const lastThumbnailUploadRef = useRef<number>(0);
+  const THUMBNAIL_COOLDOWN = 5 * 60 * 1000;
+
+  const captureAndUpload = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !id) return;
+    const now = Date.now();
+    if (now - lastThumbnailUploadRef.current < THUMBNAIL_COOLDOWN) return;
+    try {
+      const shot = await html2canvas(canvas, {
+        useCORS: true,
+        backgroundColor: '#f2f5ff',
+        scale: 0.5,
+      });
+      const blob = await new Promise<Blob | null>((res) =>
+        shot.toBlob(res, 'image/png', 0.8),
+      );
+      if (blob) {
+        await uploadThumbnail(Number(id), blob);
+        lastThumbnailUploadRef.current = Date.now();
+      }
+    } catch {
+      /* 캡처 실패 시 lastUploadedAt 갱신 안 함 → 다음 CUD에서 재시도 */
+    }
+  }, [id, uploadThumbnail]);
 
   /* 채팅 상태 */
   const [querying, setQuerying] = useState(false);
@@ -281,10 +311,10 @@ export default function DashboardDetailPage() {
 
   const persistWidget = useCallback(async (w: CanvasWidget) => {
     if (!id) return;
-    // 백엔드 PATCH 시도 (실패해도 무방)
     const ok = await patchWidget(Number(id), w.widgetId, widgetToBody(w));
     console.log('[FINT] persistWidget', { widgetId: w.widgetId, ok });
-  }, [id, patchWidget, widgetToBody]);
+    if (ok) void captureAndUpload();
+  }, [id, patchWidget, widgetToBody, captureAndUpload]);
 
   const schedulePersist = useCallback((w: CanvasWidget) => {
     const timers = persistTimersRef.current;
@@ -331,8 +361,9 @@ export default function DashboardDetailPage() {
     if (id) {
       const ok = await deleteWidgetApi(Number(id), wid);
       console.log('[FINT] deleteWidget', { widgetId: wid, ok });
+      if (ok) void captureAndUpload();
     }
-  }, [canvasWidgets, deleteWidgetApi, id, cacheWidgets]);
+  }, [canvasWidgets, deleteWidgetApi, id, cacheWidgets, captureAndUpload]);
 
   /* 처음 화면(/dashboard)의 추천 항목을 골랐을 때 — 캔버스에 그 위젯을 띄우고 즉시 영속화 */
   useEffect(() => {
