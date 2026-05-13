@@ -238,10 +238,10 @@ export default function DashboardDetailPage() {
         if (serverWidgets.length === 0) return; // 백엔드에 위젯 없으면 캐시 유지
         const next = serverWidgets.map((w, i) => ({
           ...w,
-          px: 28 + i * 30,
-          py: 28 + i * 20,
-          pw: 400,
-          ph: 260,
+          px: w.position?.x ?? (28 + i * 30),
+          py: w.position?.y ?? (28 + i * 20),
+          pw: w.position?.w ?? 400,
+          ph: w.position?.h ?? 260,
         }));
         setCanvasWidgets(next);
         try { localStorage.setItem(`fint:widgets:${id}`, JSON.stringify(next)); } catch { /* ignore */ }
