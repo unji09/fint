@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_PATH: str = "model/e5-small"
 
     # ─────────────────────────────────────────────
+    # Naver Open API
+    # ─────────────────────────────────────────────
+
+    NAVER_CLIENT_ID: str = ""
+    NAVER_CLIENT_SECRET: str = ""
+
+    # ─────────────────────────────────────────────
     # GPU OCR Server
     # ─────────────────────────────────────────────
 
@@ -111,6 +118,12 @@ class Settings(BaseSettings):
             f"{self.REDIS_HOST}:"
             f"{self.REDIS_PORT}/0"
         )
+    # ─────────────────────────────────────────────
+    # Spring Internal
+    # ─────────────────────────────────────────────
+
+    SPRING_BASE_URL: str = "http://localhost:8080"
+    INTERNAL_SECRET: str = ""
 
 
 @lru_cache

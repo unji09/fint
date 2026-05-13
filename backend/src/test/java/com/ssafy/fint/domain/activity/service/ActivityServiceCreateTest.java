@@ -5,6 +5,8 @@ import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
+import com.ssafy.fint.domain.deal.dto.DealCreateRequest;
+import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
@@ -118,7 +120,8 @@ class ActivityServiceCreateTest {
                 end,
                 List.of(Map.of("name", "김영업")),
                 5L,
-                "고객이 예산 확인 필요"
+                "고객이 예산 확인 필요",
+                null
         );
 
         ActivityCreateResponse res = activityService.create(req);
@@ -177,6 +180,7 @@ class ActivityServiceCreateTest {
                 end,
                 null,
                 null,
+                null,
                 null
         );
 
@@ -206,6 +210,7 @@ class ActivityServiceCreateTest {
                 "콜드콜",
                 start,
                 end,
+                null,
                 null,
                 null,
                 null
@@ -242,6 +247,7 @@ class ActivityServiceCreateTest {
                 start.plusHours(1),
                 null,
                 null,
+                null,
                 null
         );
 
@@ -267,6 +273,7 @@ class ActivityServiceCreateTest {
                 start.plusHours(1),
                 null,
                 77L,
+                null,
                 null
         );
 
@@ -290,6 +297,7 @@ class ActivityServiceCreateTest {
                 start.minusMinutes(1),
                 null,
                 null,
+                null,
                 null
         );
 
@@ -298,6 +306,87 @@ class ActivityServiceCreateTest {
                 .extracting("errorCode")
                 .isEqualTo(ActivityErrorCode.INVALID_TIME_RANGE);
         verify(activityRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("newDeal 이 제공되면 dealService.create() 를 호출하고 생성된 deal 로 activity 를 연결한다.")
+    void createActivityWithNewDeal() {
+        OffsetDateTime start = OffsetDateTime.now();
+        OffsetDateTime end = start.plusHours(1);
+        long createdDealId = 500L;
+
+        DealCreateRequest dealReq = new DealCreateRequest(
+                10L, null, "신규 딜", null, null, null);
+        DealCreateResponse dealRes = new DealCreateResponse(
+                createdDealId, 10L, null, "신규 딜", null, null, (short) 70, List.of(), OffsetDateTime.now());
+
+        when(dealService.create(any(CustomUserDetails.class), eq(dealReq))).thenReturn(dealRes);
+        when(dealRepository.getReferenceById(createdDealId)).thenReturn(newDeal(createdDealId));
+        when(userRepository.getReferenceById(CURRENT_USER_ID))
+                .thenReturn(stubUser(CURRENT_USER_ID, CURRENT_TENANT_ID));
+        when(activityRepository.save(any(Activity.class)))
+                .thenAnswer(invocation -> {
+                    Activity a = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(a, "activityId", 300L);
+                    return a;
+                });
+
+        ActivityCreateRequest req = new ActivityCreateRequest(
+                null,
+                ActivityType.MEETING,
+                "신규 딜 첫 미팅",
+                start,
+                end,
+                null,
+                null,
+                null,
+                dealReq
+        );
+
+        ActivityCreateResponse res = activityService.create(req);
+
+        assertThat(res.activityId()).isEqualTo(300L);
+        verify(dealService).create(any(CustomUserDetails.class), eq(dealReq));
+        verify(dealRepository).getReferenceById(createdDealId);
+        verify(dealRepository, never()).findByIdAndTenantId(any(), any());
+    }
+
+    @Test
+    @DisplayName("dealId 와 newDeal 이 동시에 제공되면 dealId 가 우선 적용되고 dealService.create() 는 호출되지 않는다.")
+    void dealIdTakesPrecedenceOverNewDeal() {
+        OffsetDateTime start = OffsetDateTime.now();
+        OffsetDateTime end = start.plusHours(1);
+
+        DealCreateRequest dealReq = new DealCreateRequest(
+                10L, null, "신규 딜", null, null, null);
+
+        when(dealRepository.findByIdAndTenantId(3L, CURRENT_TENANT_ID))
+                .thenReturn(Optional.of(newDeal(3L)));
+        when(userRepository.getReferenceById(CURRENT_USER_ID))
+                .thenReturn(stubUser(CURRENT_USER_ID, CURRENT_TENANT_ID));
+        when(activityRepository.save(any(Activity.class)))
+                .thenAnswer(invocation -> {
+                    Activity a = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(a, "activityId", 301L);
+                    return a;
+                });
+
+        ActivityCreateRequest req = new ActivityCreateRequest(
+                3L,
+                ActivityType.CALL,
+                "기존 딜 + newDeal 동시 제공",
+                start,
+                end,
+                null,
+                null,
+                null,
+                dealReq
+        );
+
+        activityService.create(req);
+
+        verify(dealRepository).findByIdAndTenantId(3L, CURRENT_TENANT_ID);
+        verify(dealService, never()).create(any(), any());
     }
 
     private Deal newDeal(long dealId) {

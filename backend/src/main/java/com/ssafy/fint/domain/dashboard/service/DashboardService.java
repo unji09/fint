@@ -14,8 +14,10 @@ import com.ssafy.fint.domain.dashboard.repository.DashboardQueryRepository;
 import com.ssafy.fint.domain.dashboard.repository.DashboardRepository;
 import com.ssafy.fint.domain.dashboard.repository.DashboardTemplateRepository;
 import com.ssafy.fint.domain.dashboard.repository.DashboardWidgetRepository;
+import com.ssafy.fint.domain.file.service.FilePresignedService;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
+import com.ssafy.fint.global.config.properties.AwsS3Properties;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.CommonErrorCode;
@@ -55,6 +57,8 @@ public class DashboardService {
     private final DashboardWidgetRepository dashboardWidgetRepository;
     private final DashboardQueryRepository dashboardQueryRepository;
     private final DashboardQueryService dashboardQueryService;
+    private final FilePresignedService filePresignedService;
+    private final AwsS3Properties awsS3Properties;
 
     @Transactional(readOnly = true)
     public List<DashboardTemplateGroupResponse> findTemplates(List<Long> groupIds) {
@@ -130,7 +134,7 @@ public class DashboardService {
 
     @Transactional
     public void update(CustomUserDetails me, Long dashboardId, DashboardUpdateRequest request) {
-        if (request.title() == null && request.thumbnailUrl() == null) {
+        if (request.title() == null && request.thumbnailKey() == null) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT,
                     "수정할 필드가 하나 이상 필요합니다.");
         }
@@ -145,8 +149,9 @@ public class DashboardService {
         if (request.title() != null) {
             dashboard.changeTitle(request.title());
         }
-        if (request.thumbnailUrl() != null) {
-            dashboard.changeThumbnailUrl(request.thumbnailUrl());
+        if (request.thumbnailKey() != null) {
+            validateThumbnailKey(request.thumbnailKey(), dashboardId);
+            dashboard.changeThumbnailKey(request.thumbnailKey());
         }
     }
 
@@ -162,6 +167,16 @@ public class DashboardService {
         dashboardWidgetRepository.deleteByDashboard(dashboard);
         dashboardQueryRepository.deleteByDashboard(dashboard);
         dashboardRepository.delete(dashboard);
+    }
+
+    private void validateThumbnailKey(String thumbnailKey, Long dashboardId) {
+        String expectedPrefix = awsS3Properties.upload().keyPrefix().thumbnail() + dashboardId + "/";
+        if (!thumbnailKey.startsWith(expectedPrefix)) {
+            throw new BusinessException(DashboardErrorCode.INVALID_THUMBNAIL_KEY);
+        }
+        if (!filePresignedService.existsOnS3(thumbnailKey)) {
+            throw new BusinessException(DashboardErrorCode.THUMBNAIL_NOT_FOUND_ON_S3);
+        }
     }
 
     private String resolveTitle(String input) {

@@ -43,22 +43,22 @@ public class Dashboard extends BaseUpdatableEntity {
     @Column(name = "last_accessed_at")
     private OffsetDateTime lastAccessedAt;
 
-    @Column(name = "thumbnail_url", length = 300)
-    private String thumbnailUrl;
+    @Column(name = "thumbnail_key", length = 300)
+    private String thumbnailKey;
 
     @Builder
-    private Dashboard(User owner, String title, String thumbnailUrl) {
+    private Dashboard(User owner, String title, String thumbnailKey) {
         this.owner = owner;
         this.title = title;
-        this.thumbnailUrl = thumbnailUrl;
+        this.thumbnailKey = thumbnailKey;
     }
 
     public void changeTitle(String title) {
         this.title = title;
     }
 
-    public void changeThumbnailUrl(String thumbnailUrl) {
-        this.thumbnailUrl = thumbnailUrl;
+    public void changeThumbnailKey(String thumbnailKey) {
+        this.thumbnailKey = thumbnailKey;
     }
 
     public void touchAccess(OffsetDateTime accessedAt) {

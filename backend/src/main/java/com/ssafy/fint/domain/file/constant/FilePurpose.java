@@ -5,5 +5,6 @@ package com.ssafy.fint.domain.file.constant;
  */
 public enum FilePurpose {
     MEETING_RECORD,
-    OCR
+    OCR,
+    THUMBNAIL
 }

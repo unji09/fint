@@ -43,4 +43,19 @@ public interface ActivityRepository
               and a.type = com.ssafy.fint.domain.activity.entity.ActivityType.MEETING
             """)
     long countMeetingsByDealId(@Param("dealId") Long dealId);
+
+    /**
+     * 딜의 현재 파이프라인 단계를 산출하기 위한 쿼리.
+     * startAt <= 현재 시각이고 pipelineStage 가 설정된 활동 중 가장 최근 것을 반환한다.
+     */
+    @Query("""
+            select a from Activity a
+            join fetch a.pipelineStage
+            where a.deal.dealId = :dealId
+              and a.pipelineStage is not null
+              and a.startAt <= current_timestamp
+            order by a.startAt desc
+            limit 1
+            """)
+    Optional<Activity> findLatestPipelineActivityByDealId(@Param("dealId") Long dealId);
 }

@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.entity;
 
+import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.global.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -16,6 +17,10 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.util.List;
 
 /**
  * 고객사 분위기(날씨) 이력 (append-only).
@@ -43,10 +48,25 @@ public class TemperatureHistory extends BaseEntity {
     @Column(name = "reason", nullable = false, columnDefinition = "TEXT")
     private String reason;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "activity_id")
+    private Activity activity;
+
+    @Column(name = "mood_score", nullable = false)
+    private Integer moodScore;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "key_signals", columnDefinition = "jsonb")
+    private List<String> keySignals;
+
     @Builder
-    private TemperatureHistory(Account account, Mood mood, String reason) {
+    private TemperatureHistory(Account account, Mood mood, String reason,
+                               Activity activity, Integer moodScore, List<String> keySignals) {
         this.account = account;
         this.mood = mood;
         this.reason = reason;
+        this.activity = activity;
+        this.moodScore = moodScore;
+        this.keySignals = keySignals;
     }
 }
