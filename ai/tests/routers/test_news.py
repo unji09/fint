@@ -5,7 +5,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.clients import get_embedder_client, get_naver_client
+from app.clients import get_dart_client, get_embedder_client, get_naver_client
+from app.clients.dart import DartClient
 from app.clients.embedder import OnnxEmbedderClient
 from app.clients.naver import NaverNewsClient
 from app.core.db import get_db
@@ -39,12 +40,17 @@ def mock_naver():
 
 
 @pytest.fixture
+def mock_dart():
+    return MagicMock(spec=DartClient)
+
+
+@pytest.fixture
 def mock_embedder():
     return MagicMock(spec=OnnxEmbedderClient)
 
 
 @pytest.fixture
-def test_app(mock_db, mock_naver, mock_embedder):
+def test_app(mock_db, mock_naver, mock_dart, mock_embedder):
     app = FastAPI()
     register_exception_handlers(app)
     app.include_router(router)
@@ -52,6 +58,7 @@ def test_app(mock_db, mock_naver, mock_embedder):
         get_tenant_id: lambda: TENANT_ID,
         get_db: lambda: mock_db,
         get_naver_client: lambda: mock_naver,
+        get_dart_client: lambda: mock_dart,
         get_embedder_client: lambda: mock_embedder,
     }
     return app
@@ -89,13 +96,14 @@ class TestCollectSignalsEndpoint:
         assert data["dart"]["existing_rcept_nos"] == []
 
     @pytest.mark.asyncio
-    async def test_missing_tenant_returns_401(self, mock_db, mock_naver, mock_embedder):
+    async def test_missing_tenant_returns_401(self, mock_db, mock_naver, mock_dart, mock_embedder):
         app = FastAPI()
         register_exception_handlers(app)
         app.include_router(router)
         app.dependency_overrides = {
             get_db: lambda: mock_db,
             get_naver_client: lambda: mock_naver,
+            get_dart_client: lambda: mock_dart,
             get_embedder_client: lambda: mock_embedder,
         }
         async with AsyncClient(
@@ -109,7 +117,7 @@ class TestCollectSignalsEndpoint:
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_null_embedder_returns_400(self, mock_db, mock_naver):
+    async def test_null_embedder_returns_400(self, mock_db, mock_naver, mock_dart):
         app = FastAPI()
         register_exception_handlers(app)
         app.include_router(router)
@@ -117,6 +125,7 @@ class TestCollectSignalsEndpoint:
             get_tenant_id: lambda: TENANT_ID,
             get_db: lambda: mock_db,
             get_naver_client: lambda: mock_naver,
+            get_dart_client: lambda: mock_dart,
             get_embedder_client: lambda: None,
         }
         async with AsyncClient(

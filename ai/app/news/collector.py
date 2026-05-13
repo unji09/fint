@@ -10,12 +10,16 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.dart import DartClient
 from app.clients.embedder import EmbedderClient
 from app.clients.naver import NaverNewsClient
+from app.news.dart_collector import DartCollector
 from app.news.naver_collector import AccountInfo, NaverNewsCollector
 from app.schemas.news import (
+    CollectedDartDisclosure,
     CollectedNewsArticle,
     DartResult,
+    ExistingDartRceptNo,
     ExistingNewsLink,
     NewsResult,
     SignalsCollectResponse,
@@ -51,6 +55,7 @@ async def collect_news(
     tenant_id: int,
     db: AsyncSession,
     naver_client: NaverNewsClient | None = None,
+    dart_client: DartClient | None = None,
     embedder: EmbedderClient | None = None,
     include_embeddings: bool = True,
 ) -> SignalsCollectResponse:
@@ -74,20 +79,19 @@ async def collect_news(
             collector = NaverNewsCollector(naver_client, embedder)
             naver_data = await collector.collect_for_accounts(accounts, db)
 
-            new_articles = []
-            for ad in naver_data.new_articles:
-                new_articles.append(
-                    CollectedNewsArticle(
-                        title=ad.item.title,
-                        link=ad.item.link,
-                        original_link=ad.item.original_link or None,
-                        published_at=ad.item.pub_date,
-                        content_summary=ad.item.description or None,
-                        title_embedding=ad.title_embedding if include_embeddings else [],
-                        summary_embedding=ad.summary_embedding if include_embeddings else [],
-                        account_ids=ad.account_ids,
-                    )
+            new_articles = [
+                CollectedNewsArticle(
+                    title=ad.item.title,
+                    link=ad.item.link,
+                    original_link=ad.item.original_link or None,
+                    published_at=ad.item.pub_date,
+                    content_summary=ad.item.description or None,
+                    title_embedding=ad.title_embedding if include_embeddings else [],
+                    summary_embedding=ad.summary_embedding if include_embeddings else [],
+                    account_ids=ad.account_ids,
                 )
+                for ad in naver_data.new_articles
+            ]
 
             existing_links = [
                 ExistingNewsLink(link=link, account_ids=acct_ids)
@@ -100,12 +104,46 @@ async def collect_news(
             )
 
     if source in ("dart", "all"):
-        errors.append("DART 수집은 추후 구현 예정입니다")
+        if dart_client is None or embedder is None:
+            errors.append("DART 수집에 필요한 클라이언트가 설정되지 않았습니다 (DART_API_KEY 확인)")
+        else:
+            collector = DartCollector(dart_client, embedder)
+            dart_data = await collector.collect_for_accounts(accounts, db)
+
+            new_disclosures = [
+                CollectedDartDisclosure(
+                    corp_code=dd.item.corp_code,
+                    corp_name=dd.item.corp_name,
+                    stock_code=dd.item.stock_code or None,
+                    corp_cls=dd.item.corp_cls or None,
+                    report_nm=dd.item.report_nm,
+                    rcept_no=dd.item.rcept_no,
+                    flr_nm=dd.item.flr_nm or None,
+                    rcept_dt=dd.item.rcept_dt,
+                    rm=dd.item.rm or None,
+                    content=dd.content,
+                    content_summary=dd.content_summary,
+                    title_embedding=dd.title_embedding if include_embeddings else [],
+                    summary_embedding=dd.summary_embedding if include_embeddings else [],
+                    account_ids=dd.account_ids,
+                )
+                for dd in dart_data.new_disclosures
+            ]
+
+            existing_rcept_nos = [
+                ExistingDartRceptNo(rcept_no=rcept_no, account_ids=acct_ids)
+                for rcept_no, acct_ids in dart_data.existing_rcept_nos.items()
+            ]
+
+            dart_result = DartResult(
+                new_disclosures=new_disclosures,
+                existing_rcept_nos=existing_rcept_nos,
+            )
 
     logger.info(
-        "collect done: tenant=%d, accounts=%d, news_new=%d, news_existing=%d",
+        "collect done: tenant=%d, accounts=%d, news_new=%d, dart_new=%d",
         tenant_id, len(accounts),
-        len(news_result.new_articles), len(news_result.existing_links),
+        len(news_result.new_articles), len(dart_result.new_disclosures),
     )
 
     return SignalsCollectResponse(
