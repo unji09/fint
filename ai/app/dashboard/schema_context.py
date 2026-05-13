@@ -94,7 +94,11 @@ def _build_schema() -> dict[str, TableMeta]:
             JoinPath("activities", "deal_id", "deal_id"),
         ],
         tenant_path=TenantPath(
-            joins=[("teams", "team_id", "team_id")]
+            joins=[
+                ("accounts", "account_id", "account_id"),
+                ("account_user_assignment", "account_id", "account_id"),
+                ("users", "user_id", "user_id"),
+            ]
         ),
         has_soft_delete=True,
     )

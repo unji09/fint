@@ -198,6 +198,7 @@ class QueryEngine:
         if intent.search_type in ("SEMANTIC", "HYBRID") and intent.semantic_spec:
             search_results = await semantic_search(
                 intent.semantic_spec,
+                tenant_id=tenant_id,
                 embedder=self._embedder,
                 db=self._db,
             )
