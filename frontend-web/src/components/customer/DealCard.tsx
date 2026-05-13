@@ -15,7 +15,6 @@ export default function DealCard({ deal, selected, onClick }: DealCardProps) {
         borderRadius: 10,
         width: 200,
         minWidth: 200,
-        minHeight: 140,
         height: 140,
         border: selected ? '2px solid #06b6d4' : '1px solid #e2e8f0',
         borderLeft: selected ? '3px solid #06b6d4' : '3px solid #7c3aed',
@@ -27,6 +26,7 @@ export default function DealCard({ deal, selected, onClick }: DealCardProps) {
         flexShrink: 0,
         cursor: onClick ? 'pointer' : 'default',
         transition: 'border-color 0.15s',
+        boxSizing: 'border-box',
       }}
     >
       <div
@@ -44,9 +44,14 @@ export default function DealCard({ deal, selected, onClick }: DealCardProps) {
           textAlign: 'center',
           fontFamily: 'Pretendard,sans-serif',
           fontWeight: 500,
-          fontSize: 20,
+          fontSize: 18,
           color: '#7c3aed',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          padding: '0 4px',
         }}
+        title={deal.title}
       >
         {deal.title}
       </div>

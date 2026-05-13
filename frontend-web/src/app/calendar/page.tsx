@@ -49,15 +49,15 @@ const F_PRETENDARD = "'Pretendard', -apple-system, sans-serif";
 const F_INTER = "'Inter', 'Noto Sans KR', sans-serif";
 const F_SEGOE = "'Pretendard', 'Segoe UI', sans-serif"; // 달력 날짜 폰트
 
-// ── 파이프라인 스타일 (Figma: 7항목) — count는 API에서 동적 집계 ─
+// ── 파이프라인 스타일 — DB pipeline_stages 와 1:1 매칭 (한글 stage 이름 사용)
 const PIPELINE_STYLES = [
-  { label: '첫 미팅 준비', code: 'FIRST_MEETING',   dot: '#8CB2E5', cBg: '#EEF4FB', cTxt: '#8CB2E5' },
-  { label: '니즈 파악',   code: 'NEEDS_ANALYSIS',  dot: '#738CD9', cBg: '#EAEEF9', cTxt: '#738CD9' },
-  { label: '제안서 작성', code: 'PROPOSAL_WRITING', dot: '#806BC7', cBg: '#ECE9F7', cTxt: '#806BC7' },
-  { label: '제안 발표',   code: 'PROPOSAL_PRESENT', dot: '#6B5CBF', cBg: '#E9E7F5', cTxt: '#6B5CBF' },
-  { label: '협상 중',     code: 'NEGOTIATION',      dot: '#997333', cBg: '#F0EAE0', cTxt: '#997333' },
-  { label: '계약 검토',   code: 'CONTRACT_REVIEW',  dot: '#339E80', cBg: '#E0F0EC', cTxt: '#339E80' },
-  { label: '성사 / 실패', code: 'CLOSED',            dot: '#268C66', cBg: '#DEEEE8', cTxt: '#268C66' },
+  { label: '발굴',        code: '발굴',        dot: '#8CB2E5', cBg: '#EEF4FB', cTxt: '#8CB2E5' },
+  { label: '가치 제안',   code: '가치 제안',   dot: '#738CD9', cBg: '#EAEEF9', cTxt: '#738CD9' },
+  { label: '솔루션 설계', code: '솔루션 설계', dot: '#806BC7', cBg: '#ECE9F7', cTxt: '#806BC7' },
+  { label: '제안 제출',   code: '제안 제출',   dot: '#6B5CBF', cBg: '#E9E7F5', cTxt: '#6B5CBF' },
+  { label: '협상',        code: '협상',        dot: '#997333', cBg: '#F0EAE0', cTxt: '#997333' },
+  { label: '계약 대기',   code: '계약 대기',   dot: '#339E80', cBg: '#E0F0EC', cTxt: '#339E80' },
+  { label: '수주',        code: '수주',        dot: '#268C66', cBg: '#DEEEE8', cTxt: '#268C66' },
 ];
 
 // ── 미니 주간 (월~일) ─────────────────────────────────────────
@@ -405,16 +405,17 @@ export default function CalendarPage() {
         const res = await fetch(`${API_BASE}/deals?size=200`, { headers: authHeader() });
         if (!res.ok) return;
         const json = await res.json();
-        const deals: any[] = json.data?.content ?? json.data ?? [];
+        // 백엔드 응답: { status, message, data: { data: [...], totalElements } }
+        const deals: any[] = Array.isArray(json?.data?.data) ? json.data.data : [];
         const counts: Record<string, number> = {};
-        deals.forEach((d: any) => {
-          const code = d.pipelineStage?.stageCode ?? '';
+        deals.forEach((d) => {
+          // 백엔드 DealListResponse: currentPipelineStage (DealDetailResponse 와 동일 명명 가정)
+          // 또는 currentPipeline. 둘 다 한글 stage 이름.
+          const code = d?.currentPipelineStage ?? d?.currentPipeline ?? '';
           if (code) counts[code] = (counts[code] ?? 0) + 1;
         });
         setPipeline(PIPELINE_STYLES.map((s) => ({ ...s, count: counts[s.code] ?? 0 })));
-      } catch {
-        /* count 0 유지 */
-      }
+      } catch { /* count 0 유지 */ }
     })();
   }, []);
 
@@ -810,16 +811,20 @@ export default function CalendarPage() {
                 flexShrink: 0,
                 backgroundColor: WHITE,
                 borderBottom: `1px solid ${BORDER}`,
-                display: 'flex',
+                display: 'grid',
+                // 주간 뷰와 동일한 컬럼 구성: 좌측 시간컬럼(52px) + 7개 단계(1fr)
+                gridTemplateColumns: `52px repeat(7, 1fr)`,
                 alignItems: 'stretch',
                 overflow: 'hidden',
+                height: 44,
               }}
             >
+              {/* 시간 컬럼 자리 (주간 뷰와 정렬 맞춤) */}
+              <div style={{ borderRight: `1px solid ${BORDER}` }} />
               {pipeline.map((s, i) => (
                 <div
                   key={s.label}
                   style={{
-                    flex: 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
@@ -827,7 +832,6 @@ export default function CalendarPage() {
                     boxShadow: i > 0 ? `-1px 0 0 0 #EBEDF0` : 'none',
                     overflow: 'hidden',
                     minWidth: 0,
-                    height: 44,
                   }}
                 >
                   <span

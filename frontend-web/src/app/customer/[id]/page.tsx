@@ -64,7 +64,9 @@ export default function CustomerDetailPage() {
       const r = await fetchWithAuth(`/deals/${d.dealId}`);
       if (!r.ok) return;
       const j = await r.json();
-      if ((j.data?.contacts ?? []).some((c: any) => c.contactId === cid)) ids.add(d.dealId);
+      // 백엔드 DealDetailResponse: { contacts: [{ contactId, name, title, email, phone, personality }] }
+      const contacts = (j.data?.contacts ?? []) as { contactId: number }[];
+      if (contacts.some((c) => c.contactId === cid)) ids.add(d.dealId);
     }));
     setCDealIds(ids);
   }, [deals]);
@@ -107,23 +109,28 @@ export default function CustomerDetailPage() {
             {acc && <span style={{ fontFamily: F, fontSize: 12, color: '#94a3b8' }}>{acc.industry}</span>}
           </div>
 
-          {/* 메인 카드 */}
-          <div style={{ background: '#fff', border: '1px solid #e2eaf0', borderRadius: 10, display: 'flex', flexDirection: allDeals ? 'column' : 'row', flexShrink: 0, minHeight: 180 }}>
+          {/* 메인 카드 — 높이 고정으로 컨텐츠 전환 시 흔들림 차단 */}
+          <div style={{ background: '#fff', border: '1px solid #e2eaf0', borderRadius: 10, display: 'flex', flexDirection: allDeals ? 'column' : 'row', flexShrink: 0, height: allDeals ? 320 : 280, overflow: 'hidden' }}>
             {allDeals ? (
               <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontFamily: F, fontWeight: 600, fontSize: 15, color: '#1e293b' }}>{selContact ? `${selContact.name} 관련 딜` : '전체 딜'} ({visDeal.length})</span>
                   <button onClick={() => setAllDeals(false)} style={{ fontFamily: F, fontSize: 12, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>접기</button>
                 </div>
-                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                  {visDeal.map(d => <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => { setSelDeal(selDeal?.dealId === d.dealId ? null : d); setAllDeals(false); }} />)}
-                  {visDeal.length === 0 && <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8' }}>딜이 없습니다.</p>}
-                </div>
+                {visDeal.length > 0 ? (
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start', alignContent: 'flex-start' }}>
+                    {visDeal.map(d => <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} />)}
+                  </div>
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0 }}>딜이 없습니다.</p>
+                  </div>
+                )}
               </div>
             ) : (
               <>
                 {/* 왼쪽 */}
-                <div style={{ flex: '1 1 0', minWidth: 0, borderRight: '1px solid #e2eaf0', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, borderRight: '1px solid #e2eaf0', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
                   {selContact ? (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -181,7 +188,7 @@ export default function CustomerDetailPage() {
                 </div>
 
                 {/* 오른쪽: 최근 딜 */}
-                <div style={{ flex: '1 1 0', minWidth: 0, padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontFamily: F, fontWeight: 600, fontSize: 14, color: '#1e293b' }}>{selContact ? `${selContact.name} 딜` : '최근 딜'}</span>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -205,11 +212,17 @@ export default function CustomerDetailPage() {
                         {addingD ? '등록 중...' : '등록'}
                       </button>
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
-                      {visDeal.length > 0 ? visDeal.slice(0, 2).map(d => (
+                  ) : visDeal.length > 0 ? (
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                      {visDeal.slice(0, 2).map(d => (
                         <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} />
-                      )) : <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8' }}>{selContact ? '연결된 딜 없음' : '진행 중인 딜 없음'}</p>}
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0 }}>
+                        {selContact ? '연결된 딜 없음' : '진행 중인 딜 없음'}
+                      </p>
                     </div>
                   )}
                 </div>
