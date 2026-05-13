@@ -16,6 +16,18 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
             select distinct a from Account a
             join AccountUserAssignment aua on aua.account = a
             join aua.user u
+            where a.name = :name
+              and u.tenant.tenantId = :tenantId
+              and u.isDeleted = false
+            """)
+    List<Account> findByNameAndTenantId(
+            @Param("name") String name,
+            @Param("tenantId") Long tenantId);
+
+    @Query("""
+            select distinct a from Account a
+            join AccountUserAssignment aua on aua.account = a
+            join aua.user u
             where a.accountId = :accountId
               and u.tenant.tenantId = :tenantId
               and u.isDeleted = false

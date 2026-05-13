@@ -2,10 +2,13 @@ package com.ssafy.fint.domain.contact.controller;
 
 import com.ssafy.fint.domain.account.service.ContactService;
 import com.ssafy.fint.domain.contact.dto.request.ContactCreateRequest;
+import com.ssafy.fint.domain.contact.dto.request.ContactOcrInitRequest;
 import com.ssafy.fint.domain.contact.dto.request.ContactOcrRequest;
 import com.ssafy.fint.domain.contact.dto.request.ContactUpdateRequest;
 import com.ssafy.fint.domain.contact.dto.response.ContactCreateResponse;
 import com.ssafy.fint.domain.contact.dto.response.ContactListResponse;
+import com.ssafy.fint.domain.contact.dto.response.ContactOcrInitResponse;
+import com.ssafy.fint.domain.contact.dto.response.ContactOcrInitResult;
 import com.ssafy.fint.domain.contact.dto.response.ContactOcrResponse;
 import com.ssafy.fint.domain.contact.service.ContactOcrService;
 import com.ssafy.fint.global.ApiResponse;
@@ -66,6 +69,20 @@ public class ContactController {
     ) {
         contactService.deleteContact(contactId);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "OCR 기반 담당자 등록", description = "OCR 추출 정보로 고객사 조회/생성 후 담당자를 등록합니다.")
+    @PreAuthorize("hasRole('MEMBER') or hasRole('ADMIN')")
+    @PostMapping("/contacts/ocr/init")
+    public ResponseEntity<ApiResponse<ContactOcrInitResponse>> initContactByOcr(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @RequestBody @Valid ContactOcrInitRequest request
+    ) {
+        ContactOcrInitResult result = contactService.initContactByOcr(me, request);
+        if (result.created()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(result.response()));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result.response()));
     }
 
     @Operation(
