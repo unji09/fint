@@ -809,7 +809,8 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* 파이프라인: 월간 뷰에서만 표시 (주간은 WeekGrid 내부에서 렌더링 → 완벽 정렬) */}
+          {/* 파이프라인: 월간 뷰 전용 헤더. (주간은 WeekGrid 내부의 sticky 파이프라인이 표시됨)
+              월간 그리드는 시간컬럼이 없으므로 7개 동일 분할로 셀과 정확히 정렬. */}
           {viewMode === 'month' && (
             <div
               style={{
@@ -817,15 +818,12 @@ export default function CalendarPage() {
                 backgroundColor: WHITE,
                 borderBottom: `1px solid ${BORDER}`,
                 display: 'grid',
-                // 주간 뷰와 동일한 컬럼 구성: 좌측 시간컬럼(52px) + 7개 단계(1fr)
-                gridTemplateColumns: `52px repeat(7, 1fr)`,
+                gridTemplateColumns: 'repeat(7, 1fr)',
                 alignItems: 'stretch',
                 overflow: 'hidden',
                 height: 44,
               }}
             >
-              {/* 시간 컬럼 자리 (주간 뷰와 정렬 맞춤) */}
-              <div style={{ borderRight: `1px solid ${BORDER}` }} />
               {pipeline.map((s, i) => (
                 <div
                   key={s.label}
@@ -834,7 +832,8 @@ export default function CalendarPage() {
                     alignItems: 'center',
                     gap: 8,
                     padding: '0 16px',
-                    boxShadow: i > 0 ? `-1px 0 0 0 #EBEDF0` : 'none',
+                    // MonthGrid 셀 우측 구분선과 동일한 색(`#D6D6D6`) 사용해 시각 정렬
+                    borderRight: i < 6 ? `1px solid #D6D6D6` : 'none',
                     overflow: 'hidden',
                     minWidth: 0,
                   }}
