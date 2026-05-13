@@ -747,3 +747,52 @@ class TestOrderByExpressions:
         sql, _ = build_query(spec, tenant_id=1)
 
         assert "ORDER BY DATE_TRUNC('month', deals.created_at)" in sql
+
+
+class TestDateTruncIntervalValidation:
+    def test_valid_interval_month(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('month', created_at)", "COUNT(*)"],
+            group_by=["DATE_TRUNC('month', created_at)"],
+        )
+        sql, _ = build_query(spec, tenant_id=1)
+        assert "DATE_TRUNC('month'" in sql
+
+    def test_valid_interval_year(self):
+        spec = QuerySpec(table="deals", columns=["DATE_TRUNC('year', created_at)"])
+        sql, _ = build_query(spec, tenant_id=1)
+        assert "DATE_TRUNC('year'" in sql
+
+    def test_valid_interval_week(self):
+        spec = QuerySpec(table="deals", columns=["DATE_TRUNC('week', created_at)"])
+        sql, _ = build_query(spec, tenant_id=1)
+        assert "DATE_TRUNC('week'" in sql
+
+    def test_invalid_interval_raises(self):
+        spec = QuerySpec(table="deals", columns=["DATE_TRUNC('fortnight', created_at)"])
+        with pytest.raises(QueryBuildError, match="허용되지 않은 DATE_TRUNC 간격"):
+            build_query(spec, tenant_id=1)
+
+    def test_case_insensitive_interval(self):
+        spec = QuerySpec(table="deals", columns=["DATE_TRUNC('MONTH', created_at)"])
+        sql, _ = build_query(spec, tenant_id=1)
+        assert "DATE_TRUNC('MONTH'" in sql
+
+    def test_invalid_interval_in_group_by_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('biweekly', created_at)", "COUNT(*)"],
+            group_by=["DATE_TRUNC('biweekly', created_at)"],
+        )
+        with pytest.raises(QueryBuildError, match="허용되지 않은 DATE_TRUNC 간격"):
+            build_query(spec, tenant_id=1)
+
+    def test_invalid_interval_in_order_by_raises(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["DATE_TRUNC('century', created_at)"],
+            order_by=[OrderSpec(column="DATE_TRUNC('century', created_at)")],
+        )
+        with pytest.raises(QueryBuildError, match="허용되지 않은 DATE_TRUNC 간격"):
+            build_query(spec, tenant_id=1)

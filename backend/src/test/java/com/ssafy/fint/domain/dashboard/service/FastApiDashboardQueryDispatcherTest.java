@@ -1,6 +1,5 @@
 package com.ssafy.fint.domain.dashboard.service;
 
-import com.ssafy.fint.domain.dashboard.dto.AiQueryDispatchRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,12 +20,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * FastAPI dispatcher 단위 테스트.
- * - URL: {ai-server-url}/api/v1/dashboard/query 로 POST
- * - X-Tenant-Id 헤더 + JSON Content-Type
- * - 본문은 AiQueryDispatchRequest.from(command) 결과
- */
 @ExtendWith(MockitoExtension.class)
 class FastApiDashboardQueryDispatcherTest {
 
@@ -36,9 +29,25 @@ class FastApiDashboardQueryDispatcherTest {
 
     @Mock private RestTemplate aiRestTemplate;
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> captureBody() {
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> captor =
+                ArgumentCaptor.forClass(HttpEntity.class);
+        verify(aiRestTemplate).postForObject(eq(EXPECTED_URL), captor.capture(), eq(Void.class));
+        return captor.getValue().getBody();
+    }
+
+    @SuppressWarnings("unchecked")
+    private HttpEntity<Map<String, Object>> captureEntity() {
+        ArgumentCaptor<HttpEntity<Map<String, Object>>> captor =
+                ArgumentCaptor.forClass(HttpEntity.class);
+        verify(aiRestTemplate).postForObject(eq(EXPECTED_URL), captor.capture(), eq(Void.class));
+        return captor.getValue();
+    }
+
     @Test
-    @DisplayName("dispatch 호출 시 FastAPI POST URL/X-Tenant-Id 헤더/JSON 본문이 모두 정확히 전송된다.")
-    void dispatchSendsExpectedHttpRequest() {
+    @DisplayName("dispatch 호출 시 snake_case 키로 FastAPI POST URL/X-Tenant-Id 헤더/JSON 본문이 전송된다.")
+    void dispatchSendsSnakeCaseBody() {
         FastApiDashboardQueryDispatcher dispatcher =
                 new FastApiDashboardQueryDispatcher(aiRestTemplate, AI_SERVER_URL);
 
@@ -55,28 +64,24 @@ class FastApiDashboardQueryDispatcherTest {
 
         dispatcher.dispatch(command);
 
-        ArgumentCaptor<HttpEntity<AiQueryDispatchRequest>> entityCaptor =
-                ArgumentCaptor.forClass(HttpEntity.class);
-        verify(aiRestTemplate).postForObject(eq(EXPECTED_URL), entityCaptor.capture(), eq(Void.class));
-
-        HttpEntity<AiQueryDispatchRequest> entity = entityCaptor.getValue();
+        HttpEntity<Map<String, Object>> entity = captureEntity();
         assertThat(entity.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
         assertThat(entity.getHeaders().getFirst(TENANT_HEADER)).isEqualTo("1");
 
-        AiQueryDispatchRequest body = entity.getBody();
+        Map<String, Object> body = entity.getBody();
         assertThat(body).isNotNull();
-        assertThat(body.traceId()).isEqualTo("trace-1");
-        assertThat(body.action()).isEqualTo("ADD");
-        assertThat(body.inputText()).isEqualTo("주간 매출 추이");
-        assertThat(body.dashboardId()).isEqualTo(5L);
-        assertThat(body.tenantId()).isEqualTo(1L);
-        assertThat(body.userId()).isEqualTo(99L);
-        assertThat(body.existingWidgets()).isEmpty();
-        assertThat(body.currentWidget()).isNull();
+        assertThat(body).containsEntry("trace_id", "trace-1");
+        assertThat(body).containsEntry("action", "ADD");
+        assertThat(body).containsEntry("input_text", "주간 매출 추이");
+        assertThat(body).containsEntry("dashboard_id", 5L);
+        assertThat(body).containsEntry("tenant_id", 1L);
+        assertThat(body).containsEntry("user_id", 99L);
+        assertThat((List<?>) body.get("existing_widgets")).isEmpty();
+        assertThat(body.get("current_widget")).isNull();
     }
 
     @Test
-    @DisplayName("action=CREATE + existingWidgets 비어있는 command 가 정확히 직렬화되어 전송된다.")
+    @DisplayName("action=CREATE + existingWidgets 비어있는 command 가 snake_case 로 전송된다.")
     void dispatchCreateActionWithEmptyWidgets() {
         FastApiDashboardQueryDispatcher dispatcher =
                 new FastApiDashboardQueryDispatcher(aiRestTemplate, AI_SERVER_URL);
@@ -94,16 +99,12 @@ class FastApiDashboardQueryDispatcherTest {
 
         dispatcher.dispatch(command);
 
-        ArgumentCaptor<HttpEntity<AiQueryDispatchRequest>> entityCaptor =
-                ArgumentCaptor.forClass(HttpEntity.class);
-        verify(aiRestTemplate).postForObject(eq(EXPECTED_URL), entityCaptor.capture(), eq(Void.class));
-
-        AiQueryDispatchRequest body = entityCaptor.getValue().getBody();
+        Map<String, Object> body = captureBody();
         assertThat(body).isNotNull();
-        assertThat(body.action()).isEqualTo("CREATE");
-        assertThat(body.dashboardId()).isEqualTo(10L);
-        assertThat(body.tenantId()).isEqualTo(2L);
-        assertThat(body.userId()).isEqualTo(50L);
+        assertThat(body).containsEntry("action", "CREATE");
+        assertThat(body).containsEntry("dashboard_id", 10L);
+        assertThat(body).containsEntry("tenant_id", 2L);
+        assertThat(body).containsEntry("user_id", 50L);
     }
 
     @Test
@@ -130,13 +131,9 @@ class FastApiDashboardQueryDispatcherTest {
 
         dispatcher.dispatch(command);
 
-        ArgumentCaptor<HttpEntity<AiQueryDispatchRequest>> entityCaptor =
-                ArgumentCaptor.forClass(HttpEntity.class);
-        verify(aiRestTemplate).postForObject(eq(EXPECTED_URL), entityCaptor.capture(), eq(Void.class));
-
-        AiQueryDispatchRequest body = entityCaptor.getValue().getBody();
+        Map<String, Object> body = captureBody();
         assertThat(body).isNotNull();
-        assertThat(body.existingWidgets()).hasSize(1);
+        assertThat((List<?>) body.get("existing_widgets")).hasSize(1);
     }
 
     @Test
@@ -154,5 +151,23 @@ class FastApiDashboardQueryDispatcherTest {
         assertThatThrownBy(() -> dispatcher.dispatch(command))
                 .isInstanceOf(org.springframework.web.client.ResourceAccessException.class)
                 .hasMessageContaining("Connection refused");
+    }
+
+    @Test
+    @DisplayName("본문에 camelCase 키가 존재하지 않고 snake_case 키만 존재한다.")
+    void bodyContainsNoCamelCaseKeys() {
+        FastApiDashboardQueryDispatcher dispatcher =
+                new FastApiDashboardQueryDispatcher(aiRestTemplate, AI_SERVER_URL);
+
+        DashboardQueryDispatchCommand command = new DashboardQueryDispatchCommand(
+                "trace-sc", QueryAction.ADD, "테스트", 1L, 1L, 1L, List.of(), null);
+
+        dispatcher.dispatch(command);
+
+        Map<String, Object> body = captureBody();
+        assertThat(body).isNotNull();
+        assertThat(body.keySet()).containsExactlyInAnyOrder(
+                "trace_id", "action", "input_text", "dashboard_id",
+                "tenant_id", "user_id", "existing_widgets", "current_widget");
     }
 }

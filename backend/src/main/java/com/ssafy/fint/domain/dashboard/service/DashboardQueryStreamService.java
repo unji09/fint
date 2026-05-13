@@ -47,6 +47,8 @@ public class DashboardQueryStreamService {
     private static final String FIELD_DASHBOARD_ID = "dashboardId";
     private static final String FIELD_INPUT_TEXT = "inputText";
     private static final String FIELD_RESULT = "result";
+    private static final String FIELD_USER_ID = "userId";
+    private static final String FIELD_TENANT_ID = "tenantId";
     private static final String FIELD_ERROR = "error";
     private static final String FIELD_RESULT_DATA = "data";
     private static final String FIELD_RESULT_INSIGHT = "insight_text";
@@ -64,10 +66,20 @@ public class DashboardQueryStreamService {
     /**
      * traceId 의 처리 진행 상태를 구독한다. 호출 즉시 SseEmitter 를 반환하고
      * 내부에서 Redis polling 을 시작한다.
+     *
+     * @param userId 요청자의 userId — Redis 에 저장된 userId 와 불일치하면 구독 거부
      */
-    public SseEmitter subscribe(String traceId) {
-        log.info("[SSE] subscribe traceId={}", traceId);
+    public SseEmitter subscribe(String traceId, Long userId) {
+        log.info("[SSE] subscribe traceId={} userId={}", traceId, userId);
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+
+        if (!verifyOwnership(traceId, userId)) {
+            log.warn("[SSE] userId mismatch traceId={} userId={}", traceId, userId);
+            sendErrorSilently(emitter, null, "해당 쿼리에 접근할 권한이 없습니다.");
+            emitter.complete();
+            return emitter;
+        }
+
         AtomicReference<AiQueryStatus> lastStatus = new AtomicReference<>();
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
@@ -96,6 +108,24 @@ public class DashboardQueryStreamService {
         return emitter;
     }
 
+    private boolean verifyOwnership(String traceId, Long userId) {
+        try {
+            String json = redisTemplate.opsForValue().get(REDIS_KEY_PREFIX + traceId);
+            if (json == null) {
+                return true;
+            }
+            Map<String, Object> payload = objectMapper.readValue(json, PAYLOAD_TYPE);
+            Object storedUserIdObj = payload.get(FIELD_USER_ID);
+            if (storedUserIdObj instanceof Number storedNum) {
+                return Long.valueOf(storedNum.longValue()).equals(userId);
+            }
+            return true;
+        } catch (Exception e) {
+            log.warn("[SSE] ownership verification failed traceId={}", traceId, e);
+            return true;
+        }
+    }
+
     private void tick(String traceId,
                       SseEmitter emitter,
                       AtomicReference<AiQueryStatus> lastStatus,
@@ -120,7 +150,16 @@ public class DashboardQueryStreamService {
             }
 
             Map<String, Object> payload = objectMapper.readValue(json, PAYLOAD_TYPE);
-            AiQueryStatus status = AiQueryStatus.valueOf((String) payload.get(FIELD_STATUS));
+
+            AiQueryStatus status;
+            try {
+                status = AiQueryStatus.valueOf((String) payload.get(FIELD_STATUS));
+            } catch (IllegalArgumentException e) {
+                log.warn("[SSE] unknown status traceId={} status={}", traceId, payload.get(FIELD_STATUS));
+                sendErrorSilently(emitter, null, "알 수 없는 처리 상태입니다.");
+                cancelAndComplete(emitter, futureRef);
+                return;
+            }
 
             if (status == lastStatus.get()) {
                 return;
@@ -131,8 +170,13 @@ public class DashboardQueryStreamService {
             switch (status) {
                 case INTENT_PARSING, DATA_QUERYING, COMPONENT_BUILDING, STYLING -> sendProgress(emitter, status);
                 case COMPLETED -> {
-                    sendComplete(emitter, payload);
-                    log.info("[SSE] completed traceId={}", traceId);
+                    try {
+                        sendComplete(emitter, payload);
+                        log.info("[SSE] completed traceId={}", traceId);
+                    } catch (Exception e) {
+                        log.warn("[SSE] sendComplete failed traceId={}", traceId, e);
+                        sendErrorSilently(emitter, null, "결과 저장 중 오류가 발생했습니다.");
+                    }
                     cancelAndComplete(emitter, futureRef);
                 }
                 case FAILED -> {
@@ -172,11 +216,16 @@ public class DashboardQueryStreamService {
     }
 
     private void sendComplete(SseEmitter emitter, Map<String, Object> payload) throws IOException {
-        Long dashboardId = ((Number) payload.get(FIELD_DASHBOARD_ID)).longValue();
+        Long dashboardId = extractLong(payload, FIELD_DASHBOARD_ID);
+        Long tenantId = extractLong(payload, FIELD_TENANT_ID);
         String inputText = (String) payload.get(FIELD_INPUT_TEXT);
         Map<String, Object> result = asMap(payload.get(FIELD_RESULT));
 
-        DashboardQueryResultWriter.InsertedIds ids = resultWriter.persist(dashboardId, inputText, result);
+        if (dashboardId == null || tenantId == null || result == null) {
+            throw new IllegalStateException("COMPLETED payload missing required fields: dashboardId, tenantId, or result");
+        }
+
+        DashboardQueryResultWriter.InsertedIds ids = resultWriter.persist(tenantId, dashboardId, inputText, result);
 
         QueryStreamCompleteEvent body = new QueryStreamCompleteEvent(
                 ids.widgetId(),
@@ -234,6 +283,11 @@ public class DashboardQueryStreamService {
         if (f != null) {
             f.cancel(false);
         }
+    }
+
+    private Long extractLong(Map<String, Object> payload, String field) {
+        Object value = payload.get(field);
+        return value instanceof Number num ? num.longValue() : null;
     }
 
     @SuppressWarnings("unchecked")

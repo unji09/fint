@@ -38,9 +38,13 @@ public class DashboardQueryResultWriter {
     private final DashboardWidgetRepository dashboardWidgetRepository;
 
     @Transactional
-    public InsertedIds persist(Long dashboardId, String inputText, Map<String, Object> result) {
+    public InsertedIds persist(Long tenantId, Long dashboardId, String inputText, Map<String, Object> result) {
         Dashboard dashboard = dashboardRepository.findById(dashboardId)
                 .orElseThrow(() -> new BusinessException(DashboardErrorCode.DASHBOARD_NOT_FOUND));
+
+        if (!dashboard.getOwner().getTenant().getTenantId().equals(tenantId)) {
+            throw new BusinessException(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
+        }
 
         DashboardQuery query = dashboardQueryRepository.save(DashboardQuery.builder()
                 .dashboard(dashboard)

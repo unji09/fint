@@ -1,6 +1,5 @@
 package com.ssafy.fint.domain.dashboard.service;
 
-import com.ssafy.fint.domain.dashboard.dto.AiQueryDispatchRequest;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -9,11 +8,9 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-/**
- * FastAPI {@code POST /api/v1/dashboard/query} 호출로 자연어 쿼리 작업을 위임한다.
- * FastAPI 는 traceId 를 즉시 echo 한 뒤 background task 로 처리하므로
- * 본 호출은 fire-and-forget 으로 응답 본문을 무시한다 (HTTP 상태 코드만 신뢰).
- */
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 @Component
 public class FastApiDashboardQueryDispatcher implements DashboardQueryDispatcher {
 
@@ -37,9 +34,17 @@ public class FastApiDashboardQueryDispatcher implements DashboardQueryDispatcher
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set(TENANT_HEADER, String.valueOf(command.tenantId()));
 
-        HttpEntity<AiQueryDispatchRequest> request = new HttpEntity<>(
-                AiQueryDispatchRequest.from(command), headers);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("trace_id", command.traceId());
+        body.put("action", command.action().name());
+        body.put("input_text", command.inputText());
+        body.put("dashboard_id", command.dashboardId());
+        body.put("tenant_id", command.tenantId());
+        body.put("user_id", command.userId());
+        body.put("existing_widgets", command.existingWidgets());
+        body.put("current_widget", command.currentWidget());
 
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         aiRestTemplate.postForObject(aiServerUrl + DISPATCH_PATH, request, Void.class);
     }
 }

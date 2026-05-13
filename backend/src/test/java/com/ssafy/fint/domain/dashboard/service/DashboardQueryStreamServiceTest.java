@@ -41,6 +41,8 @@ class DashboardQueryStreamServiceTest {
     private static final String TRACE_ID = "trace-abc";
     private static final String REDIS_KEY = "dashboard:query:" + TRACE_ID;
     private static final long DEADLINE_NEVER = Long.MAX_VALUE;
+    private static final Long USER_ID = 7L;
+    private static final Long TENANT_ID = 1L;
 
     @Mock private RedisTemplate<String, String> redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
@@ -59,15 +61,31 @@ class DashboardQueryStreamServiceTest {
 
     @Test
     @DisplayName("subscribe 호출 시 SseEmitter 발급 + scheduler 에 500ms 주기 polling tick 등록.")
-    void subscribeSchedulesTick() {
+    void subscribeSchedulesTick() throws Exception {
         ScheduledFuture<?> future = mock(ScheduledFuture.class);
         doReturn(future).when(scheduler).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(REDIS_KEY)).thenReturn(
+                objectMapper.writeValueAsString(Map.of("status", "PENDING", "userId", USER_ID, "tenantId", TENANT_ID)));
 
-        SseEmitter emitter = service.subscribe(TRACE_ID);
+        SseEmitter emitter = service.subscribe(TRACE_ID, USER_ID);
 
         assertThat(emitter).isNotNull();
         assertThat(emitter.getTimeout()).isEqualTo(35_000L);
         verify(scheduler).scheduleAtFixedRate(any(Runnable.class), eq(Duration.ofMillis(500)));
+    }
+
+    @Test
+    @DisplayName("subscribe 시 userId 불일치 → polling 미시작.")
+    void subscribeRejectsWrongUserId() throws Exception {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(REDIS_KEY)).thenReturn(
+                objectMapper.writeValueAsString(Map.of("status", "PENDING", "userId", USER_ID, "tenantId", TENANT_ID)));
+
+        SseEmitter emitter = service.subscribe(TRACE_ID, 999L);
+
+        assertThat(emitter).isNotNull();
+        verifyNoInteractions(scheduler);
     }
 
     @Test
@@ -174,16 +192,17 @@ class DashboardQueryStreamServiceTest {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", "COMPLETED");
         payload.put("dashboardId", 5);
+        payload.put("tenantId", TENANT_ID);
         payload.put("inputText", "주간 매출 추이");
         payload.put("result", result);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(REDIS_KEY)).thenReturn(objectMapper.writeValueAsString(payload));
-        when(resultWriter.persist(eq(5L), eq("주간 매출 추이"), any()))
+        when(resultWriter.persist(eq(TENANT_ID), eq(5L), eq("주간 매출 추이"), any()))
                 .thenReturn(new DashboardQueryResultWriter.InsertedIds(20L, 10L));
 
         invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);
 
-        verify(resultWriter).persist(eq(5L), eq("주간 매출 추이"), any());
+        verify(resultWriter).persist(eq(TENANT_ID), eq(5L), eq("주간 매출 추이"), any());
         verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
         verify(emitter).complete();
         verify(future).cancel(false);
@@ -247,11 +266,12 @@ class DashboardQueryStreamServiceTest {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", "COMPLETED");
         payload.put("dashboardId", 5);
+        payload.put("tenantId", TENANT_ID);
         payload.put("inputText", "test");
         payload.put("result", result);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(REDIS_KEY)).thenReturn(objectMapper.writeValueAsString(payload));
-        when(resultWriter.persist(eq(5L), eq("test"), any()))
+        when(resultWriter.persist(eq(TENANT_ID), eq(5L), eq("test"), any()))
                 .thenReturn(new DashboardQueryResultWriter.InsertedIds(1L, 1L));
 
         invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);
@@ -275,11 +295,102 @@ class DashboardQueryStreamServiceTest {
         verify(future).cancel(false);
     }
 
+    @Test
+    @DisplayName("COMPLETED payload 에 dashboardId 누락 → error 이벤트 + emitter complete.")
+    void tickCompletedWithMissingDashboardIdSendsError() throws Exception {
+        SseEmitter emitter = mock(SseEmitter.class);
+        ScheduledFuture<?> future = mock(ScheduledFuture.class);
+        AtomicReference<AiQueryStatus> lastStatus = new AtomicReference<>();
+        AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>(future);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", "COMPLETED");
+        payload.put("inputText", "test");
+        payload.put("result", Map.of("widget_type", "KPI", "title", "t"));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(REDIS_KEY)).thenReturn(objectMapper.writeValueAsString(payload));
+
+        invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);
+
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).complete();
+        verify(future).cancel(false);
+        verifyNoInteractions(resultWriter);
+    }
+
+    @Test
+    @DisplayName("COMPLETED payload 에 tenantId 누락 → error 이벤트 + emitter complete.")
+    void tickCompletedWithMissingTenantIdSendsError() throws Exception {
+        SseEmitter emitter = mock(SseEmitter.class);
+        ScheduledFuture<?> future = mock(ScheduledFuture.class);
+        AtomicReference<AiQueryStatus> lastStatus = new AtomicReference<>();
+        AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>(future);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", "COMPLETED");
+        payload.put("dashboardId", 5);
+        payload.put("inputText", "test");
+        payload.put("result", Map.of("widget_type", "KPI", "title", "t"));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(REDIS_KEY)).thenReturn(objectMapper.writeValueAsString(payload));
+
+        invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);
+
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).complete();
+        verify(future).cancel(false);
+        verifyNoInteractions(resultWriter);
+    }
+
+    @Test
+    @DisplayName("COMPLETED payload 에 result 누락 → error 이벤트 + emitter complete.")
+    void tickCompletedWithMissingResultSendsError() throws Exception {
+        SseEmitter emitter = mock(SseEmitter.class);
+        ScheduledFuture<?> future = mock(ScheduledFuture.class);
+        AtomicReference<AiQueryStatus> lastStatus = new AtomicReference<>();
+        AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>(future);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", "COMPLETED");
+        payload.put("dashboardId", 5);
+        payload.put("tenantId", TENANT_ID);
+        payload.put("inputText", "test");
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(REDIS_KEY)).thenReturn(objectMapper.writeValueAsString(payload));
+
+        invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);
+
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).complete();
+        verify(future).cancel(false);
+        verifyNoInteractions(resultWriter);
+    }
+
+    @Test
+    @DisplayName("Redis 에 알 수 없는 status 문자열 → error 이벤트 + emitter complete.")
+    void tickUnknownStatusSendsError() throws Exception {
+        SseEmitter emitter = mock(SseEmitter.class);
+        ScheduledFuture<?> future = mock(ScheduledFuture.class);
+        AtomicReference<AiQueryStatus> lastStatus = new AtomicReference<>();
+        AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>(future);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(REDIS_KEY)).thenReturn(
+                objectMapper.writeValueAsString(Map.of("status", "UNKNOWN_STATUS")));
+
+        invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);
+
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).complete();
+        verify(future).cancel(false);
+    }
+
     private void stubRedisStatus(String status, Map<String, Object> result) throws Exception {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", status);
         payload.put("dashboardId", 5);
+        payload.put("tenantId", TENANT_ID);
         payload.put("inputText", "test");
+        payload.put("userId", USER_ID);
         if (result != null) {
             payload.put("result", result);
         }

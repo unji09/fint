@@ -88,10 +88,10 @@ class SecurityConfigProxyTest {
     }
 
     @Test
-    @DisplayName("SSE 스트림 엔드포인트는 토큰 없이 접근 가능 (403 아님)")
+    @DisplayName("SSE 스트림 엔드포인트는 토큰 없으면 401 또는 403")
     void sseStreamWithoutToken() throws Exception {
         mockMvc.perform(get("/api/v1/dashboards/queries/test-trace-id/stream")
                         .accept(MediaType.TEXT_EVENT_STREAM))
-                .andExpect(status().is(not(403)));
+                .andExpect(status().is4xxClientError());
     }
 }

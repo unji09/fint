@@ -24,5 +24,5 @@ public interface DashboardQuerySwagger {
                     + "단계 완료 시마다 progress 이벤트(총 4번), 처리 완료 시 complete 이벤트, "
                     + "실패 시 error 이벤트를 발행하고 SSE 를 종료한다. polling 30초 timeout."
     )
-    SseEmitter stream(String traceId);
+    SseEmitter stream(CustomUserDetails me, String traceId);
 }

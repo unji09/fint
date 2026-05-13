@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -23,6 +24,8 @@ from app.schemas.dashboard import (
 )
 
 logger = logging.getLogger(__name__)
+
+LLM_TIMEOUT_SECONDS: float = 30.0
 
 _SYSTEM_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 사용자의 자연어 질의를 분석하여 적절한 데이터 조회 방법을 결정합니다.
@@ -81,7 +84,12 @@ class QueryEngine:
             return {"status": "FAILED", "error": str(e)}
 
         try:
-            intent = await self._classify_intent(request)
+            intent = await asyncio.wait_for(
+                self._classify_intent(request), timeout=LLM_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            logger.warning("LLM intent classification timed out")
+            return {"status": "FAILED", "error": "질의 분석 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."}
         except Exception:
             logger.exception("LLM intent classification failed")
             return {"status": "FAILED", "error": "질의 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
@@ -106,7 +114,13 @@ class QueryEngine:
 
         modify_context = request.current_widget if request.action == "MODIFY" else None
         try:
-            insight = await self._generate_insight(request.input_text, rows, modify_context=modify_context)
+            insight = await asyncio.wait_for(
+                self._generate_insight(request.input_text, rows, modify_context=modify_context),
+                timeout=LLM_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("LLM insight generation timed out")
+            return {"status": "FAILED", "error": "인사이트 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."}
         except Exception:
             logger.exception("LLM insight generation failed")
             return {"status": "FAILED", "error": "인사이트 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
