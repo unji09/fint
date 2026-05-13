@@ -1,5 +1,7 @@
 package com.ssafy.fint.domain.ai.controller;
 
+import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
+import com.ssafy.fint.domain.ai.dto.NextActionCreateResponse;
 import com.ssafy.fint.domain.ai.dto.NextActionDetailResponse;
 import com.ssafy.fint.domain.ai.dto.NextActionListResponse;
 import com.ssafy.fint.global.ApiResponse;
@@ -11,6 +13,13 @@ import java.util.List;
 
 @Tag(name = "AI Suggestion", description = "고객사 AI 추천 Next Action API")
 public interface AiSuggestionSwagger {
+
+    @Operation(
+            summary = "고객사 Next Action 생성",
+            description = "고객사 데이터를 기반으로 FastAPI AI 서비스를 호출하여 Next Action을 생성한다. "
+                    + "생성 결과는 DB에 저장되고, 해당 고객사 담당 사원에게 WebSocket 알림이 push된다."
+    )
+    ApiResponse<NextActionCreateResponse> create(CustomUserDetails me, NextActionCreateRequest request);
 
     @Operation(
             summary = "고객사 Next Action 목록 조회",
