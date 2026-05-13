@@ -237,6 +237,95 @@ export function useDashboardQuery() {
   return { startQuery, streamResults, traceId, loading };
 }
 
+// ─── 썸네일 업로드 ──────────────────────────────────────────────────────────
+
+const MAX_THUMBNAIL_WIDTH = 640;
+const THUMBNAIL_QUALITY = 0.7;
+
+function compressImage(blob: Blob): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const ratio = Math.min(1, MAX_THUMBNAIL_WIDTH / img.width);
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('Canvas context failed'));
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(
+        (result) => (result ? resolve(result) : reject(new Error('toBlob failed'))),
+        'image/png',
+        THUMBNAIL_QUALITY,
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Image load failed'));
+    };
+    img.src = url;
+  });
+}
+
+export function useThumbnailUpload() {
+  const [uploading, setUploading] = useState(false);
+
+  const upload = useCallback(async (dashboardId: number, imageBlob: Blob) => {
+    setUploading(true);
+    try {
+      const compressed = await compressImage(imageBlob);
+      const fileName = `thumb_${dashboardId}_${Date.now()}.png`;
+
+      const { uploadUrl, fileKey } = await fetchWithAuth<{
+        uploadUrl: string;
+        fileKey: string;
+      }>('/files/presigned-url', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileName,
+          contentType: 'image/png',
+          fileType: 'IMAGE',
+          purpose: 'THUMBNAIL',
+          fileSize: compressed.size,
+          dashboardId,
+        }),
+      });
+
+      const s3Res = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: compressed,
+        headers: {
+          'Content-Type': 'image/png',
+          'x-amz-server-side-encryption': 'aws:kms',
+          'x-amz-server-side-encryption-aws-kms-key-id': 'alias/crm-fint-s3-key',
+        },
+      });
+      if (!s3Res.ok) throw new Error('S3 업로드 실패');
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const patchRes = await fetch(`${API_BASE}/dashboards/${dashboardId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ thumbnailKey: fileKey }),
+      });
+      if (!patchRes.ok) throw new Error('thumbnailKey 저장 실패');
+
+      return fileKey;
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  return { upload, uploading };
+}
+
 // ─── 대시보드 이름 변경 ─────────────────────────────────────────────────────
 
 export function useRenameDashboard() {
