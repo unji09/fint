@@ -6,6 +6,7 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
+import com.ssafy.fint.domain.dashboard.dto.QueryHistoryResponse;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.domain.dashboard.service.DashboardService;
 import com.ssafy.fint.domain.dashboard.service.DashboardWidgetService;
@@ -58,6 +59,15 @@ public class DashboardController implements DashboardSwagger {
             @PathVariable Long dashboardId
     ) {
         return ApiResponse.ok(dashboardService.findDetail(me, dashboardId));
+    }
+
+    @Override
+    @GetMapping("/{dashboardId}/queries")
+    public ApiResponse<List<QueryHistoryResponse>> findQueryHistory(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId
+    ) {
+        return ApiResponse.ok(dashboardService.findQueryHistory(me, dashboardId));
     }
 
     @Override

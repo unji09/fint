@@ -6,6 +6,7 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
+import com.ssafy.fint.domain.dashboard.dto.QueryHistoryResponse;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
 import com.ssafy.fint.global.security.CustomUserDetails;
@@ -36,6 +37,12 @@ public interface DashboardSwagger {
             description = "대시보드와 소속 위젯 목록(쿼리 결과 포함)을 반환한다. 조회 성공 시 lastAccessedAt 이 갱신된다."
     )
     ApiResponse<DashboardDetailResponse> findDetail(CustomUserDetails me, Long dashboardId);
+
+    @Operation(
+            summary = "대시보드 쿼리 내역 조회",
+            description = "해당 대시보드에서 실행된 자연어 쿼리 내역을 completedAt 오름차순으로 반환한다."
+    )
+    ApiResponse<List<QueryHistoryResponse>> findQueryHistory(CustomUserDetails me, Long dashboardId);
 
     @Operation(
             summary = "대시보드 생성 (빈/템플릿/자연어 통합 진입)",

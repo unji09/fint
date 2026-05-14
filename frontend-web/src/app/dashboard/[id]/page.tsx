@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import type { Dashboard, DashboardWidget } from '@/types/dashboard';
+import type { Dashboard, DashboardWidget, ChatMessage } from '@/types/dashboard';
 import GridBg from '@/components/dashboard/GridBg';
 import CanvasWidgetCard from '@/components/dashboard/CanvasWidgetCard';
 import FintChatPanel from '@/components/dashboard/FintChatPanel';
@@ -86,15 +86,15 @@ export default function DashboardDetailPage() {
   /* SSE complete 시 받아둔 위젯 데이터 */
   const [pendingWidget, setPendingWidget] = useState<CanvasWidget | null>(null);
 
+  /* 채팅 내역 */
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+
   /* 드래그 고스트 */
   const [dragging, setDragging] = useState(false);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
   const dragOrigin = useRef({ ox: 0, oy: 0 });
 
-  /* 채팅창 위치 (드래그로 이동) */
-  const [chatPos, setChatPos] = useState<{ left: number; top: number } | null>(null);
-  const [chatDragging, setChatDragging] = useState(false);
-  const chatWrapperRef = useRef<HTMLDivElement>(null);
+  /* 채팅창 위치 — 좌측 하단 고정 (드래그 불가) */
 
   /* 대시보드 탭 삭제 */
   const { remove: deleteDashboard, loading: deletingDashboard } = useDeleteDashboard();
@@ -176,49 +176,6 @@ export default function DashboardDetailPage() {
     [deleteDashboard, deletingDashboard, id, router],
   );
 
-  const handleChatMouseDown = useCallback((e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('input, button, textarea, [contenteditable="true"]')) return;
-    const el = chatWrapperRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const startMx = e.clientX;
-    const startMy = e.clientY;
-    const startLeft = rect.left;
-    const startTop = rect.top;
-    let latestLeft = startLeft;
-    let latestTop = startTop;
-    let rafId = 0;
-    e.preventDefault();
-    setChatDragging(true);
-
-    // 시작 시점에 bottom 좌표를 끊어내고 left/top로만 위치 잡도록 고정
-    el.style.bottom = 'auto';
-    el.style.left = `${startLeft}px`;
-    el.style.top = `${startTop}px`;
-
-    const apply = () => {
-      rafId = 0;
-      if (!chatWrapperRef.current) return;
-      chatWrapperRef.current.style.left = `${latestLeft}px`;
-      chatWrapperRef.current.style.top = `${latestTop}px`;
-    };
-    const onMove = (ev: MouseEvent) => {
-      latestLeft = Math.max(0, startLeft + (ev.clientX - startMx));
-      latestTop = Math.max(0, startTop + (ev.clientY - startMy));
-      if (!rafId) rafId = requestAnimationFrame(apply);
-    };
-    const onUp = () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      setChatDragging(false);
-      setChatPos({ left: latestLeft, top: latestTop });
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, []);
-
   useEffect(() => {
     // 1) localStorage 캐시 먼저 보여줌 (백엔드 응답 늦더라도 새로고침 후 즉시 보이게)
     try {
@@ -248,6 +205,56 @@ export default function DashboardDetailPage() {
         try { localStorage.setItem(`fint:widgets:${id}`, JSON.stringify(next)); } catch { /* ignore */ }
       })
       .catch((err) => { console.warn('[FINT] GET /dashboards/{id} 실패', err); });
+
+    // 3) 이전 대화 내역 로드
+    fetch(`${API_BASE}/dashboards/${id}/queries`, { headers: authHeader() as HeadersInit })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return;
+        const queries = (j.data ?? j) as Array<{
+          queryId?: number;
+          inputText?: string;
+          widgetType?: string;
+          title?: string;
+          result?: { data?: unknown; insightText?: string };
+          config?: Record<string, unknown>;
+          createdAt?: string;
+          status?: string;
+          errorMessage?: string;
+        }>;
+        if (!Array.isArray(queries) || queries.length === 0) return;
+        const msgs: ChatMessage[] = [];
+        for (const q of queries) {
+          const ts = q.createdAt ?? new Date().toISOString();
+          // user message
+          msgs.push({
+            id: `user-${q.queryId ?? Date.now()}-${msgs.length}`,
+            role: 'user',
+            content: q.inputText ?? '',
+            widget: null,
+            timestamp: ts,
+            status: 'done',
+          });
+          // assistant message
+          const isError = q.status === 'ERROR' || q.status === 'FAILED';
+          msgs.push({
+            id: `assistant-${q.queryId ?? Date.now()}-${msgs.length}`,
+            role: 'assistant',
+            content: q.result?.insightText ?? (isError ? '' : ''),
+            widget: isError ? null : {
+              widgetType: q.widgetType ?? 'BAR_CHART',
+              title: q.title ?? '',
+              data: q.result?.data ?? {},
+              config: q.config ?? {},
+            },
+            timestamp: ts,
+            status: isError ? 'error' : 'done',
+            errorMessage: isError ? (q.errorMessage ?? '쿼리 처리에 실패했습니다.') : undefined,
+          });
+        }
+        setChatHistory(msgs);
+      })
+      .catch((err) => { console.warn('[FINT] GET /dashboards/{id}/queries 실패', err); });
 
     fetch(`${API_BASE}/dashboards`, { headers: authHeader() as HeadersInit })
       .then(async (r) => {
@@ -475,6 +482,18 @@ export default function DashboardDetailPage() {
 
       setSteps(STEP_LABELS.map((l, idx) => ({ label: l, done: false, active: idx === 0 })));
 
+      // 채팅 내역에 사용자 메시지 추가
+      const userMsgId = `user-${Date.now()}`;
+      const userMsg: ChatMessage = {
+        id: userMsgId,
+        role: 'user',
+        content: text,
+        widget: null,
+        timestamp: new Date().toISOString(),
+        status: 'done',
+      };
+      setChatHistory((prev) => [...prev, userMsg]);
+
       try {
         const startRes = await fetch(`${API_BASE}/dashboards/${id}/queries`, {
           method: 'POST',
@@ -528,14 +547,45 @@ export default function DashboardDetailPage() {
                 setSteps(STEP_LABELS.map((l) => ({ label: l, done: true, active: false })));
                 setQuerying(false);
                 setChatDone(true);
+
+                // 채팅 내역에 어시스턴트 메시지 추가
+                const assistantMsg: ChatMessage = {
+                  id: `assistant-${Date.now()}`,
+                  role: 'assistant',
+                  content: data.result?.insightText ?? '',
+                  widget: {
+                    widgetType: data.widgetType ?? 'BAR_CHART',
+                    title: data.title ?? autoTitle,
+                    data: data.result?.data ?? {},
+                    config: data.config ?? {},
+                  },
+                  timestamp: new Date().toISOString(),
+                  status: 'done',
+                };
+                setChatHistory((prev) => [...prev, assistantMsg]);
+
                 ctrl.abort();
                 return;
               }
               if (ev.event === 'error') {
                 console.error('Query error:', data.message);
-                setQueryErrorMsg(data.message ?? '쿼리 처리에 실패했습니다.');
+                const errMsg = data.message ?? '쿼리 처리에 실패했습니다.';
+                setQueryErrorMsg(errMsg);
                 setQuerying(false);
                 setChatDone(true);
+
+                // 채팅 내역에 에러 어시스턴트 메시지 추가
+                const errorAssistantMsg: ChatMessage = {
+                  id: `assistant-err-${Date.now()}`,
+                  role: 'assistant',
+                  content: '',
+                  widget: null,
+                  timestamp: new Date().toISOString(),
+                  status: 'error',
+                  errorMessage: errMsg,
+                };
+                setChatHistory((prev) => [...prev, errorAssistantMsg]);
+
                 ctrl.abort();
               }
             } catch {
@@ -820,21 +870,16 @@ export default function DashboardDetailPage() {
             ))}
           </div>
 
-          {/* FINT 채팅 + 검색바 (드래그로 이동 가능) */}
+          {/* FINT 채팅 + 검색바 (좌측 하단 고정) */}
           <div
-            ref={chatWrapperRef}
-            onMouseDown={handleChatMouseDown}
             style={{
               position: 'fixed',
               zIndex: 20,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-start',
-              cursor: chatDragging ? 'grabbing' : 'grab',
-              willChange: 'left, top',
-              ...(chatPos
-                ? { left: chatPos.left, top: chatPos.top }
-                : { bottom: 20, left: 20 }),
+              bottom: 20,
+              left: 20,
             }}
           >
             {chatOpen && (
@@ -850,6 +895,7 @@ export default function DashboardDetailPage() {
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}
+                chatHistory={chatHistory}
               />
             )}
             <QueryBar
