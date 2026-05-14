@@ -15,7 +15,6 @@ import java.io.File
  * 명함 OCR + 담당자 등록 ViewModel.
  *
  * - [imagePath] 가 주어지면 init 단계에서 [uploadAndOcr] 호출
- * - Repository 가 [NotImplementedError] (stub) 를 반환해도 빈 폼으로 fallback 하여 화면 흐름은 그대로 검증 가능
  */
 class BusinessCardViewModel(
     private val imagePath: String?,
@@ -49,11 +48,10 @@ class BusinessCardViewModel(
                     }
                 }
                 .onFailure { e ->
-                    // stub (NotImplementedError) or 실제 실패 → 빈 폼으로 수동 입력 fallback
                     _state.update {
                         it.copy(
                             isOcrInProgress = false,
-                            error = if (e is NotImplementedError) null else e.message,
+                            error = e.message,
                         )
                     }
                 }
@@ -88,12 +86,13 @@ class BusinessCardViewModel(
                     _state.update { it.copy(registeredContactId = id) }
                 }
                 .onFailure { e ->
-                    if (e !is NotImplementedError) {
-                        _state.update { it.copy(error = e.message) }
+                    _state.update {
+                        it.copy(
+                            phase = BusinessCardUiState.Phase.Confirm,
+                            error = e.message,
+                        )
                     }
-                    // stub or 실패에도 데모용으로 진행 화면 표시
                 }
-            // RegisterProgressContent 가 onComplete 시 [completeRegistration] 호출하므로 여기서는 phase 유지
         }
     }
 
