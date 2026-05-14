@@ -510,6 +510,7 @@ export default function DashboardDetailPage() {
                   queryId: data.queryId ?? null,
                   inputText: text,
                   result: data.result ?? { data: {}, insightText: '' },
+                  data: null,
                   px: 0,
                   py: 0,
                   pw: 400,
