@@ -77,6 +77,8 @@ ai/tests/resources/
 # ===== Personal workspace (local only, not tracked) =====
 backend/mydocs/
 ai/mydocs/
+mydocs/
+ai/scripts/_*
 
 # ===== Package Files =====
 *.war
