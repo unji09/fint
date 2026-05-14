@@ -33,11 +33,13 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -61,55 +63,69 @@ class NextActionCreateServiceTest {
     private final CustomUserDetails me = new CustomUserDetails(USER_ID, TENANT_ID, "MEMBER");
 
     @Test
-    @DisplayName("정상 — FastAPI 응답을 AiSuggestion 으로 저장하고 WebSocket push 후 응답을 반환한다.")
+    @DisplayName("정상 — FastAPI 배열 응답을 모두 AiSuggestion 으로 저장하고 응답을 반환한다.")
     void createSuccess() {
         Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
         PipelineStage stage = newStage(STAGE_ID, "제안");
-        NextActionAiResponse aiResponse = new NextActionAiResponse(
-                "클라우드 전환 비용 절감 제안",
-                "최근 인프라 비용 증가 이슈 감지",
-                "COST_REDUCTION",
-                "account",
-                87.5,
-                89,
-                Map.of("news", List.of(), "dart", List.of(), "crm", List.of()),
-                "인프라 비용 절감 효과를 수치로 제시하세요",
-                STAGE_ID
+
+        List<NextActionAiResponse> aiResponses = List.of(
+                new NextActionAiResponse(
+                        "클라우드 전환 비용 절감 제안",
+                        "최근 인프라 비용 증가 이슈 감지",
+                        "COST_REDUCTION", "ACCOUNT",
+                        87.5, 89,
+                        Map.of("news", List.of(), "dart", List.of(), "crm", List.of()),
+                        "인프라 비용 절감 효과를 수치로 제시하세요",
+                        STAGE_ID
+                ),
+                new NextActionAiResponse(
+                        "EB 식별 및 컨택",
+                        "EB 미참여 상태",
+                        "Qualification", "ACCOUNT",
+                        72.0, 72,
+                        Map.of("news", List.of(), "dart", List.of(), "crm", List.of()),
+                        "Champion 에게 EB 소개 요청",
+                        STAGE_ID
+                )
         );
 
         NextActionCreateRequest request = new NextActionCreateRequest(
                 ACCOUNT_ID, TriggerType.EXTERNAL_SIGNAL_UPDATED,
                 List.of(101L, 102L), List.of(55L), null, null);
 
+        AtomicLong idSeq = new AtomicLong(100L);
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));
         when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
-                .thenReturn(aiResponse);
+                .thenReturn(aiResponses);
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(STAGE_ID, TENANT_ID))
                 .thenReturn(Optional.of(stage));
         when(aiSuggestionRepository.save(any(AiSuggestion.class)))
                 .thenAnswer(invocation -> {
                     AiSuggestion s = invocation.getArgument(0);
-                    ReflectionTestUtils.setField(s, "aiSuggestionId", 100L);
+                    ReflectionTestUtils.setField(s, "aiSuggestionId", idSeq.getAndIncrement());
                     ReflectionTestUtils.setField(s, "createdAt", OffsetDateTime.now());
                     return s;
                 });
 
-        NextActionCreateResponse response = aiSuggestionService.createNextAction(me, request);
+        List<NextActionCreateResponse> responses = aiSuggestionService.createNextAction(me, request);
 
-        assertThat(response.nextActionId()).isEqualTo(100L);
-        assertThat(response.accountId()).isEqualTo(ACCOUNT_ID);
-        assertThat(response.accountName()).isEqualTo("(주)삼성전자");
-        assertThat(response.action()).isEqualTo("클라우드 전환 비용 절감 제안");
-        assertThat(response.reason()).isEqualTo("최근 인프라 비용 증가 이슈 감지");
-        assertThat(response.category()).isEqualTo("COST_REDUCTION");
-        assertThat(response.relatedType()).isEqualTo("account");
-        assertThat(response.importanceScore()).isEqualTo(87.5);
-        assertThat(response.successProbability()).isEqualTo(89);
-        assertThat(response.recommendedScript()).isEqualTo("인프라 비용 절감 효과를 수치로 제시하세요");
-        assertThat(response.createdAt()).isNotNull();
+        assertThat(responses).hasSize(2);
 
-        verify(notificationService).pushNotification(any(AiSuggestion.class));
+        NextActionCreateResponse first = responses.get(0);
+        assertThat(first.nextActionId()).isEqualTo(100L);
+        assertThat(first.accountId()).isEqualTo(ACCOUNT_ID);
+        assertThat(first.accountName()).isEqualTo("(주)삼성전자");
+        assertThat(first.action()).isEqualTo("클라우드 전환 비용 절감 제안");
+        assertThat(first.importanceScore()).isEqualTo(87.5);
+
+        NextActionCreateResponse second = responses.get(1);
+        assertThat(second.nextActionId()).isEqualTo(101L);
+        assertThat(second.action()).isEqualTo("EB 식별 및 컨택");
+        assertThat(second.importanceScore()).isEqualTo(72.0);
+
+        verify(aiSuggestionRepository, times(2)).save(any(AiSuggestion.class));
+        verify(notificationService, times(2)).pushNotification(any(AiSuggestion.class));
     }
 
     @Test
@@ -118,10 +134,11 @@ class NextActionCreateServiceTest {
         Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
         PipelineStage stage = newStage(STAGE_ID, "제안");
         Map<String, Object> sources = Map.of("news", List.of("뉴스1"), "dart", List.of(), "crm", List.of());
-        NextActionAiResponse aiResponse = new NextActionAiResponse(
-                "제목", "설명", "MARKET_EXPANSION", "account",
+
+        List<NextActionAiResponse> aiResponses = List.of(new NextActionAiResponse(
+                "제목", "설명", "MARKET_EXPANSION", "ACCOUNT",
                 75.0, 75, sources, "멘트", STAGE_ID
-        );
+        ));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
                 ACCOUNT_ID, TriggerType.NEWS_UPDATED,
@@ -130,7 +147,7 @@ class NextActionCreateServiceTest {
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));
         when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
-                .thenReturn(aiResponse);
+                .thenReturn(aiResponses);
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(STAGE_ID, TENANT_ID))
                 .thenReturn(Optional.of(stage));
         when(aiSuggestionRepository.save(any(AiSuggestion.class)))
@@ -162,10 +179,11 @@ class NextActionCreateServiceTest {
     void meetingTriggerSetsRelatedTypeMeeting() {
         Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
         PipelineStage stage = newStage(STAGE_ID, "제안");
-        NextActionAiResponse aiResponse = new NextActionAiResponse(
+
+        List<NextActionAiResponse> aiResponses = List.of(new NextActionAiResponse(
                 "미팅 후속 액션", "미팅 기반 추천", "FOLLOW_UP", null,
                 60.0, 70, Map.of(), "멘트", STAGE_ID
-        );
+        ));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
                 ACCOUNT_ID, TriggerType.MEETING_CREATED,
@@ -174,7 +192,7 @@ class NextActionCreateServiceTest {
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));
         when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
-                .thenReturn(aiResponse);
+                .thenReturn(aiResponses);
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(STAGE_ID, TENANT_ID))
                 .thenReturn(Optional.of(stage));
         when(aiSuggestionRepository.save(any(AiSuggestion.class)))
@@ -211,10 +229,11 @@ class NextActionCreateServiceTest {
     @DisplayName("FastAPI 가 반환한 pipelineStageId 가 테넌트에 존재하지 않으면 INVALID_AI_RESPONSE 예외가 발생한다.")
     void invalidPipelineStage() {
         Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
-        NextActionAiResponse aiResponse = new NextActionAiResponse(
-                "제목", "설명", "전략", "account",
+
+        List<NextActionAiResponse> aiResponses = List.of(new NextActionAiResponse(
+                "제목", "설명", "전략", "ACCOUNT",
                 50.0, 50, Map.of(), "멘트", 999L
-        );
+        ));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
                 ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
@@ -222,7 +241,7 @@ class NextActionCreateServiceTest {
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));
         when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
-                .thenReturn(aiResponse);
+                .thenReturn(aiResponses);
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(999L, TENANT_ID))
                 .thenReturn(Optional.empty());
 

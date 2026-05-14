@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,45 +40,49 @@ public class AiSuggestionService {
     private final NotificationService notificationService;
 
     @Transactional
-    public NextActionCreateResponse createNextAction(CustomUserDetails me, NextActionCreateRequest request) {
+    public List<NextActionCreateResponse> createNextAction(CustomUserDetails me, NextActionCreateRequest request) {
         Long tenantId = me.getTenantId();
         Long accountId = request.accountId();
 
         Account account = accountRepository.findByIdAndTenantId(accountId, tenantId)
                 .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
 
-        NextActionAiResponse aiResponse = nextActionClient.generate(tenantId, request);
+        List<NextActionAiResponse> aiResponses = nextActionClient.generate(tenantId, request);
 
-        PipelineStage stage = pipelineStageRepository
-                .findByPipelineStageIdAndTenant_TenantId(aiResponse.pipelineStageId(), tenantId)
-                .orElseThrow(() -> new BusinessException(AiErrorCode.INVALID_AI_RESPONSE));
+        List<NextActionCreateResponse> results = new ArrayList<>();
 
-        AiSuggestionRelatedType relatedType = resolveRelatedType(aiResponse, request);
-        String category = aiResponse.category() != null ? aiResponse.category() : "GENERAL";
-        int successProbability = aiResponse.successProbability() != null ? aiResponse.successProbability() : 0;
-        double importanceScore = aiResponse.importanceScore() != null ? aiResponse.importanceScore() : 0.0;
+        for (NextActionAiResponse aiResponse : aiResponses) {
+            PipelineStage stage = pipelineStageRepository
+                    .findByPipelineStageIdAndTenant_TenantId(aiResponse.pipelineStageId(), tenantId)
+                    .orElseThrow(() -> new BusinessException(AiErrorCode.INVALID_AI_RESPONSE));
 
-        Map<String, Object> reason = new HashMap<>();
-        reason.put("sources", aiResponse.sources());
-        reason.put("recommendedScript", aiResponse.recommendedScript());
+            AiSuggestionRelatedType relatedType = resolveRelatedType(aiResponse, request);
+            String category = aiResponse.category() != null ? aiResponse.category() : "GENERAL";
+            int successProbability = aiResponse.successProbability() != null ? aiResponse.successProbability() : 0;
+            double importanceScore = aiResponse.importanceScore() != null ? aiResponse.importanceScore() : 0.0;
 
-        AiSuggestion suggestion = AiSuggestion.builder()
-                .account(account)
-                .pipelineStage(stage)
-                .title(aiResponse.action())
-                .content(aiResponse.reason())
-                .relatedType(relatedType)
-                .category(category)
-                .successProbability(successProbability)
-                .importanceScore(importanceScore)
-                .reason(reason)
-                .build();
+            Map<String, Object> reason = new HashMap<>();
+            reason.put("sources", aiResponse.sources());
+            reason.put("recommendedScript", aiResponse.recommendedScript());
 
-        AiSuggestion saved = aiSuggestionRepository.save(suggestion);
+            AiSuggestion suggestion = AiSuggestion.builder()
+                    .account(account)
+                    .pipelineStage(stage)
+                    .title(aiResponse.action())
+                    .content(aiResponse.reason())
+                    .relatedType(relatedType)
+                    .category(category)
+                    .successProbability(successProbability)
+                    .importanceScore(importanceScore)
+                    .reason(reason)
+                    .build();
 
-        notificationService.pushNotification(saved);
+            AiSuggestion saved = aiSuggestionRepository.save(suggestion);
+            notificationService.pushNotification(saved);
+            results.add(NextActionCreateResponse.from(saved));
+        }
 
-        return NextActionCreateResponse.from(saved);
+        return results;
     }
 
     public List<NextActionListResponse> findNextActions(CustomUserDetails me, Long accountId) {

@@ -46,20 +46,33 @@ class NextActionClientTest {
     }
 
     @Test
-    @DisplayName("정상 응답 시 snake_case JSON 이 NextActionAiResponse 로 역직렬화된다.")
-    void parseSnakeCaseResponse() {
+    @DisplayName("정상 응답 시 JSON 배열이 List<NextActionAiResponse> 로 역직렬화된다.")
+    void parseArrayResponse() {
         String responseJson = """
-                {
-                  "action": "클라우드 전환 제안",
-                  "reason": "비용 절감 가능",
-                  "category": "COST_REDUCTION",
-                  "related_type": "account",
-                  "importance_score": 87.5,
-                  "success_probability": 89,
-                  "sources": { "news": [], "dart": [], "crm": [] },
-                  "recommended_script": "멘트 내용",
-                  "pipeline_stage_id": 10
-                }
+                [
+                  {
+                    "action": "클라우드 전환 제안",
+                    "reason": "비용 절감 가능",
+                    "category": "COST_REDUCTION",
+                    "related_type": "ACCOUNT",
+                    "importance_score": 87.5,
+                    "success_probability": 89,
+                    "sources": { "news": [], "dart": [], "crm": [] },
+                    "recommended_script": "멘트 내용",
+                    "pipeline_stage_id": 10
+                  },
+                  {
+                    "action": "EB 식별",
+                    "reason": "EB 미참여",
+                    "category": "Qualification",
+                    "related_type": "ACCOUNT",
+                    "importance_score": 72.0,
+                    "success_probability": 72,
+                    "sources": { "news": [], "dart": [], "crm": [] },
+                    "recommended_script": "Champion 에게 요청",
+                    "pipeline_stage_id": 2
+                  }
+                ]
                 """;
 
         when(aiRestTemplate.postForEntity(
@@ -69,16 +82,23 @@ class NextActionClientTest {
         NextActionCreateRequest request = new NextActionCreateRequest(
                 ACCOUNT_ID, TriggerType.EXTERNAL_SIGNAL_UPDATED,
                 List.of(101L), List.of(55L), null, null);
-        NextActionAiResponse response = nextActionClient.generate(TENANT_ID, request);
+        List<NextActionAiResponse> responses = nextActionClient.generate(TENANT_ID, request);
 
-        assertThat(response.action()).isEqualTo("클라우드 전환 제안");
-        assertThat(response.reason()).isEqualTo("비용 절감 가능");
-        assertThat(response.category()).isEqualTo("COST_REDUCTION");
-        assertThat(response.relatedType()).isEqualTo("account");
-        assertThat(response.importanceScore()).isEqualTo(87.5);
-        assertThat(response.successProbability()).isEqualTo(89);
-        assertThat(response.recommendedScript()).isEqualTo("멘트 내용");
-        assertThat(response.pipelineStageId()).isEqualTo(10L);
+        assertThat(responses).hasSize(2);
+
+        NextActionAiResponse first = responses.get(0);
+        assertThat(first.action()).isEqualTo("클라우드 전환 제안");
+        assertThat(first.reason()).isEqualTo("비용 절감 가능");
+        assertThat(first.category()).isEqualTo("COST_REDUCTION");
+        assertThat(first.relatedType()).isEqualTo("ACCOUNT");
+        assertThat(first.importanceScore()).isEqualTo(87.5);
+        assertThat(first.successProbability()).isEqualTo(89);
+        assertThat(first.recommendedScript()).isEqualTo("멘트 내용");
+        assertThat(first.pipelineStageId()).isEqualTo(10L);
+
+        NextActionAiResponse second = responses.get(1);
+        assertThat(second.action()).isEqualTo("EB 식별");
+        assertThat(second.pipelineStageId()).isEqualTo(2L);
     }
 
     @Test
@@ -86,10 +106,10 @@ class NextActionClientTest {
     @SuppressWarnings("unchecked")
     void requestBodyContainsNewFields() {
         String responseJson = """
-                { "action": "t", "reason": "d", "category": "c",
-                  "related_type": "account", "importance_score": 50.0,
-                  "success_probability": 1, "sources": {},
-                  "recommended_script": "s", "pipeline_stage_id": 10 }
+                [{ "action": "t", "reason": "d", "category": "c",
+                   "related_type": "ACCOUNT", "importance_score": 50.0,
+                   "success_probability": 1, "sources": {},
+                   "recommended_script": "s", "pipeline_stage_id": 10 }]
                 """;
 
         when(aiRestTemplate.postForEntity(any(String.class), any(HttpEntity.class), eq(String.class)))
@@ -117,10 +137,10 @@ class NextActionClientTest {
     @SuppressWarnings("unchecked")
     void tenantHeaderIncluded() {
         String responseJson = """
-                { "action": "t", "reason": "d", "category": "c",
-                  "related_type": "account", "importance_score": 50.0,
-                  "success_probability": 1, "sources": {},
-                  "recommended_script": "s", "pipeline_stage_id": 10 }
+                [{ "action": "t", "reason": "d", "category": "c",
+                   "related_type": "ACCOUNT", "importance_score": 50.0,
+                   "success_probability": 1, "sources": {},
+                   "recommended_script": "s", "pipeline_stage_id": 10 }]
                 """;
 
         when(aiRestTemplate.postForEntity(any(String.class), any(HttpEntity.class), eq(String.class)))
@@ -168,13 +188,28 @@ class NextActionClientTest {
     }
 
     @Test
-    @DisplayName("필수 필드(action)가 null 이면 EXTERNAL_API_FAILED 예외가 발생한다.")
+    @DisplayName("빈 배열 응답이면 EXTERNAL_API_FAILED 예외가 발생한다.")
+    void externalApiFailedOnEmptyArray() {
+        when(aiRestTemplate.postForEntity(any(String.class), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>("[]", HttpStatus.OK));
+
+        NextActionCreateRequest request = new NextActionCreateRequest(
+                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+
+        assertThatThrownBy(() -> nextActionClient.generate(TENANT_ID, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.EXTERNAL_API_FAILED);
+    }
+
+    @Test
+    @DisplayName("배열 내 항목에 필수 필드(action)가 null 이면 EXTERNAL_API_FAILED 예외가 발생한다.")
     void externalApiFailedOnMissingRequiredField() {
         String responseJson = """
-                { "reason": "d", "category": "c",
-                  "related_type": "account", "importance_score": 50.0,
-                  "success_probability": 1, "sources": {},
-                  "recommended_script": "s", "pipeline_stage_id": 10 }
+                [{ "reason": "d", "category": "c",
+                   "related_type": "ACCOUNT", "importance_score": 50.0,
+                   "success_probability": 1, "sources": {},
+                   "recommended_script": "s", "pipeline_stage_id": 10 }]
                 """;
 
         when(aiRestTemplate.postForEntity(any(String.class), any(HttpEntity.class), eq(String.class)))

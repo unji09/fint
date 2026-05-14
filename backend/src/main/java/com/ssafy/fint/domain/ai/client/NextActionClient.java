@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +42,7 @@ public class NextActionClient {
         this.aiServerUrl = aiServerUrl;
     }
 
-    public NextActionAiResponse generate(Long tenantId, NextActionCreateRequest request) {
+    public List<NextActionAiResponse> generate(Long tenantId, NextActionCreateRequest request) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
@@ -84,10 +86,17 @@ public class NextActionClient {
                 throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
             }
 
-            NextActionAiResponse parsed = objectMapper.readValue(responseBody, NextActionAiResponse.class);
-            if (parsed.action() == null || parsed.pipelineStageId() == null) {
-                log.error("[NextAction] required fields missing. body={}", responseBody);
+            List<NextActionAiResponse> parsed = objectMapper.readValue(
+                    responseBody, new TypeReference<>() {});
+            if (parsed.isEmpty()) {
+                log.error("[NextAction] empty list returned. body={}", responseBody);
                 throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
+            }
+            for (NextActionAiResponse item : parsed) {
+                if (item.action() == null || item.pipelineStageId() == null) {
+                    log.error("[NextAction] required fields missing in item. body={}", responseBody);
+                    throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
+                }
             }
             return parsed;
         } catch (RestClientException e) {

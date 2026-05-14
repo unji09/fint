@@ -151,19 +151,20 @@ async def build_context(
     )
 
 
-async def resolve_pipeline_stage_id(
-    db: AsyncSession,
-    tenant_id: int,
-    action_category: str,
-) -> int:
+async def load_pipeline_stages(db: AsyncSession, tenant_id: int) -> dict[int, int]:
+    """tenant의 {sort_order: pipeline_stage_id} 매핑을 1회 조회."""
     result = await db.execute(_PIPELINE_STAGES_SQL, {"tenant_id": tenant_id})
     stages = result.mappings().all()
     if not stages:
+        return {}
+    return {row["sort_order"]: row["pipeline_stage_id"] for row in stages}
+
+
+def map_category_to_stage_id(category: str, stages_map: dict[int, int]) -> int:
+    """액션 카테고리 → pipeline_stage_id 변환 (사전 로딩된 stages_map 사용)."""
+    if not stages_map:
         return 1
-
-    stages_by_order = {row["sort_order"]: row["pipeline_stage_id"] for row in stages}
-    target_order = _CATEGORY_TO_SORT_ORDER.get(action_category)
-    if target_order and target_order in stages_by_order:
-        return stages_by_order[target_order]
-
-    return stages[0]["pipeline_stage_id"]
+    target_order = _CATEGORY_TO_SORT_ORDER.get(category)
+    if target_order and target_order in stages_map:
+        return stages_map[target_order]
+    return min(stages_map.values())

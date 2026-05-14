@@ -26,7 +26,7 @@ public class AiSuggestionController implements AiSuggestionSwagger {
 
     @Override
     @PostMapping("/ai/next-actions")
-    public ApiResponse<NextActionCreateResponse> create(
+    public ApiResponse<List<NextActionCreateResponse>> create(
             @AuthenticationPrincipal CustomUserDetails me,
             @Valid @RequestBody NextActionCreateRequest request
     ) {
