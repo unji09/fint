@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 
 from app.dashboard.schema_context import (
     ALLOWED_AGGREGATES,
@@ -13,6 +14,9 @@ from app.dashboard.schema_context import (
     get_filterable_columns,
 )
 from app.schemas.dashboard import FilterOperator, QuerySpec
+
+_DATE_COLUMN_TYPES = frozenset({"DATE"})
+_DATETIME_COLUMN_TYPES = frozenset({"TIMESTAMPTZ", "TIMESTAMP"})
 
 _AGG_PATTERN = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\((\*|\w+(?:\.\w+)?)\)$", re.IGNORECASE)
 _DATE_TRUNC_PATTERN = re.compile(r"^DATE_TRUNC\('(\w+)',\s*(\w+(?:\.\w+)?)\)$", re.IGNORECASE)
@@ -27,6 +31,43 @@ _ALLOWED_DATE_TRUNC_INTERVALS = frozenset({
 
 class QueryBuildError(Exception):
     pass
+
+
+def _get_column_type(table: str, column: str) -> str | None:
+    meta = ALLOWED_TABLES.get(table)
+    if not meta:
+        return None
+    for col in meta.columns:
+        if col.name == column:
+            return col.type
+    return None
+
+
+def _coerce_value(value: object, col_type: str | None) -> object:
+    if col_type is None or not isinstance(value, str):
+        return value
+    upper = col_type.upper()
+    if upper in _DATE_COLUMN_TYPES:
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return value
+    if upper in _DATETIME_COLUMN_TYPES:
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            try:
+                return datetime.fromisoformat(value + "T00:00:00")
+            except ValueError:
+                return value
+    return value
+
+
+def _coerce_filter_value(value: object, table: str, column: str) -> object:
+    col_type = _get_column_type(table, column)
+    if isinstance(value, list):
+        return [_coerce_value(v, col_type) for v in value]
+    return _coerce_value(value, col_type)
 
 
 def _validate_date_trunc_interval(interval: str) -> None:
@@ -166,21 +207,22 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
     for f in spec.filters:
         f_tbl, f_col = _resolve_column(f.column, spec)
         col_ref = f"{f_tbl}.{f_col}"
+        coerced = _coerce_filter_value(f.value, f_tbl, f_col)
         if f.operator in (FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL):
             sql_parts.append(f"AND {col_ref} {f.operator.value}")
         elif f.operator == FilterOperator.IN:
-            if not isinstance(f.value, list) or not f.value:
+            if not isinstance(coerced, list) or not coerced:
                 raise QueryBuildError("IN 연산자에는 비어있지 않은 리스트가 필요합니다")
-            placeholders = ", ".join(_next_param(v) for v in f.value)
+            placeholders = ", ".join(_next_param(v) for v in coerced)
             sql_parts.append(f"AND {col_ref} IN ({placeholders})")
         elif f.operator == FilterOperator.BETWEEN:
-            if not isinstance(f.value, list) or len(f.value) != 2:
+            if not isinstance(coerced, list) or len(coerced) != 2:
                 raise QueryBuildError("BETWEEN 연산자에는 2개 값의 리스트가 필요합니다")
-            p1 = _next_param(f.value[0])
-            p2 = _next_param(f.value[1])
+            p1 = _next_param(coerced[0])
+            p2 = _next_param(coerced[1])
             sql_parts.append(f"AND {col_ref} BETWEEN {p1} AND {p2}")
         else:
-            placeholder = _next_param(f.value)
+            placeholder = _next_param(coerced)
             sql_parts.append(f"AND {col_ref} {f.operator.value} {placeholder}")
 
     def _qualify_ref(col: str) -> str:
