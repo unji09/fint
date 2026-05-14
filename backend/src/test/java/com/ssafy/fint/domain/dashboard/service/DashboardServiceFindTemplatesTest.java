@@ -86,7 +86,7 @@ class DashboardServiceFindTemplatesTest {
 
     private DashboardTemplate newTemplate(long id) {
         DashboardTemplate template = DashboardTemplate.builder()
-                .widgetType(WidgetType.BAR_CHART)
+                .widgetType(WidgetType.CHART)
                 .title("위젯 " + id)
                 .config(Map.of())
                 .position(Map.of("x", 0, "y", 0))

@@ -7,6 +7,9 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryHistoryResponse;
+import com.ssafy.fint.domain.dashboard.dto.WidgetBatchCreateRequest;
+import com.ssafy.fint.domain.dashboard.dto.WidgetCreateRequest;
+import com.ssafy.fint.domain.dashboard.dto.WidgetCreateResponse;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
 import com.ssafy.fint.global.security.CustomUserDetails;
@@ -67,6 +70,26 @@ public interface DashboardSwagger {
             description = "대시보드와 소속 위젯 · 쿼리를 모두 삭제한다."
     )
     ResponseEntity<Void> delete(CustomUserDetails me, Long dashboardId);
+
+    @Operation(
+            summary = "위젯 추가 (단건, 템플릿 기반)",
+            description = "templateId 에 해당하는 템플릿을 대시보드의 위젯으로 복사한다."
+    )
+    ApiResponse<WidgetCreateResponse> addWidget(
+            CustomUserDetails me,
+            Long dashboardId,
+            WidgetCreateRequest request
+    );
+
+    @Operation(
+            summary = "위젯 일괄 추가 (템플릿 그룹 기반)",
+            description = "templateGroupId 에 해당하는 그룹(위젯 8개)을 대시보드의 위젯으로 일괄 복사한다."
+    )
+    ApiResponse<WidgetCreateResponse> addWidgetBatch(
+            CustomUserDetails me,
+            Long dashboardId,
+            WidgetBatchCreateRequest request
+    );
 
     @Operation(
             summary = "위젯 수정 (드래그/리사이즈/필터/제목 통합)",

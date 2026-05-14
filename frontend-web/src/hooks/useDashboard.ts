@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Dashboard, DashboardTemplate, CreateDashboardRequest } from '@/types/dashboard';
+import type { Dashboard, TemplateGroup, CreateDashboardRequest } from '@/types/dashboard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -67,45 +67,17 @@ export function useDashboardList() {
 }
 
 export function useDashboardTemplates() {
-  const [templates, setTemplates] = useState<DashboardTemplate[]>([]);
+  const [groups, setGroups] = useState<TemplateGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchWithAuth<DashboardTemplate[]>('/dashboards/templates')
-      .then(setTemplates)
-      .catch(() => {
-        // mock templates during dev
-        setTemplates([
-          {
-            templateId: 1,
-            title: '기본 대시보드 1',
-            widgetType: 'BAR_CHART',
-            thumbnailKey: null,
-            config: { labels: ['리드', '제안', '계약'] },
-            position: { x: 0, y: 0, w: 6, h: 4 },
-          },
-          {
-            templateId: 2,
-            title: '기본 대시보드 2',
-            widgetType: 'TABLE',
-            thumbnailKey: null,
-            config: {},
-            position: { x: 0, y: 0, w: 6, h: 4 },
-          },
-          {
-            templateId: 3,
-            title: '기본 대시보드 3',
-            widgetType: 'PIE',
-            thumbnailKey: null,
-            config: {},
-            position: { x: 0, y: 0, w: 6, h: 4 },
-          },
-        ]);
-      })
+    fetchWithAuth<TemplateGroup[]>('/dashboards/templates')
+      .then((data) => setGroups(data ?? []))
+      .catch(() => setGroups([]))
       .finally(() => setLoading(false));
   }, []);
 
-  return { templates, loading };
+  return { groups, loading };
 }
 
 // ─── 위젯 업데이트 ──────────────────────────────────────────────────────────
