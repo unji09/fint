@@ -7,12 +7,13 @@ import java.util.Map;
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record NextActionAiResponse(
-        String title,
-        String description,
+        String action,
+        String reason,
         String category,
+        String relatedType,
+        Double importanceScore,
         Integer successProbability,
         Map<String, Object> sources,
         String recommendedScript,
-        String risk,
         Long pipelineStageId
 ) {}

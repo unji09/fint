@@ -8,6 +8,7 @@ import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
 import com.ssafy.fint.domain.ai.dto.NextActionCreateResponse;
 import com.ssafy.fint.domain.ai.entity.AiSuggestion;
 import com.ssafy.fint.domain.ai.entity.AiSuggestionRelatedType;
+import com.ssafy.fint.domain.ai.entity.TriggerType;
 import com.ssafy.fint.domain.ai.repository.AiSuggestionRepository;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
@@ -29,12 +30,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -65,17 +68,22 @@ class NextActionCreateServiceTest {
         NextActionAiResponse aiResponse = new NextActionAiResponse(
                 "클라우드 전환 비용 절감 제안",
                 "최근 인프라 비용 증가 이슈 감지",
-                "시장 확장 전략",
+                "COST_REDUCTION",
+                "account",
+                87.5,
                 89,
-                Map.of("news", java.util.List.of(), "dart", java.util.List.of(), "crm", java.util.List.of()),
+                Map.of("news", List.of(), "dart", List.of(), "crm", List.of()),
                 "인프라 비용 절감 효과를 수치로 제시하세요",
-                "기존 벤더 교체 리스크",
                 STAGE_ID
         );
 
+        NextActionCreateRequest request = new NextActionCreateRequest(
+                ACCOUNT_ID, TriggerType.EXTERNAL_SIGNAL_UPDATED,
+                List.of(101L, 102L), List.of(55L), null, null);
+
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));
-        when(nextActionClient.generate(TENANT_ID, ACCOUNT_ID, null))
+        when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
                 .thenReturn(aiResponse);
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(STAGE_ID, TENANT_ID))
                 .thenReturn(Optional.of(stage));
@@ -87,34 +95,41 @@ class NextActionCreateServiceTest {
                     return s;
                 });
 
-        NextActionCreateRequest request = new NextActionCreateRequest(ACCOUNT_ID, null);
         NextActionCreateResponse response = aiSuggestionService.createNextAction(me, request);
 
-        assertThat(response.id()).isEqualTo(100L);
-        assertThat(response.title()).isEqualTo("클라우드 전환 비용 절감 제안");
-        assertThat(response.description()).isEqualTo("최근 인프라 비용 증가 이슈 감지");
-        assertThat(response.category()).isEqualTo("시장 확장 전략");
+        assertThat(response.nextActionId()).isEqualTo(100L);
+        assertThat(response.accountId()).isEqualTo(ACCOUNT_ID);
+        assertThat(response.accountName()).isEqualTo("(주)삼성전자");
+        assertThat(response.action()).isEqualTo("클라우드 전환 비용 절감 제안");
+        assertThat(response.reason()).isEqualTo("최근 인프라 비용 증가 이슈 감지");
+        assertThat(response.category()).isEqualTo("COST_REDUCTION");
+        assertThat(response.relatedType()).isEqualTo("account");
+        assertThat(response.importanceScore()).isEqualTo(87.5);
         assertThat(response.successProbability()).isEqualTo(89);
         assertThat(response.recommendedScript()).isEqualTo("인프라 비용 절감 효과를 수치로 제시하세요");
-        assertThat(response.risk()).isEqualTo("기존 벤더 교체 리스크");
         assertThat(response.createdAt()).isNotNull();
 
         verify(notificationService).pushNotification(any(AiSuggestion.class));
     }
 
     @Test
-    @DisplayName("저장된 엔티티의 reason JSONB 에 category/successProbability/sources/recommendedScript/risk 가 포함된다.")
-    void reasonJsonbContainsAllFields() {
+    @DisplayName("저장된 엔티티에 category/successProbability/importanceScore 가 직접 필드로 저장된다.")
+    void entityFieldsStoredDirectly() {
         Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
         PipelineStage stage = newStage(STAGE_ID, "제안");
-        Map<String, Object> sources = Map.of("news", java.util.List.of("뉴스1"), "dart", java.util.List.of(), "crm", java.util.List.of());
+        Map<String, Object> sources = Map.of("news", List.of("뉴스1"), "dart", List.of(), "crm", List.of());
         NextActionAiResponse aiResponse = new NextActionAiResponse(
-                "제목", "설명", "전략", 75, sources, "멘트", "리스크", STAGE_ID
+                "제목", "설명", "MARKET_EXPANSION", "account",
+                75.0, 75, sources, "멘트", STAGE_ID
         );
+
+        NextActionCreateRequest request = new NextActionCreateRequest(
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED,
+                List.of(201L), null, null, "추가 맥락");
 
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));
-        when(nextActionClient.generate(TENANT_ID, ACCOUNT_ID, "추가 맥락"))
+        when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
                 .thenReturn(aiResponse);
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(STAGE_ID, TENANT_ID))
                 .thenReturn(Optional.of(stage));
@@ -126,7 +141,7 @@ class NextActionCreateServiceTest {
                     return s;
                 });
 
-        aiSuggestionService.createNextAction(me, new NextActionCreateRequest(ACCOUNT_ID, "추가 맥락"));
+        aiSuggestionService.createNextAction(me, request);
 
         ArgumentCaptor<AiSuggestion> captor = ArgumentCaptor.forClass(AiSuggestion.class);
         verify(aiSuggestionRepository).save(captor.capture());
@@ -134,12 +149,47 @@ class NextActionCreateServiceTest {
 
         assertThat(saved.getTitle()).isEqualTo("제목");
         assertThat(saved.getContent()).isEqualTo("설명");
+        assertThat(saved.getCategory()).isEqualTo("MARKET_EXPANSION");
+        assertThat(saved.getSuccessProbability()).isEqualTo(75);
+        assertThat(saved.getImportanceScore()).isEqualTo(75.0);
         assertThat(saved.getRelatedType()).isEqualTo(AiSuggestionRelatedType.ACCOUNT);
-        assertThat(saved.getReason()).containsEntry("category", "전략");
-        assertThat(saved.getReason()).containsEntry("successProbability", 75);
-        assertThat(saved.getReason()).containsEntry("recommendedScript", "멘트");
-        assertThat(saved.getReason()).containsEntry("risk", "리스크");
         assertThat(saved.getReason()).containsKey("sources");
+        assertThat(saved.getReason()).containsEntry("recommendedScript", "멘트");
+    }
+
+    @Test
+    @DisplayName("triggerType 이 MEETING_CREATED 이면 relatedType 이 MEETING 으로 설정된다.")
+    void meetingTriggerSetsRelatedTypeMeeting() {
+        Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
+        PipelineStage stage = newStage(STAGE_ID, "제안");
+        NextActionAiResponse aiResponse = new NextActionAiResponse(
+                "미팅 후속 액션", "미팅 기반 추천", "FOLLOW_UP", null,
+                60.0, 70, Map.of(), "멘트", STAGE_ID
+        );
+
+        NextActionCreateRequest request = new NextActionCreateRequest(
+                ACCOUNT_ID, TriggerType.MEETING_CREATED,
+                null, null, 77L, "미팅 기반 추천 요청");
+
+        when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
+                .thenReturn(Optional.of(account));
+        when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
+                .thenReturn(aiResponse);
+        when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(STAGE_ID, TENANT_ID))
+                .thenReturn(Optional.of(stage));
+        when(aiSuggestionRepository.save(any(AiSuggestion.class)))
+                .thenAnswer(invocation -> {
+                    AiSuggestion s = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(s, "aiSuggestionId", 1L);
+                    ReflectionTestUtils.setField(s, "createdAt", OffsetDateTime.now());
+                    return s;
+                });
+
+        aiSuggestionService.createNextAction(me, request);
+
+        ArgumentCaptor<AiSuggestion> captor = ArgumentCaptor.forClass(AiSuggestion.class);
+        verify(aiSuggestionRepository).save(captor.capture());
+        assertThat(captor.getValue().getRelatedType()).isEqualTo(AiSuggestionRelatedType.MEETING);
     }
 
     @Test
@@ -148,7 +198,10 @@ class NextActionCreateServiceTest {
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> aiSuggestionService.createNextAction(me, new NextActionCreateRequest(ACCOUNT_ID, null)))
+        NextActionCreateRequest request = new NextActionCreateRequest(
+                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+
+        assertThatThrownBy(() -> aiSuggestionService.createNextAction(me, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorCode.ACCOUNT_NOT_FOUND);
@@ -159,17 +212,21 @@ class NextActionCreateServiceTest {
     void invalidPipelineStage() {
         Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
         NextActionAiResponse aiResponse = new NextActionAiResponse(
-                "제목", "설명", "전략", 50, Map.of(), "멘트", "리스크", 999L
+                "제목", "설명", "전략", "account",
+                50.0, 50, Map.of(), "멘트", 999L
         );
+
+        NextActionCreateRequest request = new NextActionCreateRequest(
+                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
 
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));
-        when(nextActionClient.generate(TENANT_ID, ACCOUNT_ID, null))
+        when(nextActionClient.generate(eq(TENANT_ID), any(NextActionCreateRequest.class)))
                 .thenReturn(aiResponse);
         when(pipelineStageRepository.findByPipelineStageIdAndTenant_TenantId(999L, TENANT_ID))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> aiSuggestionService.createNextAction(me, new NextActionCreateRequest(ACCOUNT_ID, null)))
+        assertThatThrownBy(() -> aiSuggestionService.createNextAction(me, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(AiErrorCode.INVALID_AI_RESPONSE);
