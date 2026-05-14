@@ -138,6 +138,8 @@ services:
     env_file: ../.env.dev
     expose:
       - "8000"
+    volumes:
+      - ai-model:/app/model
     depends_on:
       postgres:
         condition: service_healthy
@@ -161,3 +163,4 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+  ai-model:
