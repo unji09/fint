@@ -39,6 +39,17 @@ export interface DashboardTemplate {
   position: WidgetPosition;
 }
 
+export interface TemplateGroup {
+  groupId: number;
+  widgets: {
+    templateId: number;
+    widgetType: string;
+    title: string;
+    config: Record<string, unknown>;
+    position: Record<string, unknown>;
+  }[];
+}
+
 export interface CreateDashboardRequest {
   title?: string;
   templateId?: number;

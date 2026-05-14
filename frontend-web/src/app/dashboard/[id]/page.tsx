@@ -13,7 +13,6 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 import {
   useDeleteDashboard,
   useCreateDashboard,
-  useDashboardTemplates,
   useRenameDashboard,
   useUpdateWidget,
   useDeleteWidget,
@@ -145,9 +144,6 @@ export default function DashboardDetailPage() {
     }
   }, [createDashboard, creatingDashboard]);
 
-  /* 처음 화면(/dashboard)의 추천 항목을 골랐을 때 — 마운트 후 templates와 persistWidget이
-   * 준비된 시점에 캔버스에 그 위젯을 띄우고 즉시 영속화한다. 실제 effect 는 아래 정의됨. */
-  const { templates } = useDashboardTemplates();
   const handleDeleteDashboard = useCallback(
     async (targetId: number, title: string) => {
       if (deletingDashboard) return;
@@ -380,37 +376,6 @@ export default function DashboardDetailPage() {
     }
   }, [canvasWidgets, deleteWidgetApi, id, cacheWidgets, captureAndUpload]);
 
-  /* 처음 화면(/dashboard)의 추천 항목을 골랐을 때 — 캔버스에 그 위젯을 띄우고 즉시 영속화 */
-  useEffect(() => {
-    if (templates.length === 0) return;
-    let pending: string | null = null;
-    try { pending = sessionStorage.getItem('fint:pendingTemplate'); } catch { /* ignore */ }
-    if (!pending) return;
-    const tpl = templates.find((t) => String(t.templateId) === pending);
-    if (!tpl) return;
-    try { sessionStorage.removeItem('fint:pendingTemplate'); } catch { /* ignore */ }
-    setCanvasWidgets((prev) => {
-      const offset = prev.length;
-      const next: CanvasWidget = {
-        widgetId: Date.now(),
-        widgetType: tpl.widgetType,
-        title: tpl.title,
-        config: tpl.config,
-        position: tpl.position,
-        queryId: null,
-        inputText: null,
-        result: { data: tpl.config, insightText: '' },
-        px: 60 + offset * 24,
-        py: 60 + offset * 24,
-        pw: 400,
-        ph: 260,
-      };
-      void persistWidget(next);
-      const merged = [...prev, next];
-      cacheWidgets(merged);
-      return merged;
-    });
-  }, [templates, persistWidget, cacheWidgets]);
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
