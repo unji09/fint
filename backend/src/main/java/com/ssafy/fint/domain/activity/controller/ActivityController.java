@@ -1,11 +1,6 @@
 package com.ssafy.fint.domain.activity.controller;
 
-import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
-import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
-import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
+import com.ssafy.fint.domain.activity.dto.*;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.domain.activity.service.ActivityListFilter;
 import com.ssafy.fint.domain.activity.service.ActivityService;
@@ -75,5 +70,15 @@ public class ActivityController implements ActivitySwagger {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long activityId) {
         activityService.delete(activityId);
+    }
+
+    @Override
+    @PostMapping("/{activityId}/recording")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<RecordingResponse> recording(
+        @PathVariable Long activityId,
+        @Valid @RequestBody RecordingRequest request
+    ) {
+        return ApiResponse.ok(activityService.requestRecording(activityId, request));
     }
 }
