@@ -23,6 +23,31 @@ function authHeader(): HeadersInit {
 
 type RightView = 'memo' | 'recording' | 'stt' | 'briefing';
 
+// 화자 라벨: speakerName > speakerId의 끝 숫자 추출해 "화자 N" > fallbackIndex 기반 "화자 N" > "화자"
+export function formatSpeakerLabel(line: SttLine, fallbackIndex?: number): string {
+  if (line.speakerName) return line.speakerName;
+  if (line.speakerId) {
+    const m = line.speakerId.match(/(\d+)$/);
+    if (m) return `화자 ${Number(m[1]) + 1}`;
+    return line.speakerId;
+  }
+  if (fallbackIndex !== undefined) return `화자 ${fallbackIndex + 1}`;
+  return '화자';
+}
+
+// 백엔드 WS 미연결 상태에서 녹음 중 실시간 전사 UI를 보여주기 위한 데모 라인.
+// 실제 WS 연결은 후속 이슈에서 useTranscriptStream hook으로 교체.
+// 실제로는 화자 식별 정보(이름)를 알 수 없으므로 speakerId만 두고
+// formatSpeakerLabel이 "화자 1", "화자 2" 형태로 변환한다.
+const DEMO_LIVE_LINES: SttLine[] = [
+  { timestamp: '00:03', text: '안녕하십니까. 이 과장님 소개로 뵙게 되어 반갑습니다.', speakerId: 'SPEAKER_00', isSelf: false },
+  { timestamp: '00:09', text: '네, 반갑습니다. 저희 솔루션에 관심을 가져주셔서 감사합니다.', speakerId: 'SPEAKER_01', isSelf: true },
+  { timestamp: '00:21', text: '저희가 지금 MES 90% 이상, IOC 30% 도입 중이고 2028년 자가 기능적 제조로 사업 목표를 갖고 있어요.', speakerId: 'SPEAKER_00', isSelf: false },
+  { timestamp: '00:38', text: '저희 플랫폼이 실시간 대시보드와 알림 기능을 제공합니다. 기존 ERP와도 연동 가능하고요.', speakerId: 'SPEAKER_01', isSelf: true },
+  { timestamp: '00:55', text: '데이터 연동은 어떻게 되나요? 기존 ERP와 호환이 되어야 합니다.', speakerId: 'SPEAKER_00', isSelf: false },
+  { timestamp: '01:12', text: '표준 REST API와 메시지 큐 양쪽 다 지원합니다. 자세한 스펙은 자료로 보내드리겠습니다.', speakerId: 'SPEAKER_01', isSelf: true },
+];
+
 export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: Props) {
   const [rightView, setRightView] = useState<RightView>('memo');
   const [deleting, setDeleting] = useState(false);
@@ -46,6 +71,29 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoSaving, setMemoSaving] = useState(false);
 
+  // ── 녹음 중 실시간 전사 (mock) — 후속 이슈에서 WS hook으로 교체 ──
+  const liveSegRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [liveSegments, setLiveSegments] = useState<SttLine[]>([]);
+  const liveScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // ── 모바일 반응형 (< 768px) ──
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = () => setIsMobile(mq.matches);
+    handler();
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // 새 라인 추가 시 실시간 전사 컨테이너 하단으로 자동 스크롤
+  useEffect(() => {
+    if (liveScrollRef.current) {
+      liveScrollRef.current.scrollTop = liveScrollRef.current.scrollHeight;
+    }
+  }, [liveSegments.length]);
+
   useEffect(() => {
     if (event) {
       setMemoText(event.memo ?? '');
@@ -59,7 +107,8 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       setSttStatus(null); setSttLines([]); setAiSummary([]);
       setBriefingData(null); setBriefingError(null); setRecError(null);
       setMemoText(''); setMemoEditing(false); setMemoSaving(false);
-      [timerRef, pollRef].forEach((r) => { if (r.current) { clearInterval(r.current); r.current = null; } });
+      setLiveSegments([]);
+      [timerRef, pollRef, liveSegRef].forEach((r) => { if (r.current) { clearInterval(r.current); r.current = null; } });
       if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') mediaRecRef.current.stop();
       mediaRecRef.current = null;
     }
@@ -176,6 +225,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const startRec = async () => {
     if (!isFint) return;
     setRecError(null); setSttStatus(null); setSttLines([]); setAiSummary([]);
+    setLiveSegments([]);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mt = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
@@ -186,11 +236,24 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       rec.start(1000); mediaRecRef.current = rec;
       setRightView('recording');
       timerRef.current = setInterval(() => setRecordSec((s) => s + 1), 1000);
+
+      // Mock 실시간 전사 — 2초마다 DEMO_LIVE_LINES에서 한 라인씩 추가.
+      // 후속 이슈에서 useTranscriptStream WS hook으로 교체.
+      let li = 0;
+      liveSegRef.current = setInterval(() => {
+        if (li >= DEMO_LIVE_LINES.length) {
+          if (liveSegRef.current) { clearInterval(liveSegRef.current); liveSegRef.current = null; }
+          return;
+        }
+        setLiveSegments((prev) => [...prev, DEMO_LIVE_LINES[li]]);
+        li += 1;
+      }, 2000);
     } catch { setRecError('마이크 접근 권한이 필요합니다.'); }
   };
 
   const stopRec = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (liveSegRef.current) { clearInterval(liveSegRef.current); liveSegRef.current = null; }
     if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') { mediaRecRef.current.stop(); mediaRecRef.current = null; }
     setRecordSec(0); setRightView('stt');
   };
@@ -211,8 +274,22 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
 
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ width: 820, maxHeight: '88vh', borderRadius: 14, backgroundColor: '#fff', boxShadow: '0 20px 60px rgba(0,0,0,.2)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,.5)', display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div
+        data-testid="event-detail-modal"
+        data-mobile={isMobile ? 'true' : 'false'}
+        style={{
+          width: isMobile ? '100%' : 820,
+          height: isMobile ? '100%' : 'auto',
+          maxHeight: isMobile ? '100%' : '88vh',
+          borderRadius: isMobile ? 0 : 14,
+          backgroundColor: '#fff',
+          boxShadow: isMobile ? 'none' : '0 20px 60px rgba(0,0,0,.2)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
         {/* 헤더 */}
         <div style={{ padding: '16px 24px', borderBottom: '1px solid #E5E6DE', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1F2126', margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -242,10 +319,31 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           </div>
         </div>
 
-        {/* 2-column body */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-          {/* 좌: 메타 정보 */}
-          <div style={{ width: 280, flexShrink: 0, padding: '20px 24px', borderRight: '1px solid #E5E6DE', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* 2-column body (모바일에서는 세로 스택) */}
+        <div
+          data-testid="event-detail-body"
+          style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            flex: 1,
+            overflow: 'hidden',
+            minHeight: 0,
+          }}
+        >
+          {/* 좌(또는 상단): 메타 정보 */}
+          <div
+            style={{
+              width: isMobile ? '100%' : 280,
+              flexShrink: 0,
+              padding: isMobile ? '16px 20px' : '20px 24px',
+              borderRight: isMobile ? 'none' : '1px solid #E5E6DE',
+              borderBottom: isMobile ? '1px solid #E5E6DE' : 'none',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}
+          >
             <MetaRow label="영업 목표">{event.dealTitle ?? <Muted>없음</Muted>}</MetaRow>
             <MetaRow label="고객">
               {event.accountName ? (
@@ -273,8 +371,8 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             </MetaRow>
           </div>
 
-          {/* 우: 탭+뷰 */}
-          <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* 우(또는 하단): 탭+뷰 */}
+          <div style={{ flex: 1, padding: isMobile ? '16px 20px' : '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
             {rightView !== 'recording' && (
               <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #E5E6DE', paddingBottom: 10 }}>
                 {(['memo', 'briefing'] as const).map((v) => {
@@ -416,30 +514,20 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                             원본 대화 보기
                           </summary>
                           <div
+                            data-testid="transcript-scroll"
                             style={{
                               marginTop: 14,
-                              maxHeight: 360,
+                              maxHeight: isMobile ? '40vh' : 360,
                               overflowY: 'auto',
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: 14,
+                              gap: 12,
                             }}
                           >
                             {sttLines
                               .filter((l) => l.text && l.text.trim())
                               .map((line, i) => (
-                                <p
-                                  key={i}
-                                  style={{
-                                    margin: 0,
-                                    fontSize: 13,
-                                    lineHeight: 1.9,
-                                    color: '#737880',
-                                    whiteSpace: 'pre-wrap',
-                                  }}
-                                >
-                                  {line.text}
-                                </p>
+                                <SpeakerLine key={i} line={line} fallbackIndex={i % 2} />
                               ))}
                           </div>
                         </details>
@@ -489,6 +577,10 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             {/* 녹음 뷰 — 단순 시간 표시 + 중지 (사인파/빨간 강조 톤다운) */}
             {rightView === 'recording' && (
               <>
+                {/* REQ-ACT-01: AI 기록 고지 */}
+                <div style={{ fontSize: 11, color: '#9CA193', textAlign: 'center' }} data-testid="ai-notice">
+                  AI가 자동으로 기록·요약합니다
+                </div>
                 <div
                   style={{
                     backgroundColor: '#F8F8F5',
@@ -541,6 +633,31 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                   <style>{`@keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
                 </div>
                 <div style={{ fontSize: 11, color: '#9CA193', textAlign: 'center' }}>녹음 중지 시 자동으로 STT 분석이 시작됩니다.</div>
+
+                {/* 실시간 전사 — 컨트롤 박스 아래에 표시. 일정 높이 이상이면 스크롤. */}
+                <SectionLabel>실시간 전사</SectionLabel>
+                <div
+                  ref={liveScrollRef}
+                  data-testid="live-transcript-scroll"
+                  style={{
+                    maxHeight: isMobile ? '40vh' : 280,
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    padding: '4px 2px',
+                  }}
+                >
+                  {liveSegments.length === 0 ? (
+                    <div style={{ fontSize: 12, color: '#9CA193', textAlign: 'center', padding: '12px 0' }}>
+                      전사 대기 중…
+                    </div>
+                  ) : (
+                    liveSegments.map((line, i) => (
+                      <SpeakerLine key={i} line={line} fallbackIndex={i % 2} />
+                    ))
+                  )}
+                </div>
               </>
             )}
 
@@ -614,6 +731,42 @@ function SectionLabel({ children }: { children: ReactNode }) {
 }
 function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
   return <span style={{ fontSize: 11, color, backgroundColor: bg, padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>{label}</span>;
+}
+
+// 화자별 채팅 버블 — isSelf면 우측 정렬 + 청록 옅은 배경, 아니면 좌측 + 회색
+export function SpeakerLine({ line, fallbackIndex }: { line: SttLine; fallbackIndex?: number }) {
+  const label = formatSpeakerLabel(line, fallbackIndex);
+  const self = line.isSelf === true;
+  return (
+    <div
+      data-testid="speaker-line"
+      data-self={self ? 'true' : 'false'}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: self ? 'flex-end' : 'flex-start',
+        gap: 4,
+      }}
+    >
+      <span style={{ fontSize: 11, color: '#737880', fontWeight: 500 }}>{label}</span>
+      <div
+        style={{
+          maxWidth: '85%',
+          backgroundColor: self ? '#ECF9FC' : '#F8F8F5',
+          borderRadius: 8,
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        {line.timestamp && (
+          <span style={{ fontSize: 10, color: '#9CA193', fontVariantNumeric: 'tabular-nums' }}>{line.timestamp}</span>
+        )}
+        <span style={{ fontSize: 13, lineHeight: 1.7, color: '#1F2126', whiteSpace: 'pre-wrap' }}>{line.text}</span>
+      </div>
+    </div>
+  );
 }
 
 // ─── STT 진행 상태 — 한 줄 텍스트. 완료 시에는 결과 자체가 신호이므로 노출하지 않음.
