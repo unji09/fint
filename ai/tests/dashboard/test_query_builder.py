@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 import pytest
 
 from app.dashboard.query_builder import QueryBuildError, build_query
@@ -796,3 +798,120 @@ class TestDateTruncIntervalValidation:
         )
         with pytest.raises(QueryBuildError, match="허용되지 않은 DATE_TRUNC 간격"):
             build_query(spec, tenant_id=1)
+
+
+class TestDateParameterCoercion:
+    def test_date_string_coerced_to_date_object(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title", "amount"],
+            filters=[
+                FilterCondition(column="expected_close", operator=FilterOperator.GTE, value="2026-01-01"),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        date_params = [v for v in params.values() if isinstance(v, date) and not isinstance(v, datetime)]
+        assert len(date_params) == 1
+        assert date_params[0] == date(2026, 1, 1)
+
+    def test_timestamptz_string_coerced_to_datetime(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[
+                FilterCondition(column="won_at", operator=FilterOperator.GTE, value="2026-05-01"),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        dt_params = [v for v in params.values() if isinstance(v, datetime)]
+        assert len(dt_params) == 1
+        assert dt_params[0].year == 2026
+        assert dt_params[0].month == 5
+
+    def test_datetime_iso_string_coerced(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[
+                FilterCondition(column="won_at", operator=FilterOperator.GTE, value="2026-05-01T09:00:00"),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        dt_params = [v for v in params.values() if isinstance(v, datetime)]
+        assert len(dt_params) == 1
+        assert dt_params[0].hour == 9
+
+    def test_between_date_values_coerced(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[
+                FilterCondition(
+                    column="expected_close",
+                    operator=FilterOperator.BETWEEN,
+                    value=["2026-01-01", "2026-12-31"],
+                ),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        date_params = [v for v in params.values() if isinstance(v, date) and not isinstance(v, datetime)]
+        assert len(date_params) == 2
+
+    def test_in_date_values_coerced(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[
+                FilterCondition(
+                    column="expected_close",
+                    operator=FilterOperator.IN,
+                    value=["2026-01-01", "2026-06-01"],
+                ),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        date_params = [v for v in params.values() if isinstance(v, date) and not isinstance(v, datetime)]
+        assert len(date_params) == 2
+
+    def test_non_date_string_unchanged(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[
+                FilterCondition(column="current_pipeline", operator=FilterOperator.EQ, value="NEGOTIATION"),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        assert "NEGOTIATION" in params.values()
+
+    def test_numeric_value_unchanged(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            filters=[
+                FilterCondition(column="amount", operator=FilterOperator.GTE, value=1000000),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        assert 1000000 in params.values()
+
+    def test_cross_table_date_filter_coerced(self):
+        spec = QuerySpec(
+            table="deals",
+            columns=["title"],
+            joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+            filters=[
+                FilterCondition(column="accounts.created_at", operator=FilterOperator.GTE, value="2026-01-01"),
+            ],
+        )
+        _, params = build_query(spec, tenant_id=1)
+
+        dt_params = [v for v in params.values() if isinstance(v, datetime)]
+        assert len(dt_params) == 1

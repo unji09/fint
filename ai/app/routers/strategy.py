@@ -1,4 +1,4 @@
-"""POST /ai/next-actions — AI 전략 추천 엔드포인트."""
+"""POST /api/v1/ai/next-actions — AI 전략 추천 엔드포인트."""
 import logging
 from datetime import UTC, datetime
 
@@ -15,7 +15,7 @@ from app.strategy.feature_extractor import extract_features
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/ai", tags=["strategy"])
+router = APIRouter(prefix="/api/v1/ai", tags=["strategy"])
 
 
 @router.post("/next-actions")

@@ -66,6 +66,8 @@ services:
       REDIS_HOST: redis
     ports:
       - "${AI_PORT:-8000}:8000"
+    volumes:
+      - ai-model:/app/model
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,3 +91,4 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+  ai-model:

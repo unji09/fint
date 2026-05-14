@@ -19,6 +19,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3",
     "onnxruntime>=1.18",
     "tokenizers>=0.21",
+    "huggingface-hub>=0.23",
 ]
 
 [dependency-groups]
