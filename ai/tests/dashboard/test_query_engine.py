@@ -487,6 +487,175 @@ class TestQueryEngineSemanticHybrid:
         assert result["status"] == "COMPLETED"
 
 
+class TestInsightResultSchema:
+    """InsightResult에 x_column/y_column 옵셔널 필드 존재 검증."""
+
+    def test_x_column_y_column_accepted(self):
+        result = InsightResult(
+            widget_type=WidgetType.BAR,
+            title="월별 매출",
+            insight_text="인사이트",
+            key_findings=["발견1"],
+            data_summary="요약",
+            config=WidgetConfig(),
+            x_column="month",
+            y_column="SUM(amount)",
+        )
+        assert result.x_column == "month"
+        assert result.y_column == "SUM(amount)"
+
+    def test_x_column_y_column_default_none(self):
+        result = InsightResult(
+            widget_type=WidgetType.TABLE,
+            title="테이블",
+            insight_text="인사이트",
+            key_findings=["발견1"],
+            data_summary="요약",
+            config=WidgetConfig(),
+        )
+        assert result.x_column is None
+        assert result.y_column is None
+
+
+class TestInferColumnPriority:
+    """LLM이 지정한 x_column/y_column이 heuristic보다 우선하는지 검증."""
+
+    def _make_engine(self):
+        return QueryEngine(
+            llm=FakeLLM(),
+            db=FakeDB(),
+            context_store=FakeContextStore(),
+        )
+
+    def test_infer_x_column_uses_insight_value_first(self):
+        engine = self._make_engine()
+        intent = IntentResult(
+            search_type="STRUCTURED",
+            query_spec=QuerySpec(
+                table="deals",
+                columns=["accounts.name", "SUM(amount)"],
+                group_by=["accounts.name"],
+            ),
+            suggested_title="테스트",
+        )
+        insight = InsightResult(
+            widget_type=WidgetType.BAR,
+            title="테스트",
+            insight_text="인사이트",
+            key_findings=["f1"],
+            data_summary="요약",
+            config=WidgetConfig(),
+            x_column="custom_x",
+        )
+        result = engine._infer_x_column(intent, insight)
+        assert result == "custom_x"
+
+    def test_infer_x_column_falls_back_to_group_by(self):
+        engine = self._make_engine()
+        intent = IntentResult(
+            search_type="STRUCTURED",
+            query_spec=QuerySpec(
+                table="deals",
+                columns=["accounts.name", "SUM(amount)"],
+                group_by=["accounts.name"],
+            ),
+            suggested_title="테스트",
+        )
+        insight = InsightResult(
+            widget_type=WidgetType.BAR,
+            title="테스트",
+            insight_text="인사이트",
+            key_findings=["f1"],
+            data_summary="요약",
+            config=WidgetConfig(),
+        )
+        result = engine._infer_x_column(intent, insight)
+        assert result == "accounts.name"
+
+    def test_infer_y_column_uses_insight_value_first(self):
+        engine = self._make_engine()
+        intent = IntentResult(
+            search_type="STRUCTURED",
+            query_spec=QuerySpec(
+                table="deals",
+                columns=["accounts.name", "SUM(amount)"],
+            ),
+            suggested_title="테스트",
+        )
+        insight = InsightResult(
+            widget_type=WidgetType.BAR,
+            title="테스트",
+            insight_text="인사이트",
+            key_findings=["f1"],
+            data_summary="요약",
+            config=WidgetConfig(),
+            y_column="custom_y",
+        )
+        result = engine._infer_y_column(intent, insight)
+        assert result == "custom_y"
+
+    def test_infer_y_column_falls_back_to_last_column(self):
+        engine = self._make_engine()
+        intent = IntentResult(
+            search_type="STRUCTURED",
+            query_spec=QuerySpec(
+                table="deals",
+                columns=["accounts.name", "SUM(amount)"],
+            ),
+            suggested_title="테스트",
+        )
+        insight = InsightResult(
+            widget_type=WidgetType.BAR,
+            title="테스트",
+            insight_text="인사이트",
+            key_findings=["f1"],
+            data_summary="요약",
+            config=WidgetConfig(),
+        )
+        result = engine._infer_y_column(intent, insight)
+        assert result == "SUM(amount)"
+
+
+class TestPromptContent:
+    """시스템 프롬프트에 few-shot 예시, 한국어 강제, 근거 요구가 포함되는지 검증."""
+
+    def test_intent_prompt_contains_few_shot_examples(self):
+        llm = FakeLLM()
+        engine = QueryEngine(llm=llm, db=FakeDB(), context_store=FakeContextStore())
+        request = DashboardQueryRequest(
+            trace_id="t", action="CREATE", input_text="매출 보여줘",
+            dashboard_id=1, tenant_id=1, user_id=1,
+        )
+        asyncio.get_event_loop().run_until_complete(engine.run(request))
+
+        system_msg = llm.calls[0]["messages"][0]["content"]
+        assert "## 예시" in system_msg
+
+    def test_insight_prompt_requires_korean(self):
+        llm = FakeLLM()
+        engine = QueryEngine(llm=llm, db=FakeDB(), context_store=FakeContextStore())
+        request = DashboardQueryRequest(
+            trace_id="t", action="CREATE", input_text="매출 보여줘",
+            dashboard_id=1, tenant_id=1, user_id=1,
+        )
+        asyncio.get_event_loop().run_until_complete(engine.run(request))
+
+        insight_system_msg = llm.calls[1]["messages"][0]["content"]
+        assert "한국어" in insight_system_msg
+
+    def test_insight_prompt_requires_breakdown(self):
+        llm = FakeLLM()
+        engine = QueryEngine(llm=llm, db=FakeDB(), context_store=FakeContextStore())
+        request = DashboardQueryRequest(
+            trace_id="t", action="CREATE", input_text="매출 보여줘",
+            dashboard_id=1, tenant_id=1, user_id=1,
+        )
+        asyncio.get_event_loop().run_until_complete(engine.run(request))
+
+        insight_system_msg = llm.calls[1]["messages"][0]["content"]
+        assert "근거" in insight_system_msg or "breakdown" in insight_system_msg.lower()
+
+
 class TestQueryEngineTimeout:
     def _make_request(self, **overrides):
         defaults = {

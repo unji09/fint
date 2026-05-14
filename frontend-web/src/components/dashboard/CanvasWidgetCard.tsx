@@ -131,7 +131,10 @@ export default function CanvasWidgetCard({ w, onUpdate, onTitleChange, onRemove 
           const yLabel = cfg.y_label as string | undefined;
           if (w.widgetType === 'LINE_CHART') return <LineChartSvg values={values} labels={labels} xLabel={xLabel} yLabel={yLabel} />;
           if (w.widgetType === 'PIE' || w.widgetType === 'SEGMENT') return <SegmentChart labels={labels} values={values} />;
-          if (w.widgetType === 'KPI') return <KpiCard value={values?.[0]} label={labels?.[0]} />;
+          if (w.widgetType === 'KPI') {
+            const kpiVal = values?.[0] ?? (typeof data.value === 'number' ? data.value : undefined);
+            return <KpiCard value={kpiVal} label={labels?.[0]} />;
+          }
           if (w.widgetType === 'TABLE') return <TableWidget data={data} />;
           return <BarChartSvg values={values} labels={labels} xLabel={xLabel} yLabel={yLabel} />;
         })()}
