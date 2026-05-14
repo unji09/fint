@@ -88,6 +88,8 @@ class InsightResult(BaseModel):
     key_findings: list[str]
     data_summary: str
     config: WidgetConfig
+    x_column: str | None = None
+    y_column: str | None = None
 
 
 class DashboardQueryRequest(BaseModel):

@@ -234,6 +234,41 @@ export function KpiCard({ value, label }: { value?: number; label?: string }) {
   );
 }
 
+const COLUMN_KO: Record<string, string> = {
+  name: '이름',
+  title: '제목',
+  amount: '금액',
+  industry: '업종',
+  current_pipeline: '파이프라인',
+  expected_close: '예상 종료일',
+  probability: '성공 확률',
+  created_at: '생성일',
+  updated_at: '수정일',
+  type: '유형',
+  email: '이메일',
+  phone: '전화번호',
+  personality: '성향',
+  biz_no: '사업자번호',
+  mood: '분위기',
+  mood_score: '날씨 점수',
+  reason: '사유',
+  source: '출처',
+  content: '본문',
+  url: '원문 URL',
+  occurred_at: '발생일',
+  won_at: '수주일',
+  lost_at: '실주일',
+  lost_reason: '실주 사유',
+  'accounts.name': '고객사명',
+  'SUM(amount)': '매출 합계',
+  'COUNT(*)': '건수',
+  'AVG(amount)': '평균 금액',
+};
+
+function toKoColumn(col: string): string {
+  return COLUMN_KO[col] ?? col;
+}
+
 export function TableWidget({ data }: { data: Record<string, unknown> }) {
   const columns = Array.isArray(data.columns) ? (data.columns as string[]) : [];
   const rows = Array.isArray(data.rows) ? (data.rows as Record<string, unknown>[]) : [];
@@ -248,7 +283,7 @@ export function TableWidget({ data }: { data: Record<string, unknown> }) {
             <tr>
               {columns.map((col) => (
                 <th key={col} style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: 500 }}>
-                  {col}
+                  {toKoColumn(col)}
                 </th>
               ))}
             </tr>

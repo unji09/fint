@@ -237,7 +237,7 @@ export default function FintChatPanel({
                     ) : msgWidgetType === 'PIE' || msgWidgetType === 'SEGMENT' ? (
                       <SegmentChart labels={msgLabels} values={msgValues} />
                     ) : msgWidgetType === 'KPI' ? (
-                      <KpiCard value={msgValues?.[0]} label={msgLabels?.[0]} />
+                      <KpiCard value={msgValues?.[0] ?? (typeof msgData.value === 'number' ? msgData.value : undefined)} label={msgLabels?.[0]} />
                     ) : msgWidgetType === 'TABLE' ? (
                       <TableWidget data={msgData} />
                     ) : (
@@ -474,7 +474,7 @@ export default function FintChatPanel({
                 ) : widgetType === 'PIE' || widgetType === 'SEGMENT' ? (
                   <SegmentChart labels={labels} values={values} />
                 ) : widgetType === 'KPI' ? (
-                  <KpiCard value={values?.[0]} label={labels?.[0]} />
+                  <KpiCard value={values?.[0] ?? (typeof data.value === 'number' ? data.value : undefined)} label={labels?.[0]} />
                 ) : widgetType === 'TABLE' ? (
                   <TableWidget data={data} />
                 ) : (

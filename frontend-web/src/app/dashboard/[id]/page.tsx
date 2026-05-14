@@ -75,7 +75,7 @@ export default function DashboardDetailPage() {
 
   /* 채팅 상태 */
   const [querying, setQuerying] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
   const [chatDone, setChatDone] = useState(false);
   const [queryErrorMsg, setQueryErrorMsg] = useState<string | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
@@ -453,9 +453,7 @@ export default function DashboardDetailPage() {
             cacheWidgets(merged);
             return merged;
           });
-          // 새로 드롭한 위젯은 즉시 백엔드에 저장
           void persistWidget(newW);
-          setChatOpen(false);
           setChatDone(false);
           setPendingWidget(null);
         }
