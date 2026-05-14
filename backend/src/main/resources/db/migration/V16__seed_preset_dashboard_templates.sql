@@ -1,10 +1,11 @@
--- 기존 시드 템플릿 삭제 후 프리셋 대시보드 템플릿 8개 삽입
+-- 기존 시드 템플릿 삭제 후 프리셋 대시보드 템플릿 8개 삽입 (ID 명시)
 DELETE FROM dashboard_templates;
 
-INSERT INTO dashboard_templates (widget_type, title, config, position, source_query)
+INSERT INTO dashboard_templates (dashboard_template_id, widget_type, title, config, position, source_query)
 VALUES
 -- 1. 기본 성과: 월별 매출 추이 (막대 차트)
 (
+    1,
     'CHART',
     '월별 매출 추이',
     '{
@@ -26,6 +27,7 @@ VALUES
 
 -- 2. 파이프라인: 딜 단계별 현황 (막대 차트)
 (
+    2,
     'CHART',
     '딜 파이프라인 현황',
     '{
@@ -47,6 +49,7 @@ VALUES
 
 -- 3. 전환율: 단계별 딜 전환율 (선 차트)
 (
+    3,
     'CHART',
     '단계별 전환율',
     '{
@@ -68,6 +71,7 @@ VALUES
 
 -- 4. 고객 관리: 고객 리스트 + 최근 접촉일 (테이블)
 (
+    4,
     'TABLE',
     '고객 리스트',
     '{
@@ -85,6 +89,7 @@ VALUES
 
 -- 5. 고객 분포: 고객 등급(mood)별 분포 (파이 차트)
 (
+    5,
     'CHART',
     '고객 등급 분포',
     '{
@@ -102,6 +107,7 @@ VALUES
 
 -- 6. 리스크: 정체된 딜 목록 (테이블)
 (
+    6,
     'TABLE',
     '정체 딜 리스트',
     '{
@@ -119,6 +125,7 @@ VALUES
 
 -- 7. 계약 관리: 만료 임박 딜 (테이블)
 (
+    7,
     'TABLE',
     '계약 만료 임박',
     '{
@@ -136,6 +143,7 @@ VALUES
 
 -- 8. 활동 로그: 이번 주 활동 기록 (테이블)
 (
+    8,
     'TABLE',
     '이번 주 활동 로그',
     '{
@@ -150,3 +158,5 @@ VALUES
     '{"x": 0, "y": 12, "w": 12, "h": 4}',
     'SELECT act.type AS "activityType", act.title AS "activityTitle", a.name AS "accountName", act.start_at AS "startAt" FROM activities act JOIN users u ON act.user_id = u.user_id LEFT JOIN deals d ON act.deal_id = d.deal_id LEFT JOIN accounts a ON d.account_id = a.account_id WHERE u.tenant_id = :tenantId AND act.start_at >= DATE_TRUNC(''week'', CURRENT_DATE) AND act.start_at < DATE_TRUNC(''week'', CURRENT_DATE) + INTERVAL ''7 days'' ORDER BY act.start_at DESC LIMIT 20'
 );
+
+SELECT setval('dashboard_templates_dashboard_template_id_seq', 8);
