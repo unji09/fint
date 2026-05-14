@@ -89,6 +89,9 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "mood_status", nullable = false, length = 20)
     private MoodStatus moodStatus;
 
+    @Column(name = "recording_key", length = 100)
+    private String recordingKey;
+
     @Builder
     private Activity(
             User user,
@@ -100,7 +103,8 @@ public class Activity extends BaseUpdatableEntity {
             OffsetDateTime startAt,
             OffsetDateTime endAt,
             List<Map<String, Object>> attendees,
-            String memo
+            String memo,
+            String recordingKey
     ) {
         this.user = user;
         this.deal = deal;
@@ -114,6 +118,7 @@ public class Activity extends BaseUpdatableEntity {
         this.memo = memo;
         this.sttStatus = SttStatus.PENDING;
         this.moodStatus = MoodStatus.PENDING;
+        this.recordingKey = recordingKey;
     }
 
     public void changeSttStatus(SttStatus sttStatus) {
@@ -167,6 +172,10 @@ public class Activity extends BaseUpdatableEntity {
 
     public void changeMoodStatus(MoodStatus moodStatus) {
         this.moodStatus = moodStatus;
+    }
+
+    public void saveRecordingKey(String recordingKey) {
+        this.recordingKey = recordingKey;
     }
 }
 
