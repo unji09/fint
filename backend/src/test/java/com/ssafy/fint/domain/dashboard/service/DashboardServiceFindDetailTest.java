@@ -28,6 +28,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +44,7 @@ class DashboardServiceFindDetailTest {
 
     @Mock private DashboardRepository dashboardRepository;
     @Mock private DashboardWidgetRepository dashboardWidgetRepository;
+    @Mock private QueryExecutionService queryExecutionService;
 
     @InjectMocks private DashboardService dashboardService;
 
@@ -55,9 +60,9 @@ class DashboardServiceFindDetailTest {
         DashboardQuery query = newQuery(1L, dashboard, "매출 추이 보여줘",
                 Map.of("labels", List.of("W1", "W2"), "values", List.of(100, 200)));
         DashboardWidget widgetWithQuery = newWidget(1L, dashboard, query,
-                WidgetType.BAR_CHART, "주간 매출", Map.of("x", 0, "y", 0, "w", 6, "h", 4));
+                WidgetType.CHART, "주간 매출", Map.of("x", 0, "y", 0, "w", 6, "h", 4), null);
         DashboardWidget widgetWithoutQuery = newWidget(2L, dashboard, null,
-                WidgetType.PIE, "세그먼트 비중", Map.of("x", 6, "y", 0, "w", 3, "h", 4));
+                WidgetType.CHART, "세그먼트 비중", Map.of("x", 6, "y", 0, "w", 3, "h", 4), null);
 
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
         when(dashboardWidgetRepository.findByDashboard(dashboard))
@@ -74,12 +79,53 @@ class DashboardServiceFindDetailTest {
         assertThat(w1.queryId()).isEqualTo(1L);
         assertThat(w1.inputText()).isEqualTo("매출 추이 보여줘");
         assertThat(w1.result()).containsKey("labels");
+        assertThat(w1.data()).isNull();
 
         var w2 = result.widgets().get(1);
         assertThat(w2.widgetId()).isEqualTo(2L);
         assertThat(w2.queryId()).isNull();
         assertThat(w2.inputText()).isNull();
         assertThat(w2.result()).isNull();
+        assertThat(w2.data()).isNull();
+    }
+
+    @Test
+    @DisplayName("source_query 가 있는 위젯은 실행 결과가 data 에 포함된다.")
+    void findDetailExecutesSourceQuery() {
+        Dashboard dashboard = newDashboard(OWNER_USER_ID, "프리셋 대시보드");
+        String sourceQuery = "SELECT month, amount FROM deals WHERE tenant_id = :tenantId";
+        DashboardWidget widget = newWidget(1L, dashboard, null,
+                WidgetType.CHART, "월별 매출", Map.of("x", 0, "y", 0, "w", 6, "h", 4), sourceQuery);
+
+        List<Map<String, Object>> queryData = List.of(
+                Map.of("month", "2026-01", "amount", 1000000),
+                Map.of("month", "2026-02", "amount", 2000000)
+        );
+        when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
+        when(dashboardWidgetRepository.findByDashboard(dashboard)).thenReturn(List.of(widget));
+        when(queryExecutionService.execute(sourceQuery, TENANT_ID)).thenReturn(queryData);
+
+        DashboardDetailResponse result = dashboardService.findDetail(owner, DASHBOARD_ID);
+
+        assertThat(result.widgets()).hasSize(1);
+        assertThat(result.widgets().get(0).data()).hasSize(2);
+        assertThat(result.widgets().get(0).data().get(0).get("month")).isEqualTo("2026-01");
+        verify(queryExecutionService).execute(sourceQuery, TENANT_ID);
+    }
+
+    @Test
+    @DisplayName("source_query 가 없는 위젯은 QueryExecutionService 를 호출하지 않는다.")
+    void findDetailSkipsNullSourceQuery() {
+        Dashboard dashboard = newDashboard(OWNER_USER_ID, "대시보드");
+        DashboardWidget widget = newWidget(1L, dashboard, null,
+                WidgetType.TABLE, "고객 목록", Map.of("x", 0, "y", 0, "w", 6, "h", 4), null);
+
+        when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
+        when(dashboardWidgetRepository.findByDashboard(dashboard)).thenReturn(List.of(widget));
+
+        dashboardService.findDetail(owner, DASHBOARD_ID);
+
+        verify(queryExecutionService, never()).execute(anyString(), anyLong());
     }
 
     @Test
@@ -167,7 +213,7 @@ class DashboardServiceFindDetailTest {
 
     private DashboardWidget newWidget(long id, Dashboard dashboard, DashboardQuery query,
                                        WidgetType type, String title,
-                                       Map<String, Object> position) {
+                                       Map<String, Object> position, String sourceQuery) {
         DashboardWidget widget = DashboardWidget.builder()
                 .dashboard(dashboard)
                 .dashboardQuery(query)
@@ -175,6 +221,7 @@ class DashboardServiceFindDetailTest {
                 .title(title)
                 .config(Map.of())
                 .position(position)
+                .sourceQuery(sourceQuery)
                 .build();
         ReflectionTestUtils.setField(widget, "dashboardWidgetId", id);
         return widget;
