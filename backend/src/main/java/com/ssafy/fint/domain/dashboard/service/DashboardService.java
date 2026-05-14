@@ -6,6 +6,7 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardDetailResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
+import com.ssafy.fint.domain.dashboard.dto.QueryHistoryResponse;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryStartResponse;
 import com.ssafy.fint.domain.dashboard.entity.Dashboard;
@@ -102,6 +103,21 @@ public class DashboardService {
         return dashboardRepository.findTop20ByOwnerOrderByLastAccessedAtDesc(owner)
                 .stream()
                 .map(DashboardListResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<QueryHistoryResponse> findQueryHistory(CustomUserDetails me, Long dashboardId) {
+        Dashboard dashboard = dashboardRepository.findById(dashboardId)
+                .orElseThrow(() -> new BusinessException(DashboardErrorCode.DASHBOARD_NOT_FOUND));
+
+        if (!dashboard.getOwner().getUserId().equals(me.getUserId())) {
+            throw new BusinessException(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
+        }
+
+        return dashboardQueryRepository.findByDashboard_DashboardIdOrderByCompletedAtAsc(dashboardId)
+                .stream()
+                .map(QueryHistoryResponse::from)
                 .toList();
     }
 
