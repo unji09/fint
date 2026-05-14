@@ -35,3 +35,20 @@ class AnthropicClient:
             messages=messages,
             response_model=response_model,
         )
+
+    async def chat_with_tools(self, messages: list[dict], tools: list[dict], *, model: str | None = None):
+        anthropic_tools = [
+            {
+                "name": t["function"]["name"],
+                "description": t["function"].get("description", ""),
+                "input_schema": t["function"]["parameters"],
+            }
+            for t in tools
+        ]
+        resp = await self._raw.messages.create(
+            model=model or DEFAULT_MODEL,
+            max_tokens=DEFAULT_MAX_TOKENS,
+            messages=messages,
+            tools=anthropic_tools,
+        )
+        return resp

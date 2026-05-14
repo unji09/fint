@@ -74,22 +74,26 @@ class IntentResult(BaseModel):
     rejection_reason: str | None = None
 
 
-class WidgetConfig(BaseModel):
-    colors: list[str] | None = None
-    x_label: str | None = None
-    y_label: str | None = None
-    period: str | None = None
+class DatasetSpec(BaseModel):
+    label: str
+    value_field: str
 
 
 class InsightResult(BaseModel):
     widget_type: WidgetType
+    chart_type: str | None = None
+    chart_variant: str | None = None
     title: str
     insight_text: str
     key_findings: list[str]
     data_summary: str
-    config: WidgetConfig
-    x_column: str | None = None
-    y_column: str | None = None
+    labels_field: str | None = None
+    datasets: list[DatasetSpec] = Field(default_factory=list)
+    x_label: str | None = None
+    y_label: str | None = None
+    y_unit: str | None = None
+    display_format: str | None = None
+    suggested_chart_types: list[str] = Field(default_factory=list)
 
 
 class DashboardQueryRequest(BaseModel):
