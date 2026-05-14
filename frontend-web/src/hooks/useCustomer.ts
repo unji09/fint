@@ -75,17 +75,39 @@ function mapApiDeal(d: ApiDeal & Record<string, unknown>): Deal {
 
 // ─── 고객사 목록 ──────────────────────────────────────────────────────────────
 
-export function useAccountList() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
+export interface AccountListFilter {
+  /** GET /accounts?keyword= — 회사명/업종 키워드 검색 (백엔드 명세) */
+  keyword?: string;
+  /** GET /accounts?industry= — 업종 필터 (백엔드 명세) */
+  industry?: string;
+}
+
+// ── 모듈 레벨 캐시 (페이지 재마운트 시 즉시 표시 후 백그라운드 refetch) ──
+// customer/ 폴더에 layout.tsx 가 없어 [id] 변경 시 페이지가 unmount/mount 되는
+// Next.js 동작 때문에 매번 빈 상태에서 시작하던 전환 끊김을 방지.
+let accountListCache: { key: string; data: Account[] } | null = null;
+const cacheKey = (f?: AccountListFilter) => `${f?.keyword ?? ''}|${f?.industry ?? ''}`;
+
+export function useAccountList(filter?: AccountListFilter) {
+  const initialKey = cacheKey(filter);
+  const initial = accountListCache && accountListCache.key === initialKey ? accountListCache.data : [];
+  const [accounts, setAccounts] = useState<Account[]>(initial);
+  const [loading, setLoading] = useState(initial.length === 0);
   const [error, setError] = useState<string | null>(null);
+
+  const keyword = filter?.keyword ?? '';
+  const industry = filter?.industry ?? '';
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // GET /accounts 시도
-      let res = await fetchWithAuth('/accounts');
+      // GET /accounts?keyword=&industry= (백엔드 명세 그대로)
+      const params = new URLSearchParams();
+      if (keyword.trim()) params.set('keyword', keyword.trim());
+      if (industry.trim()) params.set('industry', industry.trim());
+      const qs = params.toString();
+      let res = await fetchWithAuth(`/accounts${qs ? `?${qs}` : ''}`);
       let items: ApiAccountItem[] = [];
 
       if (res.ok) {
@@ -93,7 +115,8 @@ export function useAccountList() {
         items = json.data?.content ?? json.data ?? [];
       } else {
         // fallback: /accounts/searchable (GET /accounts가 500일 경우)
-        res = await fetchWithAuth('/accounts/searchable?keyword=%25&size=100');
+        const fbKw = keyword.trim() || '%';
+        res = await fetchWithAuth(`/accounts/searchable?keyword=${encodeURIComponent(fbKw)}&size=100`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         items = (json.data ?? []).map((a: any) => ({
@@ -123,22 +146,22 @@ export function useAccountList() {
         }));
       }
 
-      setAccounts(
-        items.map((a) => ({
-          accountId: a.accountId,
-          name: a.name,
-          industry: a.industry,
-          temperature: toMoodLevel(a),
-          pipelineStage: '',
-        })),
-      );
+      const mapped: Account[] = items.map((a) => ({
+        accountId: a.accountId,
+        name: a.name,
+        industry: a.industry,
+        temperature: toMoodLevel(a),
+        pipelineStage: '',
+      }));
+      setAccounts(mapped);
+      accountListCache = { key: cacheKey({ keyword, industry }), data: mapped };
     } catch (e) {
       console.error('[useAccountList] 고객사 목록 로드 실패:', e);
       setError('고객사 목록을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [keyword, industry]);
 
   useEffect(() => {
     fetch_();
@@ -224,18 +247,34 @@ export function useDeleteAccount() {
 
 // ─── 선택된 고객사 상세 (signals / contacts / deals) ─────────────────────────
 
+// accountId 별 모듈 레벨 캐시 (페이지 재마운트 시 즉시 표시용)
+const detailCache: Map<string, { signals: Signal[]; contacts: ContactInfo[]; deals: Deal[] }> = new Map();
+
 export function useAccountDetail(accountId: string | number | null) {
-  const [signals, setSignals] = useState<Signal[]>([]);
-  const [contacts, setContacts] = useState<ContactInfo[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [loading, setLoading] = useState(false);
+  const key = accountId !== null ? String(accountId) : '';
+  const cached = key ? detailCache.get(key) : undefined;
+  const [signals, setSignals] = useState<Signal[]>(cached?.signals ?? []);
+  const [contacts, setContacts] = useState<ContactInfo[]>(cached?.contacts ?? []);
+  const [deals, setDeals] = useState<Deal[]>(cached?.deals ?? []);
+  const [loading, setLoading] = useState(!cached);
 
   const load = useCallback(async () => {
     if (!accountId) return;
-    setSignals([]);
-    setContacts([]);
-    setDeals([]);
+    // 같은 instance 에서 accountId 가 변경되면 캐시된 데이터로 즉시 교체 (깜빡임 방지),
+    // 캐시 없으면 이전 데이터를 유지한 채 백그라운드 로딩.
+    const k = String(accountId);
+    const c = detailCache.get(k);
+    if (c) {
+      setSignals(c.signals);
+      setContacts(c.contacts);
+      setDeals(c.deals);
+    }
     setLoading(true);
+
+    // load 끝에서 캐시 갱신을 위한 local snapshot
+    let snapSignals: Signal[] = c?.signals ?? [];
+    let snapContacts: ContactInfo[] = c?.contacts ?? [];
+    let snapDeals: Deal[] = c?.deals ?? [];
 
     // 백엔드 응답 wrapper 종류가 다양 — 가능한 배열 위치를 모두 시도해서 추출.
     const extractList = <T,>(j: unknown): T[] => {
@@ -264,15 +303,15 @@ export function useAccountDetail(accountId: string | number | null) {
 
       if (sigRes.status === 'fulfilled') {
         const sigs = extractList<ApiSignal>(sigRes.value);
-        console.log('[FINT] /signals', { count: sigs.length, raw: sigRes.value });
-        setSignals(sigs.map(mapApiSignal));
+        snapSignals = sigs.map(mapApiSignal);
+        setSignals(snapSignals);
       }
 
       let accountContacts: ContactInfo[] = [];
       if (conRes.status === 'fulfilled') {
         const cons = extractList<ApiContact>(conRes.value);
-        console.log('[FINT] /contacts', { count: cons.length, raw: conRes.value });
         accountContacts = cons.map(mapApiContact);
+        snapContacts = accountContacts;
         setContacts(accountContacts);
       }
 
@@ -283,12 +322,17 @@ export function useAccountDetail(accountId: string | number | null) {
         accountContacts.map((c) => c.contactId).filter((v): v is number => typeof v === 'number'),
       );
       if (contactIds.size === 0) {
+        snapDeals = [];
         setDeals([]);
         return;
       }
 
       const listRes = await fetchWithAuth('/deals?size=200');
-      if (!listRes.ok) return;
+      if (!listRes.ok) {
+        snapDeals = [];
+        setDeals([]);
+        return;
+      }
       const listJson = await listRes.json();
       const list: { dealId: number }[] = Array.isArray(listJson?.data?.data)
         ? listJson.data.data
@@ -322,9 +366,12 @@ export function useAccountDetail(accountId: string | number | null) {
         )
         .map((r) => r.value);
 
-      setDeals((filtered as unknown as (ApiDeal & Record<string, unknown>)[]).map(mapApiDeal));
+      snapDeals = (filtered as unknown as (ApiDeal & Record<string, unknown>)[]).map(mapApiDeal);
+      setDeals(snapDeals);
     } finally {
       setLoading(false);
+      // 새로 받은 데이터로 캐시 갱신
+      detailCache.set(k, { signals: snapSignals, contacts: snapContacts, deals: snapDeals });
     }
   }, [accountId]);
 

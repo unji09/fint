@@ -1,23 +1,23 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import CustomerSidebar from '@/components/customer/CustomerSidebar';
+import { useParams } from 'next/navigation';
 import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
 import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
+import WeatherPanel from '@/components/customer/WeatherPanel';
 import AddEventModal from '@/components/calendar/AddEventModal';
-import { useAccountList, useAccountDetail, useRegisterAccount, useDeleteAccount } from '@/hooks/useCustomer';
+import { useAccountList, useAccountDetail } from '@/hooks/useCustomer';
+import { useCustomer } from '../CustomerContext';
 import { useDeleteContact, useUpdateContact } from '@/hooks/useContact';
 import { useCreateDeal } from '@/hooks/useDeal';
 import { useNextActions, fetchNextActionDetail } from '@/hooks/useNextActions';
 import { fetchWithAuth } from '@/hooks/useAuth';
-import type { ContactInfo, Deal, StrategyCard } from '@/types/customer';
+import type { Deal, StrategyCard } from '@/types/customer';
 
 const SA = ['#06b6d4', '#cbd5e1', '#fb923c'];
 const F = 'Pretendard,sans-serif';
-const ML: Record<string, string> = { RAINBOW: '🌈', SUNNY: '☀️', CLOUDY: '☁️', RAINY: '🌧️', THUNDER: '⛈️' };
 
 // Next Action category → AddEventModal 카테고리 매핑.
 // NEWS/DART/CRM 같은 시그널 출처는 '미팅'(가장 일반적) 으로, ActivityType 코드면 직접 매핑.
@@ -40,16 +40,17 @@ function Av({ name, color, size = 30 }: { name: string; color: string; size?: nu
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { accounts, loading: aL, error: aE, refetch: refA } = useAccountList();
-  const { signals, contacts, deals, refetch: refDetail } = useAccountDetail(id ?? null);
+  // accounts 목록은 layout 의 사이드바가 관리한다. page 에서는 acc 정보가 필요할 때만 같은 hook 호출 (모듈 캐시로 즉시 반환됨)
+  const { accounts } = useAccountList();
+  const { signals, deals, refetch: refDetail } = useAccountDetail(id ?? null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
   const { remove: delContact } = useDeleteContact();
   const { update: updContact } = useUpdateContact();
-  const { register: regAccount, loading: regL } = useRegisterAccount();
-  const { remove: delAccount } = useDeleteAccount();
   const { create: addDeal, loading: addingD } = useCreateDeal();
+
+  // 사이드바와 공유하는 선택 상태 (layout 의 CustomerProvider)
+  const { selContact, setSelContact } = useCustomer();
 
   const strats: StrategyCard[] = nextActions.map(a => ({ id: a.suggestionId, title: a.title, category: a.category, successRate: a.successRate }));
 
@@ -60,13 +61,9 @@ export default function CustomerDetailPage() {
     category?: string;
   }>({});
 
-  const [selContact, setSelContact] = useState<ContactInfo | null>(null);
   const [selDeal, setSelDeal] = useState<Deal | null>(null);
   const [allDeals, setAllDeals] = useState(false);
   const [expStrat, setExpStrat] = useState<StrategyCard | null>(null);
-  const [showAddAcc, setShowAddAcc] = useState(false);
-  const [nAName, setNAName] = useState('');
-  const [nAInd, setNAInd] = useState('');
   // 담당자 편집
   const [editContact, setEditContact] = useState(false);
   const [ecName, setEcName] = useState('');
@@ -97,9 +94,19 @@ export default function CustomerDetailPage() {
 
   const visDeal = cDealIds ? deals.filter(d => cDealIds.has(d.dealId)) : deals;
   const acc = accounts.find(a => String(a.accountId) === String(id)) ?? accounts[0];
-  const moodIcon = ML[acc?.temperature] ?? '☁️';
 
-  const onContactSel = (c: ContactInfo | null) => { setSelContact(c); setSelDeal(null); setAllDeals(false); setEditContact(false); if (c) { setEcName(c.name); setEcTitle(c.role); setEcPhone(c.phone ?? ''); setEcEmail(c.email ?? ''); } };
+  // 사이드바에서 setSelContact 호출 시 — 관련 page state reset
+  useEffect(() => {
+    setSelDeal(null);
+    setAllDeals(false);
+    setEditContact(false);
+    if (selContact) {
+      setEcName(selContact.name);
+      setEcTitle(selContact.role);
+      setEcPhone(selContact.phone ?? '');
+      setEcEmail(selContact.email ?? '');
+    }
+  }, [selContact]);
 
   const crumbs: { label: string; onClick?: () => void }[] = [{ label: acc?.name ?? '고객사', onClick: () => { setSelContact(null); setSelDeal(null); setAllDeals(false); } }];
   if (selContact) crumbs.push({ label: selContact.name, onClick: () => { setSelDeal(null); setAllDeals(false); } });
@@ -107,19 +114,8 @@ export default function CustomerDetailPage() {
 
   return (
     <>
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f8fafc', zIndex: -1 }} />
-      <div style={{ position: 'fixed', top: 64, left: 0, right: 0, bottom: 0, display: 'flex', overflow: 'hidden' }}>
-        <CustomerSidebar accounts={accounts} selectedId={acc?.accountId ?? null} loading={aL}
-          error={aE} onRetry={refA} contacts={contacts} onContactSelect={onContactSel} onAddAccount={() => setShowAddAcc(true)}
-          onDeleteAccount={async (accountId, name) => {
-            const msg = `"${name}" 고객사를 삭제하시겠습니까?\n\n연결된 모든 담당자, 딜, 활동 데이터가 함께 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`;
-            if (!window.confirm(msg)) return;
-            if (!window.confirm(`정말로 "${name}"을(를) 삭제합니까?`)) return;
-            if (await delAccount(accountId)) { refA(); router.push('/customer/1'); }
-          }} />
-
-        <main ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '24px 40px 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 브레드크럼 */}
+      <main ref={scrollRef} style={{ flex: 1, height: '100%', overflowY: 'auto', padding: '24px 40px 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 브레드크럼 — 큰 날씨 표시는 아래 WeatherPanel 로 이동 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {crumbs.map((c, i) => {
               const last = i === crumbs.length - 1;
@@ -128,9 +124,13 @@ export default function CustomerDetailPage() {
                 <span onClick={!last ? c.onClick : undefined} style={{ fontFamily: F, fontWeight: 700, fontSize: 22, color: last ? '#0f172a' : '#94a3b8', cursor: !last ? 'pointer' : 'default' }}>{c.label}</span>
               </span>;
             })}
-            {acc && <span style={{ fontSize: 16 }}>{moodIcon}</span>}
             {acc && <span style={{ fontFamily: F, fontSize: 12, color: '#94a3b8' }}>{acc.industry}</span>}
           </div>
+
+          {/* 분위기(날씨) 인라인 한 줄 — AI 감정 분석 결과 read-only */}
+          {acc && !selDeal && !selContact && (
+            <WeatherPanel mood={acc.temperature} reason={acc.moodReason} />
+          )}
 
           {/* 메인 카드 — 높이 고정으로 컨텐츠 전환 시 흔들림 차단 */}
           <div style={{ background: '#fff', border: '1px solid #e2eaf0', borderRadius: 10, display: 'flex', flexDirection: allDeals ? 'column' : 'row', flexShrink: 0, height: allDeals ? 320 : 280, overflow: 'hidden' }}>
@@ -277,36 +277,7 @@ export default function CustomerDetailPage() {
             </div>
           )}
           {!selDeal && strats.length === 0 && !aiL && null}
-        </main>
-      </div>
-
-      {/* 고객사 추가 모달 */}
-      {showAddAcc && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setShowAddAcc(false)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)' }} />
-          <div style={{ position: 'relative', backgroundColor: '#fff', borderRadius: 12, width: 380, padding: 22, boxShadow: '0 12px 40px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: F, fontSize: 16, fontWeight: 700, color: '#16180F' }}>고객사 추가</span>
-              <button onClick={() => setShowAddAcc(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: '#9CA3AF' }}>×</button>
-            </div>
-            <input value={nAName} onChange={e => setNAName(e.target.value)} placeholder="고객사명 *"
-              style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid #E5E6DE', backgroundColor: '#F8F8F5', fontSize: 13, outline: 'none', fontFamily: F }} />
-            <input value={nAInd} onChange={e => setNAInd(e.target.value)} placeholder="업종"
-              style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid #E5E6DE', backgroundColor: '#F8F8F5', fontSize: 13, outline: 'none', fontFamily: F }} />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowAddAcc(false)} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #E5E6DE', backgroundColor: '#fff', fontSize: 13, color: '#737880', cursor: 'pointer', fontFamily: F }}>취소</button>
-              <button onClick={async () => {
-                if (!nAName.trim() || regL) return;
-                await regAccount({ name: nAName.trim(), industry: nAInd.trim() || undefined });
-                setShowAddAcc(false); setNAName(''); setNAInd(''); refA();
-              }} disabled={!nAName.trim() || regL}
-                style={{ padding: '7px 16px', borderRadius: 6, border: 'none', backgroundColor: nAName.trim() ? '#06B6D4' : '#cbd5e1', fontSize: 13, fontWeight: 600, color: '#fff', cursor: nAName.trim() ? 'pointer' : 'default', fontFamily: F }}>
-                {regL ? '등록 중...' : '등록'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </main>
 
       {/* AI 추천 전략 → 일정 추가 모달 */}
       <AddEventModal

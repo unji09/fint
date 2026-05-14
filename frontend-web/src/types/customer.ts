@@ -9,6 +9,10 @@ export interface Account {
   temperature: MoodLevel;
   pipelineStage: string;
   updatedAt?: string;
+  /** 현재 분위기(날씨) 의 이유. 백엔드 응답에 들어오면 자동 표시. */
+  moodReason?: string | null;
+  /** 분위기 갱신 시각 (ISO) */
+  moodUpdatedAt?: string | null;
 }
 
 /** GET /accounts 또는 /accounts/searchable 응답 아이템 */
