@@ -19,6 +19,7 @@ export interface DashboardWidget {
   queryId: number | null;
   inputText: string | null;
   result: WidgetResult | null;
+  data: Record<string, unknown>[] | null;
 }
 
 export interface Dashboard {

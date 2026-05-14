@@ -194,13 +194,20 @@ export default function DashboardDetailPage() {
         const d = j.data ?? j;
         const serverWidgets = (d.widgets ?? []) as DashboardWidget[];
         if (serverWidgets.length === 0) return; // 백엔드에 위젯 없으면 캐시 유지
-        const next = serverWidgets.map((w, i) => ({
-          ...w,
-          px: w.position?.x ?? (28 + i * 30),
-          py: w.position?.y ?? (28 + i * 20),
-          pw: w.position?.w ?? 400,
-          ph: w.position?.h ?? 260,
-        }));
+        const GRID_COL = 100;
+        const GRID_ROW = 80;
+        const PAD = 28;
+        const next = serverWidgets.map((w, i) => {
+          const pos = w.position;
+          const isGrid = pos && pos.w <= 12 && pos.h <= 16;
+          return {
+            ...w,
+            px: isGrid ? PAD + pos.x * GRID_COL : (pos?.x ?? (28 + i * 30)),
+            py: isGrid ? PAD + pos.y * GRID_ROW : (pos?.y ?? (28 + i * 20)),
+            pw: isGrid ? pos.w * GRID_COL : (pos?.w ?? 400),
+            ph: isGrid ? pos.h * GRID_ROW : (pos?.h ?? 260),
+          };
+        });
         setCanvasWidgets(next);
         try { localStorage.setItem(`fint:widgets:${id}`, JSON.stringify(next)); } catch { /* ignore */ }
       })
