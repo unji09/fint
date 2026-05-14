@@ -23,14 +23,23 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     init_db(settings.database_url)
     init_redis(settings.redis_url)
 
+    import threading
     from pathlib import Path
 
     model_path = Path(settings.EMBEDDING_MODEL_PATH)
-    if ensure_embedding_model(model_path):
+    if (model_path / "model.onnx").exists() and (model_path / "tokenizer.json").exists():
         logging.getLogger(__name__).info("Loading embedding model from %s", model_path)
         warmup_embedder_client(str(model_path))
     else:
-        logging.getLogger(__name__).warning("Embedding model unavailable, semantic search disabled")
+        def _download_and_load() -> None:
+            if ensure_embedding_model(model_path):
+                warmup_embedder_client(str(model_path))
+                logging.getLogger(__name__).info("Embedding model loaded (background)")
+            else:
+                logging.getLogger(__name__).warning("Embedding model unavailable, semantic search disabled")
+
+        threading.Thread(target=_download_and_load, daemon=True).start()
+        logging.getLogger(__name__).info("Embedding model download started in background")
 
     _app.state.speaker_session_manager = SpeakerSessionManager()
     if settings.GPU_SERVER_URL:
