@@ -77,6 +77,23 @@ class TestOnnxEmbedderClient:
         client = self._make_client(dim=384)
         assert client.dimension == 384
 
+    def test_embed_large_batch_processes_in_chunks(self):
+        client = self._make_client()
+        call_sizes: list[int] = []
+        original_run = client._session.run
+
+        def tracking_run(_output_names, input_feed):
+            call_sizes.append(input_feed["input_ids"].shape[0])
+            return original_run(_output_names, input_feed)
+
+        client._session.run = tracking_run
+        texts = [f"query: text {i}" for i in range(100)]
+        vectors = client.embed(texts)
+
+        assert vectors.shape == (100, 384)
+        assert all(size <= 32 for size in call_sizes)
+        assert len(call_sizes) == 4  # 32 + 32 + 32 + 4
+
 
 class _StubTokenizer:
     def encode_batch(self, texts: list[str]) -> list[_StubEncoding]:
