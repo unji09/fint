@@ -71,6 +71,9 @@ public class SecurityConfig {
                 .requestMatchers(
                     path.matcher("/ws/**")
                 ).permitAll()
+                .requestMatchers(
+                    path.matcher("/test/**")
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(

@@ -71,4 +71,11 @@ public class RestTemplateConfig {
                 .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(15)))
                 .build();
     }
+
+    @Bean
+    public RestTemplate signalRestTemplate(RestTemplateBuilder builder) {
+        return builder
+                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(5), Duration.ofSeconds(120)))
+                .build();
+    }
 }
