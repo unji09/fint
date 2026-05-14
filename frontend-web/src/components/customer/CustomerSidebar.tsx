@@ -1,25 +1,40 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Account, ContactInfo, MoodLevel } from '@/types/customer';
+import WeatherIcon from '@/components/customer/WeatherIcon';
 
-const MOOD_CFG: Record<MoodLevel, { icon: string; color: string; bg: string }> = {
-  RAINBOW: { icon: '🌈', color: '#7c3aed', bg: '#f5f3ff' },
-  SUNNY:   { icon: '☀️', color: '#d97706', bg: '#fffbeb' },
-  CLOUDY:  { icon: '☁️', color: '#64748b', bg: '#f1f5f9' },
-  RAINY:   { icon: '🌧️', color: '#2563eb', bg: '#eff6ff' },
-  THUNDER: { icon: '⛈️', color: '#dc2626', bg: '#fef2f2' },
+// ─── 정렬 옵션 ─────────────────────────────────────────────
+type SortKey = 'recent' | 'name' | 'mood' | 'industry';
+const SORT_LABELS: Record<SortKey, string> = {
+  recent: '최신순',
+  name: '이름순',
+  mood: '분위기순',
+  industry: '업종순',
 };
-
-function MoodIcon({ mood }: { mood: MoodLevel }) {
-  const m = MOOD_CFG[mood] ?? MOOD_CFG.CLOUDY;
-  return (
-    <div style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-      <span style={{ fontSize: 18 }}>{m.icon}</span>
-      <div style={{ position: 'absolute', bottom: 1, left: 4, right: 4, height: 3, borderRadius: 2, backgroundColor: m.color, opacity: 0.5 }} />
-    </div>
-  );
+// 분위기 좋음(무지개) → 나쁨(천둥) 순서
+const MOOD_ORDER: Record<MoodLevel, number> = {
+  RAINBOW: 0, SUNNY: 1, CLOUDY: 2, RAINY: 3, THUNDER: 4,
+};
+function sortAccounts(list: Account[], key: SortKey): Account[] {
+  const arr = [...list];
+  switch (key) {
+    case 'name':
+      return arr.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    case 'mood':
+      return arr.sort((a, b) => (MOOD_ORDER[a.temperature] ?? 99) - (MOOD_ORDER[b.temperature] ?? 99));
+    case 'industry':
+      return arr.sort((a, b) => (a.industry ?? '').localeCompare(b.industry ?? '', 'ko'));
+    case 'recent':
+    default:
+      return arr.sort((a, b) => {
+        const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        if (ta !== tb) return tb - ta;
+        return b.accountId - a.accountId;
+      });
+  }
 }
 
 interface CustomerSidebarProps {
@@ -48,6 +63,20 @@ export default function CustomerSidebar({
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<number | null>(selectedId);
   const [activeContact, setActiveContact] = useState<string | null>(null);
+
+  // ── 정렬 ──
+  const [sortKey, setSortKey] = useState<SortKey>('recent');
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+  const sortedAccounts = useMemo(() => sortAccounts(accounts, sortKey), [accounts, sortKey]);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) setSortOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
 
   // selectedId 변경 시 expandedId 동기화
   useEffect(() => {
@@ -87,23 +116,91 @@ export default function CustomerSidebar({
     >
       <div
         style={{
-          height: 64,
+          height: 56,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          gap: 12,
           borderBottom: '1px solid rgba(6,182,212,0.8)',
-          padding: '0 20px',
-          gap: 32,
+          padding: '0 14px',
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 15, color: '#64748b' }}>
-            최신순
-          </span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M6 9l6 6 6-6" stroke="#64748b" strokeWidth="2" strokeLinecap="round" />
-          </svg>
+        <div ref={sortRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setSortOpen((v) => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '5px 8px',
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              borderRadius: 6,
+              fontFamily: 'Pretendard,sans-serif',
+              fontSize: 14,
+              color: '#475569',
+              fontWeight: 500,
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#F1F5F9'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+          >
+            {SORT_LABELS[sortKey]}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ transform: sortOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+              <path d="M6 9l6 6 6-6" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+          {sortOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                left: 0,
+                zIndex: 100,
+                backgroundColor: '#fff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                boxShadow: '0 6px 18px rgba(0, 0, 0, 0.08)',
+                minWidth: 130,
+                overflow: 'hidden',
+              }}
+            >
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => {
+                const active = k === sortKey;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => { setSortKey(k); setSortOpen(false); }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '8px 12px',
+                      border: 'none',
+                      backgroundColor: active ? '#F2FCFF' : 'transparent',
+                      color: active ? '#06B6D4' : '#1E293B',
+                      fontSize: 13,
+                      fontWeight: active ? 600 : 400,
+                      cursor: 'pointer',
+                      fontFamily: 'Pretendard,sans-serif',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                    onMouseOver={(e) => { if (!active) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                    onMouseOut={(e) => { if (!active) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  >
+                    {SORT_LABELS[k]}
+                    {active && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M5 13l4 4L19 7" stroke="#06B6D4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <button
           onClick={onAddAccount}
@@ -140,14 +237,14 @@ export default function CustomerSidebar({
                 )}
               </div>
             )
-          : accounts.length === 0 ? (
+          : sortedAccounts.length === 0 ? (
               <div style={{ padding: '20px 12px', textAlign: 'center' }}>
                 <p style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 13, color: '#94a3b8', margin: 0 }}>
                   등록된 고객사가 없습니다.
                 </p>
               </div>
             )
-          : accounts.map((acc) => {
+          : sortedAccounts.map((acc) => {
               const isSelected = acc.accountId === selectedId;
               const isExpanded = acc.accountId === expandedId;
               // 선택된 고객사만 API 담당자 데이터 사용, 나머지는 빈 배열
@@ -157,7 +254,11 @@ export default function CustomerSidebar({
                 <div key={acc.accountId} style={{ marginBottom: 7 }}>
                   <button
                     onClick={() => handleAccountClick(acc.accountId)}
-                    onMouseOver={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                      // hover 시 다음 페이지 prefetch — 클릭 시 즉시 전환
+                      router.prefetch(`/customer/${acc.accountId}`);
+                    }}
                     onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                     style={{
                       width: '100%',
@@ -170,10 +271,10 @@ export default function CustomerSidebar({
                       alignItems: 'center',
                       cursor: 'pointer',
                       textAlign: 'left',
-                      transition: 'background-color 0.12s',
+                      transition: 'background-color 0.18s ease, border-color 0.18s ease',
                     }}
                   >
-                    <MoodIcon mood={acc.temperature} />
+                    <WeatherIcon mood={acc.temperature} size="sm" />
                     <div style={{ flex: 1, paddingLeft: 10, minWidth: 0 }}>
                       <div
                         style={{
