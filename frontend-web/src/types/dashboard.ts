@@ -63,3 +63,18 @@ export type CanvasWidget = DashboardWidget & {
   pw: number;
   ph: number;
 };
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  widget?: {
+    widgetType: string;
+    title: string;
+    data: unknown;
+    config: Record<string, unknown>;
+  } | null;
+  timestamp: string;
+  status: 'pending' | 'loading' | 'done' | 'error';
+  errorMessage?: string;
+}
