@@ -19,7 +19,7 @@ public class MoodClient {
 
     public MoodClient(
         @Qualifier("aiRestTemplate") RestTemplate restTemplate,
-        @Value("${python.base-url}") String pythonBaseUrl) {
+        @Value("${ai.server-url}") String pythonBaseUrl) {
         this.restTemplate = restTemplate;
         this.pythonBaseUrl = pythonBaseUrl;
     }
