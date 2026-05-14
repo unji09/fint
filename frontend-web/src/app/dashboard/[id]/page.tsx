@@ -415,6 +415,7 @@ export default function DashboardDetailPage() {
                 queryId: null,
                 inputText: userQuery,
                 result: { data: {}, insightText: '' },
+                data: null,
                 px: Math.max(0, px),
                 py: Math.max(0, py),
                 pw: 400,
