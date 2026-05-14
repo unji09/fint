@@ -1,4 +1,4 @@
-"""POST /ai/signals/collect 라우터 테스트."""
+"""POST /api/v1/signals/collect 라우터 테스트."""
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -82,7 +82,7 @@ class TestCollectSignalsEndpoint:
             return_value=MOCK_RESULT,
         ):
             resp = await ac.post(
-                "/ai/signals/collect",
+                "/api/v1/signals/collect",
                 json={"source": "naver"},
             )
         assert resp.status_code == 200
@@ -111,7 +111,7 @@ class TestCollectSignalsEndpoint:
             base_url="http://test",
         ) as client:
             resp = await client.post(
-                "/ai/signals/collect",
+                "/api/v1/signals/collect",
                 json={"source": "naver"},
             )
         assert resp.status_code == 401
@@ -133,7 +133,7 @@ class TestCollectSignalsEndpoint:
             base_url="http://test",
         ) as client:
             resp = await client.post(
-                "/ai/signals/collect",
+                "/api/v1/signals/collect",
                 json={"source": "naver"},
             )
         assert resp.status_code == 400
@@ -151,7 +151,7 @@ class TestCollectSignalsEndpoint:
             ),
         ):
             resp = await ac.post(
-                "/ai/signals/collect",
+                "/api/v1/signals/collect",
                 json={"source": "dart"},
             )
         body = resp.json()
@@ -161,7 +161,7 @@ class TestCollectSignalsEndpoint:
     @pytest.mark.asyncio
     async def test_invalid_source_returns_422(self, ac):
         resp = await ac.post(
-            "/ai/signals/collect",
+            "/api/v1/signals/collect",
             json={"source": "invalid"},
         )
         assert resp.status_code == 400
