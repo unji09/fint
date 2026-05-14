@@ -91,3 +91,42 @@ async def extract_features(context: str, llm: LLMClient) -> dict:
     if "features" in parsed:
         return parsed["features"]
     return parsed
+
+
+# ============================================================
+# 테스트용 더미 피처 (OPENAI_API_KEY 토큰 절약)
+# 실제 LLM 호출 → extract_features()
+# 더미 모드   → extract_features_dummy()
+# router에서 주석 전환으로 모드 변경
+# ============================================================
+
+_DUMMY_FEATURES: dict = {
+    "FEAT_001": "enterprise",
+    "FEAT_002": "technology",
+    "FEAT_003": "korea",
+    "FEAT_005": "existing",
+    "FEAT_007": "evaluation",
+    "FEAT_008": 15,
+    "FEAT_009": "inbound",
+    "FEAT_011": True,
+    "FEAT_012": "stable",
+    "FEAT_013": False,
+    "FEAT_014": "not_engaged",
+    "FEAT_015": "not_engaged",
+    "FEAT_017": 3,
+    "FEAT_019": "weekly",
+    "FEAT_024": True,
+    "FEAT_025": "quantified",
+    "FEAT_029": True,
+    "FEAT_033": "medium",
+    "FEAT_049": None,
+    "FEAT_059": [],
+    "FEAT_070": None,
+    "FEAT_080": False,
+}
+
+
+def extract_features_dummy(context: str) -> dict:
+    """LLM 호출 없이 하드코딩된 더미 피처를 반환한다 (테스트용)."""
+    logger.info("Using DUMMY features (LLM call skipped). context length=%d", len(context))
+    return dict(_DUMMY_FEATURES)
