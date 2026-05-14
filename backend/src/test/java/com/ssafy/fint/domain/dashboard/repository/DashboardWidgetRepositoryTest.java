@@ -130,7 +130,7 @@ class DashboardWidgetRepositoryTest {
     private DashboardWidget persistWidget(Dashboard dashboard) {
         DashboardWidget widget = DashboardWidget.builder()
                 .dashboard(dashboard)
-                .widgetType(WidgetType.BAR_CHART)
+                .widgetType(WidgetType.CHART)
                 .title("매출 위젯")
                 .config(Map.of("k", "v"))
                 .position(Map.of("x", 0, "y", 0, "w", 6, "h", 4))

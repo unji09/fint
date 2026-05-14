@@ -67,7 +67,7 @@ class DashboardQueryResultWriterTest {
         });
 
         Map<String, Object> result = Map.of(
-                "widget_type", "BAR_CHART",
+                "widget_type", "CHART",
                 "title", "주간 매출 추이",
                 "config", Map.of("colors", "#A8BFA9"),
                 "data", Map.of("labels", "W1"),
@@ -93,7 +93,7 @@ class DashboardQueryResultWriterTest {
         DashboardWidget savedWidget = widgetCaptor.getValue();
         assertThat(savedWidget.getDashboard()).isSameAs(dashboard);
         assertThat(savedWidget.getDashboardQuery()).isSameAs(savedQuery);
-        assertThat(savedWidget.getWidgetType()).isEqualTo(WidgetType.BAR_CHART);
+        assertThat(savedWidget.getWidgetType()).isEqualTo(WidgetType.CHART);
         assertThat(savedWidget.getTitle()).isEqualTo("주간 매출 추이");
         assertThat(savedWidget.getConfig()).containsEntry("colors", "#A8BFA9");
         assertThat(savedWidget.getPosition()).isNull();
@@ -105,7 +105,7 @@ class DashboardQueryResultWriterTest {
     void notFoundWhenDashboardMissing() {
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> writer.persist(TENANT_ID, DASHBOARD_ID, INPUT_TEXT, Map.of("widget_type", "BAR_CHART")))
+        assertThatThrownBy(() -> writer.persist(TENANT_ID, DASHBOARD_ID, INPUT_TEXT, Map.of("widget_type", "CHART")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_NOT_FOUND);
@@ -176,7 +176,7 @@ class DashboardQueryResultWriterTest {
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
 
         long wrongTenantId = 999L;
-        assertThatThrownBy(() -> writer.persist(wrongTenantId, DASHBOARD_ID, INPUT_TEXT, Map.of("widget_type", "BAR_CHART")))
+        assertThatThrownBy(() -> writer.persist(wrongTenantId, DASHBOARD_ID, INPUT_TEXT, Map.of("widget_type", "CHART")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);

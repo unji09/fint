@@ -7,6 +7,9 @@ import com.ssafy.fint.domain.dashboard.dto.DashboardListResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardTemplateGroupResponse;
 import com.ssafy.fint.domain.dashboard.dto.DashboardUpdateRequest;
 import com.ssafy.fint.domain.dashboard.dto.QueryHistoryResponse;
+import com.ssafy.fint.domain.dashboard.dto.WidgetBatchCreateRequest;
+import com.ssafy.fint.domain.dashboard.dto.WidgetCreateRequest;
+import com.ssafy.fint.domain.dashboard.dto.WidgetCreateResponse;
 import com.ssafy.fint.domain.dashboard.dto.WidgetUpdateRequest;
 import com.ssafy.fint.domain.dashboard.service.DashboardService;
 import com.ssafy.fint.domain.dashboard.service.DashboardWidgetService;
@@ -98,6 +101,28 @@ public class DashboardController implements DashboardSwagger {
     ) {
         dashboardService.delete(me, dashboardId);
         return ResponseEntity.noContent().build();
+    }
+
+    @Override
+    @PostMapping("/{dashboardId}/widgets")
+    public ApiResponse<WidgetCreateResponse> addWidget(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId,
+            @Valid @RequestBody WidgetCreateRequest request
+    ) {
+        return ApiResponse.created(
+                dashboardWidgetService.addFromTemplate(me, dashboardId, request.templateId()));
+    }
+
+    @Override
+    @PostMapping("/{dashboardId}/widgets/batch")
+    public ApiResponse<WidgetCreateResponse> addWidgetBatch(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable Long dashboardId,
+            @Valid @RequestBody WidgetBatchCreateRequest request
+    ) {
+        return ApiResponse.created(
+                dashboardWidgetService.addFromTemplateGroup(me, dashboardId, request.templateGroupId()));
     }
 
     @Override

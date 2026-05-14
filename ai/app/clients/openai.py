@@ -13,7 +13,7 @@ class OpenAIClient:
         if not api_key:
             raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, "OPENAI_API_KEY not configured")
         self._raw = AsyncOpenAI(api_key=api_key, base_url=base_url) if base_url else AsyncOpenAI(api_key=api_key)
-        self._instructor = instructor.from_openai(self._raw)
+        self._instructor = instructor.from_openai(self._raw, mode=instructor.Mode.MD_JSON)
 
     async def chat(self, messages: list[dict], *, model: str | None = None) -> str:
         try:
@@ -36,3 +36,14 @@ class OpenAIClient:
             )
         except openai.OpenAIError as e:
             raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, f"OpenAI chat_structured failed: {e}") from e
+
+    async def chat_with_tools(self, messages: list[dict], tools: list[dict], *, model: str | None = None):
+        try:
+            resp = await self._raw.chat.completions.create(
+                model=model or DEFAULT_MODEL,
+                messages=messages,
+                tools=tools,
+            )
+            return resp.choices[0].message
+        except openai.OpenAIError as e:
+            raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, f"OpenAI chat_with_tools failed: {e}") from e

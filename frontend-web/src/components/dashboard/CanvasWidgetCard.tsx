@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import type { CanvasWidget } from '@/types/dashboard';
-import { BarChartSvg, LineChartSvg, SegmentChart, KpiCard, TableWidget } from './ChartWidgets';
+import WidgetRenderer from './WidgetRenderer';
 
 const RESIZE_HANDLES: { dir: string; style: React.CSSProperties }[] = [
   { dir: 'nw', style: { top: -5, left: -5, cursor: 'nw-resize' } },
@@ -122,22 +122,12 @@ export default function CanvasWidgetCard({ w, onUpdate, onTitleChange, onRemove 
         )}
       </div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', padding: '6px 10px 8px', display: 'flex', alignItems: 'stretch' }}>
-        {(() => {
-          const data = (w.result?.data as Record<string, unknown> | undefined) ?? {};
-          const labels = Array.isArray(data.labels) ? (data.labels as string[]) : undefined;
-          const values = Array.isArray(data.values) ? (data.values as number[]) : undefined;
-          const cfg = (w.config ?? {}) as Record<string, unknown>;
-          const xLabel = cfg.x_label as string | undefined;
-          const yLabel = cfg.y_label as string | undefined;
-          if (w.widgetType === 'LINE_CHART') return <LineChartSvg values={values} labels={labels} xLabel={xLabel} yLabel={yLabel} />;
-          if (w.widgetType === 'PIE' || w.widgetType === 'SEGMENT') return <SegmentChart labels={labels} values={values} />;
-          if (w.widgetType === 'KPI') {
-            const kpiVal = values?.[0] ?? (typeof data.value === 'number' ? data.value : undefined);
-            return <KpiCard value={kpiVal} label={labels?.[0]} />;
-          }
-          if (w.widgetType === 'TABLE') return <TableWidget data={data} />;
-          return <BarChartSvg values={values} labels={labels} xLabel={xLabel} yLabel={yLabel} />;
-        })()}
+        <WidgetRenderer
+          widgetType={w.widgetType}
+          config={w.config ?? {}}
+          data={w.data ?? null}
+          result={w.result ?? null}
+        />
       </div>
       {RESIZE_HANDLES.map(h => (
         <div key={h.dir} data-resize="1" onMouseDown={e => onResizeDown(e, h.dir)}

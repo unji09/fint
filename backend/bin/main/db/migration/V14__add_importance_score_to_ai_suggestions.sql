@@ -1,0 +1,2 @@
+ALTER TABLE ai_suggestions
+    ADD COLUMN importance_score DOUBLE PRECISION NOT NULL DEFAULT 0.0;

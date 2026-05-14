@@ -13,7 +13,7 @@ import DashboardList from '@/components/dashboard/DashboardList';
 
 export default function DashboardPage() {
   const { dashboards, loading: listLoading, refetch: refetchList } = useDashboardList();
-  const { templates, loading: templatesLoading } = useDashboardTemplates();
+  const { groups: templateGroups, loading: templatesLoading } = useDashboardTemplates();
   const { create, loading: creating } = useCreateDashboard();
   const { remove: deleteDashboard, loading: deleting } = useDeleteDashboard();
 
@@ -57,12 +57,12 @@ export default function DashboardPage() {
     },
     [create],
   );
-  // 추천 템플릿 카드 클릭 — 그 템플릿으로 새 대시보드를 생성한다.
+  // 추천 템플릿 그룹 카드 클릭 — 그 그룹의 위젯 8개로 새 대시보드를 생성한다.
   const handleTemplateSelect = useCallback(
-    async (templateId: number) => {
+    async (groupId: number) => {
       try {
         try { sessionStorage.removeItem('fint:allDashboards'); } catch { /* ignore */ }
-        await create({ templateId });
+        await create({ templateId: groupId });
       } catch (err) {
         const msg = err instanceof Error ? err.message : '';
         if (msg === 'UNAUTHORIZED') {
@@ -160,7 +160,7 @@ export default function DashboardPage() {
             }}
           >
             <TemplateCardGrid
-              templates={templates}
+              groups={templateGroups}
               onSelect={handleTemplateSelect}
               loading={templatesLoading}
             />

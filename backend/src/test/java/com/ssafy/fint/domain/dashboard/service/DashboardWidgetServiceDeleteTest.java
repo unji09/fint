@@ -158,7 +158,7 @@ class DashboardWidgetServiceDeleteTest {
         DashboardWidget widget = DashboardWidget.builder()
                 .dashboard(dashboard)
                 .dashboardQuery(query)
-                .widgetType(WidgetType.BAR_CHART)
+                .widgetType(WidgetType.CHART)
                 .title("테스트 위젯")
                 .config(Map.of())
                 .position(Map.of("x", 0, "y", 0))

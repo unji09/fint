@@ -76,7 +76,7 @@ class DashboardTemplateRepositoryTest {
 
     private DashboardTemplate persistTemplate(String title) {
         DashboardTemplate template = DashboardTemplate.builder()
-                .widgetType(WidgetType.BAR_CHART)
+                .widgetType(WidgetType.CHART)
                 .title(title)
                 .config(Map.of("k", "v"))
                 .position(Map.of("x", 0, "y", 0, "w", 6, "h", 4))
