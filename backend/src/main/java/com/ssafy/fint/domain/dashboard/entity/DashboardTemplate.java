@@ -48,16 +48,21 @@ public class DashboardTemplate extends BaseEntity {
     @Column(name = "position", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> position;
 
+    @Column(name = "source_query", columnDefinition = "TEXT")
+    private String sourceQuery;
+
     @Builder
     private DashboardTemplate(
             WidgetType widgetType,
             String title,
             Map<String, Object> config,
-            Map<String, Object> position
+            Map<String, Object> position,
+            String sourceQuery
     ) {
         this.widgetType = widgetType;
         this.title = title;
         this.config = config;
         this.position = position;
+        this.sourceQuery = sourceQuery;
     }
 }

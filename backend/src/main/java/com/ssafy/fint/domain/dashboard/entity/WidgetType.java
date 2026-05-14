@@ -1,14 +1,14 @@
 package com.ssafy.fint.domain.dashboard.entity;
 
 /**
- * 대시보드 위젯의 시각화 유형.
- * DashboardWidget, DashboardTemplate 양쪽에서 공유한다.
+ * 대시보드 위젯의 렌더링 대분류.
+ * 세부 차트 종류(bar, line, pie 등)는 config.chart.type 에서 결정한다.
  */
 public enum WidgetType {
-    BAR_CHART,
-    LINE_CHART,
-    PIE,
-    KPI,
+    CHART,
+    CARD,
     TABLE,
-    NL_QUERY
+    LIST,
+    PROGRESS,
+    SUMMARY
 }
