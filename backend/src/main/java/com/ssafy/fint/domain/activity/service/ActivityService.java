@@ -1,11 +1,8 @@
 package com.ssafy.fint.domain.activity.service;
 
-import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
-import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
-import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
+import com.ssafy.fint.domain.activity.dto.*;
 import com.ssafy.fint.domain.activity.entity.Activity;
+import com.ssafy.fint.domain.activity.entity.SttStatus;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
@@ -182,5 +179,21 @@ public class ActivityService {
         Activity saved = activityRepository.saveAndFlush(activity);
         log.debug("[ActivityUpdate] activityId={} tenantId={} userId={}", saved.getActivityId(), tenantId, userId);
         return ActivityUpdateResponse.from(saved);
+    }
+
+    @Transactional
+    public RecordingResponse requestRecording(Long activityId, RecordingRequest request) {
+        Long tenantId = SecurityUtils.currentTenantId();
+        Long userId = SecurityUtils.currentUserId();
+
+        Activity activity = activityRepository
+            .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(activityId, userId, tenantId)
+            .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
+
+        activity.saveRecordingKey(request.fileKey());
+        activity.changeSttStatus(SttStatus.PROCESSING);
+
+        log.info("[Recording] activityId={} fileKey={}", activityId, request.fileKey());
+        return RecordingResponse.from(activity);
     }
 }

@@ -68,6 +68,7 @@ public class MoodAnalysisService {
             .build();
 
         temperatureHistoryRepository.save(history);
+        activity.updateSummary(request.summary());
         activity.changeMoodStatus(MoodStatus.COMPLETED);
 
         log.info("[MoodCallback] activityId={} mood={} score={}", activityId, mood, request.moodScore());
