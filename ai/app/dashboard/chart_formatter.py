@@ -1,73 +1,180 @@
-"""위젯 타입별 데이터 정규화."""
+"""Chart.js 호환 위젯 결과 포매터."""
 
 from __future__ import annotations
 
-from app.schemas.dashboard import WidgetType
-
+from app.schemas.dashboard import InsightResult, WidgetType
 
 _MAX_CHART_CATEGORIES = 20
 _MAX_PIE_SEGMENTS = 10
 _TABLE_MIN_COLUMNS = 5
+_MAX_TITLE_LENGTH = 100
+
+_WIDGET_TO_CHART_TYPE = {
+    WidgetType.BAR: "bar",
+    WidgetType.LINE: "line",
+    WidgetType.PIE: "pie",
+}
 
 
-def format_chart_data(
-    widget_type: WidgetType,
+def format_result(
+    insight: InsightResult,
     rows: list[dict],
     *,
-    x_column: str | None = None,
-    y_column: str | None = None,
-) -> tuple[WidgetType, dict]:
-    widget_type = _correct_widget_type(widget_type, rows, x_column=x_column, y_column=y_column)
+    source_query: str | None,
+    search_type: str,
+) -> dict:
+    """InsightResult + rows → Spring 전달용 result dict."""
+    widget_type = _correct_widget_type(insight, rows)
+    chart_type = _resolve_chart_type(widget_type, insight.chart_type)
+    title = (insight.title or "")[:_MAX_TITLE_LENGTH]
 
-    if widget_type == WidgetType.KPI:
-        return widget_type, _format_kpi(rows, y_column=y_column)
-    if widget_type == WidgetType.TABLE:
-        return widget_type, _format_table(rows)
-    return widget_type, _format_xy(rows, x_column=x_column, y_column=y_column)
+    return {
+        "widget_type": widget_type.value,
+        "chart_type": chart_type,
+        "title": title,
+        "config": _build_config(widget_type, insight, rows),
+        "data": _build_data(rows),
+        "column_metadata": _build_column_metadata(insight),
+        "insight_text": insight.insight_text,
+        "key_findings": insight.key_findings,
+        "data_summary": insight.data_summary,
+        "suggested_chart_types": insight.suggested_chart_types,
+        "source_query": source_query,
+        "search_type": search_type,
+    }
 
 
-def _correct_widget_type(
-    widget_type: WidgetType,
-    rows: list[dict],
-    *,
-    x_column: str | None,
-    y_column: str | None,
-) -> WidgetType:
-    if widget_type in (WidgetType.KPI, WidgetType.TABLE):
-        return widget_type
+# --- widget type correction ---
+
+
+def _correct_widget_type(insight: InsightResult, rows: list[dict]) -> WidgetType:
+    wt = insight.widget_type
     if not rows:
-        return widget_type
-    if len(rows) == 1 and not x_column and y_column:
+        return wt
+    if wt == WidgetType.KPI and len(rows) > 1:
+        return WidgetType.TABLE
+    if wt in (WidgetType.KPI, WidgetType.TABLE):
+        return wt
+    if len(rows) == 1 and not insight.labels_field and insight.datasets:
         return WidgetType.KPI
-    col_count = len(rows[0])
-    if col_count >= _TABLE_MIN_COLUMNS:
+    if len(rows[0]) >= _TABLE_MIN_COLUMNS:
         return WidgetType.TABLE
     if len(rows) > _MAX_CHART_CATEGORIES:
         return WidgetType.TABLE
-    if widget_type == WidgetType.PIE and len(rows) > _MAX_PIE_SEGMENTS:
+    if wt == WidgetType.PIE and len(rows) > _MAX_PIE_SEGMENTS:
         return WidgetType.BAR
-    return widget_type
+    return wt
 
 
-def _format_xy(rows: list[dict], *, x_column: str | None, y_column: str | None) -> dict:
-    if not rows or not x_column or not y_column:
-        return {"labels": [], "values": []}
+def _resolve_chart_type(widget_type: WidgetType, insight_chart_type: str | None) -> str | None:
+    if widget_type in (WidgetType.KPI, WidgetType.TABLE):
+        return None
+    return insight_chart_type or _WIDGET_TO_CHART_TYPE.get(widget_type)
+
+
+# --- config builders ---
+
+
+def _build_config(widget_type: WidgetType, insight: InsightResult, rows: list[dict]) -> dict:
+    if widget_type == WidgetType.KPI:
+        return _build_kpi_config(insight)
+    if widget_type == WidgetType.TABLE:
+        return _build_table_config(insight, rows)
+    return _build_chart_config(widget_type, insight)
+
+
+def _build_chart_config(widget_type: WidgetType, insight: InsightResult) -> dict:
+    chart_type = _resolve_chart_type(widget_type, insight.chart_type)
+    options: dict = {}
+    if insight.x_label:
+        options["xAxis"] = {"label": insight.x_label}
+    if insight.y_label:
+        y_axis: dict = {"label": insight.y_label}
+        if insight.y_unit:
+            y_axis["unit"] = insight.y_unit
+        options["yAxis"] = y_axis
+    options["legend"] = len(insight.datasets) > 1
+
     return {
-        "labels": [row.get(x_column) for row in rows],
-        "values": [row.get(y_column, 0) for row in rows],
+        "chart": {"type": chart_type, "variant": insight.chart_variant},
+        "data": {
+            "labelsField": insight.labels_field,
+            "datasets": [
+                {"label": d.label, "valueField": d.value_field}
+                for d in insight.datasets
+            ],
+        },
+        "options": options,
+        "display": {
+            "format": insight.display_format,
+            "unit": insight.y_unit,
+            "emptyMessage": "표시할 데이터가 없습니다",
+        },
     }
 
 
-def _format_kpi(rows: list[dict], *, y_column: str | None) -> dict:
-    if not rows or not y_column:
-        return {"value": 0}
-    return {"value": rows[0].get(y_column, 0)}
-
-
-def _format_table(rows: list[dict]) -> dict:
-    if not rows:
-        return {"columns": [], "rows": []}
+def _build_kpi_config(insight: InsightResult) -> dict:
+    value_field = insight.datasets[0].value_field if insight.datasets else None
     return {
-        "columns": list(rows[0].keys()),
+        "data": {"valueField": value_field},
+        "display": {
+            "label": insight.title,
+            "format": insight.display_format,
+            "unit": insight.y_unit,
+        },
+    }
+
+
+def _build_table_config(insight: InsightResult, rows: list[dict]) -> dict:
+    columns: list[dict] = []
+    if insight.datasets:
+        if insight.labels_field:
+            columns.append({
+                "label": insight.x_label or insight.labels_field,
+                "field": insight.labels_field,
+            })
+        for ds in insight.datasets:
+            col: dict = {"label": ds.label, "field": ds.value_field}
+            if insight.display_format:
+                col["format"] = insight.display_format
+            if insight.y_unit:
+                col["unit"] = insight.y_unit
+            columns.append(col)
+    elif rows:
+        columns = [{"label": k, "field": k} for k in rows[0].keys()]
+
+    return {
+        "columns": columns,
+        "display": {"emptyMessage": "표시할 데이터가 없습니다"},
+    }
+
+
+# --- data ---
+
+
+def _build_data(rows: list[dict]) -> dict:
+    return {
+        "columns": list(rows[0].keys()) if rows else [],
         "rows": rows,
+        "totalRowCount": len(rows),
     }
+
+
+# --- column metadata ---
+
+
+def _build_column_metadata(insight: InsightResult) -> dict:
+    metadata: dict = {}
+    if insight.labels_field:
+        metadata[insight.labels_field] = {
+            "label": insight.x_label or insight.labels_field,
+            "type": "text",
+        }
+    for ds in insight.datasets:
+        entry: dict = {"label": ds.label, "type": "numeric"}
+        if insight.y_unit:
+            entry["unit"] = insight.y_unit
+        if insight.display_format:
+            entry["format"] = insight.display_format
+        metadata[ds.value_field] = entry
+    return metadata

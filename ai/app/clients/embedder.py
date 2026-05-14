@@ -8,6 +8,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+_EMBED_BATCH_SIZE = 32
+
 
 @runtime_checkable
 class EmbedderClient(Protocol):
@@ -41,15 +43,23 @@ class OnnxEmbedderClient:
         if not texts:
             return np.empty((0, self._dim), dtype=np.float32)
 
+        model_inputs = {i.name for i in self._session.get_inputs()}
+        chunks: list[np.ndarray] = []
+
+        for start in range(0, len(texts), _EMBED_BATCH_SIZE):
+            batch = texts[start : start + _EMBED_BATCH_SIZE]
+            chunks.append(self._embed_chunk(batch, model_inputs))
+
+        return np.concatenate(chunks, axis=0)
+
+    def _embed_chunk(self, texts: list[str], model_inputs: set[str]) -> np.ndarray:
         encodings = self._tokenizer.encode_batch(texts)
         input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
         attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
-        token_type_ids = np.zeros_like(input_ids)
 
         feed = {"input_ids": input_ids, "attention_mask": attention_mask}
-        model_inputs = {i.name for i in self._session.get_inputs()}
         if "token_type_ids" in model_inputs:
-            feed["token_type_ids"] = token_type_ids
+            feed["token_type_ids"] = np.zeros_like(input_ids)
 
         outputs = self._session.run(None, feed)
         token_embeddings = outputs[0]

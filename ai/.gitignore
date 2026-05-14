@@ -11,3 +11,4 @@ htmlcov/
 dist/
 model/
 checkpoint.json
+docs/

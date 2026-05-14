@@ -1,10 +1,10 @@
 'use client';
 
-import type { DashboardTemplate } from '@/types/dashboard';
+import type { TemplateGroup } from '@/types/dashboard';
 
 interface TemplateCardGridProps {
-  templates: DashboardTemplate[];
-  onSelect: (templateId: number) => void;
+  groups: TemplateGroup[];
+  onSelect: (groupId: number) => void;
   loading?: boolean;
 }
 
@@ -195,9 +195,15 @@ function CompanyPreview() {
 
 const PREVIEWS = [BarChartPreview, TablePreview, CompanyPreview];
 
-export default function TemplateCardGrid({ templates, onSelect, loading }: TemplateCardGridProps) {
+const WIDGET_TYPE_ICON: Record<string, string> = {
+  CHART: '📊',
+  TABLE: '📋',
+  CARD: '🔢',
+  LIST: '📝',
+};
+
+export default function TemplateCardGrid({ groups, onSelect, loading }: TemplateCardGridProps) {
   return (
-    /* height: 100% → 부모 flex:1 영역을 꽉 채움 */
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <svg width="13" height="17" viewBox="0 0 13 17" fill="none">
@@ -221,13 +227,12 @@ export default function TemplateCardGrid({ templates, onSelect, loading }: Templ
         </h2>
       </div>
 
-      {/* 그리드 — flex:1 로 남은 높이 전부 차지, 카드는 height:100% */}
       <div
         style={{
           flex: 1,
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gridTemplateRows: '1fr' /* 카드가 행 높이를 꽉 채움 */,
+          gridTemplateColumns: `repeat(${Math.min(groups.length || 1, 3)}, minmax(0, 1fr))`,
+          gridTemplateRows: '1fr',
           gap: 20,
           minHeight: 0,
         }}
@@ -239,12 +244,14 @@ export default function TemplateCardGrid({ templates, onSelect, loading }: Templ
                 style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 12 }}
               />
             ))
-          : templates.map((tpl, idx) => {
+          : groups.map((group, idx) => {
               const Preview = PREVIEWS[idx % PREVIEWS.length];
+              const chartCount = group.widgets.filter((w) => w.widgetType === 'CHART').length;
+              const tableCount = group.widgets.filter((w) => w.widgetType === 'TABLE').length;
               return (
                 <button
-                  key={tpl.templateId}
-                  onClick={() => onSelect(tpl.templateId)}
+                  key={group.groupId}
+                  onClick={() => onSelect(group.groupId)}
                   style={{
                     background: '#ffffff',
                     border: '1px solid rgba(226,232,240,0.8)',
@@ -260,7 +267,7 @@ export default function TemplateCardGrid({ templates, onSelect, loading }: Templ
                     cursor: 'pointer',
                     padding: 1,
                     transition: 'box-shadow 0.18s, border-color 0.18s, transform 0.18s',
-                    height: '100%' /* 그리드 행을 꽉 채움 */,
+                    height: '100%',
                   }}
                   onMouseEnter={(e) => {
                     const el = e.currentTarget;
@@ -287,17 +294,22 @@ export default function TemplateCardGrid({ templates, onSelect, loading }: Templ
                       flexShrink: 0,
                     }}
                   >
-                    <span
-                      style={{
-                        fontFamily: 'Pretendard, sans-serif',
-                        fontWeight: 600,
-                        fontSize: 13,
-                        color: '#1d1a24',
-                        letterSpacing: '0.13px',
-                      }}
-                    >
-                      {tpl.title}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span
+                        style={{
+                          fontFamily: 'Pretendard, sans-serif',
+                          fontWeight: 600,
+                          fontSize: 13,
+                          color: '#1d1a24',
+                          letterSpacing: '0.13px',
+                        }}
+                      >
+                        기본 {group.groupId}
+                      </span>
+                      <span style={{ fontFamily: 'Pretendard, sans-serif', fontSize: 11, color: '#94a3b8' }}>
+                        차트 {chartCount}개 · 테이블 {tableCount}개
+                      </span>
+                    </div>
                     <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
                       <path
                         d="M1 10L10 1M10 1H4M10 1V7"
@@ -315,9 +327,43 @@ export default function TemplateCardGrid({ templates, onSelect, loading }: Templ
                       background: '#ffffff',
                       position: 'relative',
                       minHeight: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
                     }}
                   >
-                    <Preview />
+                    <div style={{ flex: 1, minHeight: 0 }}>
+                      <Preview />
+                    </div>
+                    <div style={{ padding: '0 14px 12px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {group.widgets.slice(0, 4).map((w) => (
+                        <span
+                          key={w.templateId}
+                          style={{
+                            fontFamily: 'Pretendard, sans-serif',
+                            fontSize: 10,
+                            color: '#64748b',
+                            background: '#f1f5f9',
+                            borderRadius: 4,
+                            padding: '2px 6px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {WIDGET_TYPE_ICON[w.widgetType] ?? '📊'} {w.title}
+                        </span>
+                      ))}
+                      {group.widgets.length > 4 && (
+                        <span
+                          style={{
+                            fontFamily: 'Pretendard, sans-serif',
+                            fontSize: 10,
+                            color: '#94a3b8',
+                            padding: '2px 4px',
+                          }}
+                        >
+                          +{group.widgets.length - 4}개
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );

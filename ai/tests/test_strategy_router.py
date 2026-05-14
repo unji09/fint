@@ -52,7 +52,7 @@ class TestNextActionsEndpoint:
             return_value=MOCK_FEATURES,
         ):
             resp = await client.post(
-                "/ai/next-actions",
+                "/api/v1/ai/next-actions",
                 json={"accountId": 1, "context": "한국 대형 보험사 PoC 진행 중"},
                 headers={"X-Tenant-Id": "1"},
             )
@@ -75,7 +75,7 @@ class TestNextActionsEndpoint:
     @pytest.mark.asyncio
     async def test_missing_context_returns_400(self, client):
         resp = await client.post(
-            "/ai/next-actions",
+            "/api/v1/ai/next-actions",
             json={"accountId": 1, "context": ""},
             headers={"X-Tenant-Id": "1"},
         )
@@ -84,7 +84,7 @@ class TestNextActionsEndpoint:
     @pytest.mark.asyncio
     async def test_missing_tenant_returns_401(self, client):
         resp = await client.post(
-            "/ai/next-actions",
+            "/api/v1/ai/next-actions",
             json={"accountId": 1, "context": "테스트 상황"},
         )
         assert resp.status_code == 401
@@ -97,7 +97,7 @@ class TestNextActionsEndpoint:
             return_value={},
         ):
             resp = await client.post(
-                "/ai/next-actions",
+                "/api/v1/ai/next-actions",
                 json={"accountId": 1, "context": "상황 설명"},
                 headers={"X-Tenant-Id": "1"},
             )
@@ -111,7 +111,7 @@ class TestNextActionsEndpoint:
             return_value=MOCK_FEATURES,
         ):
             resp = await client.post(
-                "/ai/next-actions",
+                "/api/v1/ai/next-actions",
                 json={"accountId": 42, "context": "한국 대형 보험사 PoC scoping 단계"},
                 headers={"X-Tenant-Id": "1"},
             )

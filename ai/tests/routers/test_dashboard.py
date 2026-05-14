@@ -15,7 +15,6 @@ from app.schemas.dashboard import (
     InsightResult,
     IntentResult,
     QuerySpec,
-    WidgetConfig,
     WidgetType,
 )
 
@@ -33,7 +32,6 @@ class FakeLLM:
             insight_text="총 1건의 딜이 조회되었습니다.",
             key_findings=["테스트"],
             data_summary="딜 1건",
-            config=WidgetConfig(),
         )
 
     async def chat_structured(self, messages, response_model, *, model=None):

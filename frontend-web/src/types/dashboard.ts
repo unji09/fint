@@ -19,6 +19,7 @@ export interface DashboardWidget {
   queryId: number | null;
   inputText: string | null;
   result: WidgetResult | null;
+  data: Record<string, unknown>[] | null;
 }
 
 export interface Dashboard {
@@ -36,6 +37,17 @@ export interface DashboardTemplate {
   thumbnailKey: string | null;
   config: Record<string, unknown>;
   position: WidgetPosition;
+}
+
+export interface TemplateGroup {
+  groupId: number;
+  widgets: {
+    templateId: number;
+    widgetType: string;
+    title: string;
+    config: Record<string, unknown>;
+    position: Record<string, unknown>;
+  }[];
 }
 
 export interface CreateDashboardRequest {

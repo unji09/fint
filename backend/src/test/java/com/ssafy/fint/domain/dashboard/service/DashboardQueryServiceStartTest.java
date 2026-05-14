@@ -140,7 +140,7 @@ class DashboardQueryServiceStartTest {
         Dashboard dashboard = newDashboard(OWNER_USER_ID);
         DashboardWidget widget = DashboardWidget.builder()
                 .dashboard(dashboard)
-                .widgetType(WidgetType.BAR_CHART)
+                .widgetType(WidgetType.CHART)
                 .title("업종별 매출")
                 .config(Map.of("colors", List.of("#fff"), "x_label", "업종"))
                 .sourceQuery("SELECT industry, SUM(amount) FROM deals GROUP BY industry")
@@ -161,7 +161,7 @@ class DashboardQueryServiceStartTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> sentWidget = (Map<String, Object>) cmd.existingWidgets().get(0);
         assertThat(sentWidget)
-                .containsEntry("widget_type", "BAR_CHART")
+                .containsEntry("widget_type", "CHART")
                 .containsEntry("title", "업종별 매출")
                 .containsEntry("source_query", "SELECT industry, SUM(amount) FROM deals GROUP BY industry");
         @SuppressWarnings("unchecked")

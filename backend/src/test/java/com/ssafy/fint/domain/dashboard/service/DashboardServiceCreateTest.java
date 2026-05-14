@@ -217,7 +217,7 @@ class DashboardServiceCreateTest {
         List<DashboardTemplate> templates = new ArrayList<>();
         IntStream.rangeClosed((int) startId, (int) endId).forEach(id -> {
             DashboardTemplate template = DashboardTemplate.builder()
-                    .widgetType(WidgetType.BAR_CHART)
+                    .widgetType(WidgetType.CHART)
                     .title("template-" + id)
                     .config(Map.of("k", "v"))
                     .position(Map.of("x", 0, "y", 0))

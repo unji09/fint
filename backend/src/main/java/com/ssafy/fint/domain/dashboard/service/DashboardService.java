@@ -58,6 +58,7 @@ public class DashboardService {
     private final DashboardWidgetRepository dashboardWidgetRepository;
     private final DashboardQueryRepository dashboardQueryRepository;
     private final DashboardQueryService dashboardQueryService;
+    private final QueryExecutionService queryExecutionService;
     private final FilePresignedService filePresignedService;
     private final AwsS3Properties awsS3Properties;
 
@@ -92,7 +93,12 @@ public class DashboardService {
         dashboard.touchAccess(OffsetDateTime.now());
 
         List<DashboardWidget> widgets = dashboardWidgetRepository.findByDashboard(dashboard);
-        return DashboardDetailResponse.of(dashboard, widgets);
+        List<DashboardDetailResponse.WidgetDetail> details = widgets.stream()
+                .map(w -> DashboardDetailResponse.WidgetDetail.from(
+                        w, executeSourceQuery(w.getSourceQuery(), me.getTenantId())))
+                .toList();
+
+        return DashboardDetailResponse.of(dashboard, details);
     }
 
     @Transactional(readOnly = true)
@@ -195,6 +201,13 @@ public class DashboardService {
         }
     }
 
+    private List<Map<String, Object>> executeSourceQuery(String sourceQuery, Long tenantId) {
+        if (sourceQuery == null || sourceQuery.isBlank()) {
+            return null;
+        }
+        return queryExecutionService.execute(sourceQuery, tenantId);
+    }
+
     private String resolveTitle(String input) {
         return StringUtils.hasText(input) ? input : DEFAULT_TITLE;
     }
@@ -212,6 +225,7 @@ public class DashboardService {
                         .title(template.getTitle())
                         .config(template.getConfig())
                         .position(template.getPosition())
+                        .sourceQuery(template.getSourceQuery())
                         .build())
                 .toList();
 
