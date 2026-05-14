@@ -25,6 +25,12 @@ export type SttStatus = 'NONE' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILE
 export interface SttLine {
   timestamp?: string;
   text: string;
+  /** 'SPEAKER_00' 등 백엔드 원본 화자 ID */
+  speakerId?: string;
+  /** 사람이 읽는 화자 이름 ('김민수 부장' 등). 없으면 speakerId에서 '화자 N'으로 폴백 */
+  speakerName?: string;
+  /** 본인 발화 여부 — true면 우측 정렬 + self 컬러로 표시 */
+  isSelf?: boolean;
 }
 
 export interface ActivityDetail {
@@ -281,9 +287,18 @@ export function usePollSttStatus() {
               const status: SttStatus = d?.sttStatus ?? 'NONE';
               const rawTr = d?.sttTranscript ?? d?.transcript ?? [];
               const transcript: SttLine[] = Array.isArray(rawTr)
-                ? rawTr.map((t: { timestamp?: string; ts?: string; text?: string; content?: string }) => ({
+                ? rawTr.map((t: {
+                    timestamp?: string; ts?: string;
+                    text?: string; content?: string;
+                    speakerId?: string; speaker_id?: string; speaker?: string;
+                    speakerName?: string; speaker_name?: string;
+                    isSelf?: boolean; is_self?: boolean;
+                  }) => ({
                     timestamp: t.timestamp ?? t.ts ?? '',
                     text: t.text ?? t.content ?? '',
+                    speakerId: t.speakerId ?? t.speaker_id ?? t.speaker ?? undefined,
+                    speakerName: t.speakerName ?? t.speaker_name ?? undefined,
+                    isSelf: t.isSelf ?? t.is_self ?? undefined,
                   }))
                 : [];
               const summary =
