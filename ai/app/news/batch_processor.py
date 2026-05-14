@@ -103,11 +103,16 @@ class BatchProcessor:
         self, csv_file: Path, *, byte_offset: int = 0
     ) -> AsyncIterator[tuple[list[NewsRecord], int]]:
         batch: list[NewsRecord] = []
-        with open(csv_file, encoding="utf-8") as f:
+        with open(csv_file, "rb") as raw:
             if byte_offset == 0:
-                f.readline()
+                raw.readline()
             else:
-                f.buffer.seek(byte_offset)
+                raw.seek(byte_offset)
+                raw.readline()
+
+            import io
+
+            f = io.TextIOWrapper(raw, encoding="utf-8")
 
             import csv as csv_mod
 
