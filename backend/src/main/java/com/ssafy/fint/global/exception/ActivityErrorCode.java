@@ -12,7 +12,8 @@ public enum ActivityErrorCode implements ErrorCode {
     BLANK_TITLE(HttpStatus.BAD_REQUEST, "AC002", "title 은 비어 있을 수 없습니다."),
     DEAL_NOT_FOUND(HttpStatus.NOT_FOUND, "AC301", "연결 가능한 딜을 찾을 수 없습니다."),
     PIPELINE_STAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "AC302", "연결 가능한 파이프라인 스테이지를 찾을 수 없습니다."),
-    ACTIVITY_NOT_FOUND(HttpStatus.NOT_FOUND, "AC303", "활동을 찾을 수 없습니다.");
+    ACTIVITY_NOT_FOUND(HttpStatus.NOT_FOUND, "AC303", "활동을 찾을 수 없습니다."),
+    STT_ALREADY_PROCESSING(HttpStatus.CONFLICT, "AC409", "STT 처리가 이미 진행 중입니다.");
 
     private final HttpStatus status;
     private final String code;

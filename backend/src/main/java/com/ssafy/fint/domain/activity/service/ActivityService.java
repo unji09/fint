@@ -37,6 +37,7 @@ public class ActivityService {
     private final PipelineStageRepository pipelineStageRepository;
     private final UserRepository userRepository;
     private final DealService dealService;
+    private final SttProcessorService sttProcessorService;
 
     public Page<Activity> findAll(ActivityListFilter filter, Pageable pageable) {
         return activityRepository.search(SecurityUtils.currentTenantId(), filter, pageable);
@@ -190,10 +191,21 @@ public class ActivityService {
             .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(activityId, userId, tenantId)
             .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
 
+        if (activity.getSttStatus() == SttStatus.PROCESSING) {
+            throw new BusinessException(ActivityErrorCode.STT_ALREADY_PROCESSING);
+        }
+
         activity.saveRecordingKey(request.fileKey());
         activity.changeSttStatus(SttStatus.PROCESSING);
 
+        Deal deal = activity.getDeal();
+        Long accountId = (deal != null && deal.getAccount() != null)
+                ? deal.getAccount().getAccountId()
+                : null;
+        sttProcessorService.process(activityId, tenantId, accountId, request.fileKey(), "ko");
+
         log.info("[Recording] activityId={} fileKey={}", activityId, request.fileKey());
+
         return RecordingResponse.from(activity);
     }
 }

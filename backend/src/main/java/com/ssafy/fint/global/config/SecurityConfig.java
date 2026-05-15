@@ -66,6 +66,7 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers(
                     path.matcher("/api/v1/internal/**"),
+                    path.matcher("/internal/**"),
                     path.matcher("/error")
                 ).permitAll()
                 .requestMatchers(

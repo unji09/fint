@@ -1,15 +1,18 @@
 package com.ssafy.fint.domain.activity.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 public record SttCallbackRequest(
-    Long accountId,
-    List<Segment> segments
+        Long tenantId,
+        Long accountId,
+        List<Segment> segments
 ) {
     public record Segment(
-        String speakerId,
-        String text,
-        Integer startMs,
-        Integer endMs
+            String text,
+            @JsonProperty("speaker_id") String speakerId,
+            @JsonProperty("start_ms") Integer startMs,
+            @JsonProperty("end_ms") Integer endMs
     ) {}
 }
