@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * STT 비동기 처리기.
  * <p>
- * {@link com.ssafy.fint.domain.activity.service.ActivityService#requestRecording}에서 호출되며,
+ * {@link RecordingService#create}에서 호출되며,
  * sttExecutor 스레드풀에서 FastAPI를 동기 호출 후 결과를 {@link SttCallbackService}에 위임한다.
  * <p>
  * @Async가 동일 빈 내부에서 동작하지 않는 Spring AOP 제약으로 별도 빈으로 분리한다.
@@ -26,21 +26,22 @@ public class SttProcessorService {
     private final SttCallbackService sttCallbackService;
 
     @Async("sttExecutor")
-    public void process(Long activityId, Long tenantId, Long accountId, String s3Key, String language) {
-        log.info("[SttProcessor] start activityId={} tenantId={}", activityId, tenantId);
+    public void process(Long activityId, Long recordingId, Long tenantId, Long accountId, String s3Key, String language) {
+        log.info("[SttProcessor] start activityId={} recordingId={} tenantId={}", activityId, recordingId, tenantId);
         try {
             List<SttCallbackRequest.Segment> segments =
                     aiSttClient.transcribe(s3Key, tenantId, language);
 
             sttCallbackService.processCallback(
+                    recordingId,
                     activityId,
                     new SttCallbackRequest(tenantId, accountId, segments)
             );
 
-            log.info("[SttProcessor] completed activityId={} segments={}", activityId, segments.size());
+            log.info("[SttProcessor] completed activityId={} recordingId={} segments={}", activityId, recordingId, segments.size());
         } catch (Exception e) {
-            log.error("[SttProcessor] failed activityId={}", activityId, e);
-            sttCallbackService.markFailed(activityId, tenantId);
+            log.error("[SttProcessor] failed activityId={} recordingId={}", activityId, recordingId, e);
+            sttCallbackService.markFailed(recordingId, tenantId);
         }
     }
 }

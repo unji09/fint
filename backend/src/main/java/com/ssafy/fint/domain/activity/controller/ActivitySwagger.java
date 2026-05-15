@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.activity.controller;
 
 import com.ssafy.fint.domain.activity.dto.*;
+import com.ssafy.fint.domain.activity.dto.RecordingUpdateRequest;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,8 +30,9 @@ public interface ActivitySwagger {
 
     @Operation(
             summary = "영업 활동 상세 조회",
-            description = "현재 테넌트의 활동 단건을 STT 전사본·AI 요약·attendees 와 함께 반환한다. "
+            description = "현재 테넌트의 활동 단건을 AI 요약·attendees 와 함께 반환한다. "
                     + "dealId 쿼리 파라미터가 주어지면 활동의 dealId 와 일치하는지 검증하고 불일치 시 404 를 반환한다. "
+                    + "녹음 기록은 GET /activities/{id}/recordings 로 별도 조회한다."
     )
     ApiResponse<ActivityDetailResponse> detail(Long activityId, Long dealId);
 
@@ -44,13 +46,32 @@ public interface ActivitySwagger {
     @Operation(
             summary = "영업 활동 부분 수정",
             description = "현재 사용자가 작성한 활동을 부분 수정한다. "
-                    + "JSON 키를 생략하면 해당 필드는 변경되지 않고, 명시적 null 로 보내면 해당 필드가 비워진다 "
+                    + "JSON 키를 생략하면 해당 필드는 변경되지 않고, 명시적 null 로 보내면 해당 필드가 비워진다."
     )
     ApiResponse<ActivityUpdateResponse> update(Long activityId, ActivityUpdateRequest request);
 
     @Operation(
-        summary = "미팅 녹음 STT 및 분석 요청",
-        description = "업로드된 음성 파일(fileKey)을 기반으로 STT 전사 및 날씨 분석 작업을 비동기로 요청한다."
+            summary = "녹음본 업로드 및 STT 분석 요청",
+            description = "업로드된 음성 파일(fileKey)로 새 녹음 기록을 생성하고 STT 전사 작업을 비동기로 시작한다. "
+                    + "동일 활동에 여러 녹음본을 추가할 수 있다."
     )
     ApiResponse<RecordingResponse> recording(Long activityId, RecordingRequest request);
+
+    @Operation(
+            summary = "녹음 목록 조회",
+            description = "활동에 연결된 녹음 기록을 최신순으로 반환한다."
+    )
+    ApiResponse<RecordingListResponse> recordings(Long activityId);
+
+    @Operation(
+            summary = "녹음 제목 수정",
+            description = "녹음 기록의 제목을 수정한다."
+    )
+    ApiResponse<RecordingResponse> updateRecording(Long activityId, Long recordingId, RecordingUpdateRequest request);
+
+    @Operation(
+            summary = "녹음 삭제",
+            description = "특정 녹음 기록을 삭제한다. 성공 시 204 No Content 를 반환한다."
+    )
+    void deleteRecording(Long activityId, Long recordingId);
 }
