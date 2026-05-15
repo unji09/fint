@@ -590,7 +590,7 @@ export default function DashboardDetailPage() {
   const consumedQueryRef = useRef<string | null>(null);
   useEffect(() => {
     let q: string | null = searchParams.get('q');
-    let fromUrl = !!q;
+    const fromUrl = !!q;
     if (!q) {
       try { q = sessionStorage.getItem('fint:pendingQuery'); } catch { /* ignore */ }
       if (q) {

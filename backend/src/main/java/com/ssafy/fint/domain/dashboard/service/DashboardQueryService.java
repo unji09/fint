@@ -129,6 +129,7 @@ public class DashboardQueryService {
 
     private Map<String, Object> toAiPayload(DashboardWidget widget) {
         Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("widget_id", widget.getDashboardWidgetId());
         payload.put("widget_type", widget.getWidgetType() == null ? null : widget.getWidgetType().name());
         payload.put("title", widget.getTitle());
         payload.put("source_query", widget.getSourceQuery());
