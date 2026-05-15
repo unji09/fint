@@ -6,7 +6,16 @@ import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
 import { formatTime, formatFullDate } from './utils';
-import { useUploadRecording, usePollSttStatus, type SttLine } from '@/hooks/useActivity';
+import {
+  useUploadRecording,
+  usePollSttStatus,
+  useTranscriptStream,
+  useRecordingList,
+  useDeleteRecording,
+  useUpdateRecordingTitle,
+  type SttLine,
+  type RecordingItem,
+} from '@/hooks/useActivity';
 
 interface Props {
   event: CalendarEvent | null;
@@ -35,18 +44,6 @@ export function formatSpeakerLabel(line: SttLine, fallbackIndex?: number): strin
   return '화자';
 }
 
-// 백엔드 WS 미연결 상태에서 녹음 중 실시간 전사 UI를 보여주기 위한 데모 라인.
-// 실제 WS 연결은 후속 이슈에서 useTranscriptStream hook으로 교체.
-// 실제로는 화자 식별 정보(이름)를 알 수 없으므로 speakerId만 두고
-// formatSpeakerLabel이 "화자 1", "화자 2" 형태로 변환한다.
-const DEMO_LIVE_LINES: SttLine[] = [
-  { timestamp: '00:03', text: '안녕하십니까. 이 과장님 소개로 뵙게 되어 반갑습니다.', speakerId: 'SPEAKER_00', isSelf: false },
-  { timestamp: '00:09', text: '네, 반갑습니다. 저희 솔루션에 관심을 가져주셔서 감사합니다.', speakerId: 'SPEAKER_01', isSelf: true },
-  { timestamp: '00:21', text: '저희가 지금 MES 90% 이상, IOC 30% 도입 중이고 2028년 자가 기능적 제조로 사업 목표를 갖고 있어요.', speakerId: 'SPEAKER_00', isSelf: false },
-  { timestamp: '00:38', text: '저희 플랫폼이 실시간 대시보드와 알림 기능을 제공합니다. 기존 ERP와도 연동 가능하고요.', speakerId: 'SPEAKER_01', isSelf: true },
-  { timestamp: '00:55', text: '데이터 연동은 어떻게 되나요? 기존 ERP와 호환이 되어야 합니다.', speakerId: 'SPEAKER_00', isSelf: false },
-  { timestamp: '01:12', text: '표준 REST API와 메시지 큐 양쪽 다 지원합니다. 자세한 스펙은 자료로 보내드리겠습니다.', speakerId: 'SPEAKER_01', isSelf: true },
-];
 
 export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: Props) {
   const [rightView, setRightView] = useState<RightView>('memo');
@@ -61,7 +58,14 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const [sttLines, setSttLines] = useState<SttLine[]>([]);
   const [aiSummary, setAiSummary] = useState<{ label: string; text: string; color: string }[]>([]);
   const { upload: uploadRecording, uploading: uploadingRec } = useUploadRecording();
-  const { poll: pollStt } = usePollSttStatus();
+  usePollSttStatus(); // kept for mock compatibility in tests
+  const { connect: connectWs, sendChunk: sendWsChunk, disconnect: disconnectWs } = useTranscriptStream();
+  const numericActivityId = event?.source === 'FINT' ? (Number(event.eventId.replace(/^act-/, '')) || null) : null;
+  const { recordings, loading: recLoading, refetch: refetchRecordings } = useRecordingList(numericActivityId);
+  const { remove: deleteRecording } = useDeleteRecording();
+  const { update: updateRecordingTitle } = useUpdateRecordingTitle();
+  const [pendingRecordingId, setPendingRecordingId] = useState<number | null>(null);
+  const [deletingRecordingId, setDeletingRecordingId] = useState<number | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [briefingData, setBriefingData] = useState<any | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
@@ -71,6 +75,9 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const [memoText, setMemoText] = useState('');
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoSaving, setMemoSaving] = useState(false);
+
+  // 녹음 종료 시 duration 캡처용 ref — stopRec의 setRecordSec(0) 이후 onstop이 비동기로 실행되므로 state 대신 사용
+  const finalDurationRef = useRef<number>(0);
 
   // ── 녹음 중 실시간 전사 (mock) — 후속 이슈에서 WS hook으로 교체 ──
   const liveSegRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -109,11 +116,30 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       setBriefingData(null); setBriefingError(null); setRecError(null);
       setMemoText(''); setMemoEditing(false); setMemoSaving(false);
       setLiveSegments([]);
+      setPendingRecordingId(null);
+      disconnectWs();
       [timerRef, pollRef, liveSegRef].forEach((r) => { if (r.current) { clearInterval(r.current); r.current = null; } });
       if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') mediaRecRef.current.stop();
       mediaRecRef.current = null;
     }
   }, [event]);
+
+  // 업로드 직후 recording이 PROCESSING인 동안 5초마다 목록 재조회
+  useEffect(() => {
+    if (!pendingRecordingId || !numericActivityId) return;
+    const timer = setInterval(refetchRecordings, 5_000);
+    return () => clearInterval(timer);
+  }, [pendingRecordingId, numericActivityId, refetchRecordings]);
+
+  // 해당 recording의 STT가 완료/실패되면 폴링 종료
+  useEffect(() => {
+    if (!pendingRecordingId) return;
+    const rec = recordings.find((r) => r.recordingId === pendingRecordingId);
+    if (rec && (rec.sttStatus === 'COMPLETED' || rec.sttStatus === 'FAILED')) {
+      setSttStatus(rec.sttStatus);
+      setPendingRecordingId(null);
+    }
+  }, [recordings, pendingRecordingId]);
 
   if (!event) return null;
 
@@ -153,15 +179,12 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     }
   };
 
-  const SUMMARY_COLORS = ['#EF4444', '#F59E0B', '#0686D4', '#22C55E'];
-
-  const handleUpload = async (blob: Blob) => {
+  const handleUpload = async (blob: Blob, durationSec = 0) => {
     if (!activityId) return;
     setRecError(null);
     setSttLines([]);
     setAiSummary([]);
     setSttStatus('PENDING');
-    // 파일 확장자 결정 (Blob 의 type 우선, 없으면 webm)
     const ext = blob.type.includes('mp4') || blob.type.includes('m4a')
       ? 'm4a'
       : blob.type.includes('mpeg')
@@ -169,31 +192,17 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       : blob.type.includes('wav')
       ? 'wav'
       : 'webm';
-    const result = await uploadRecording(Number(activityId), blob, ext);
+    const result = await uploadRecording(Number(activityId), blob, ext, { duration: durationSec, title: event.title });
     if (!result.ok) {
-      // 백엔드 호출 실패 — 실제 에러를 사용자에게 노출 (데모 fallback 제거)
       console.error('[FINT] STT 업로드/호출 실패:', result.error);
       setSttStatus('FAILED');
       setRecError(`녹음 업로드 실패: ${result.error ?? '알 수 없는 오류'}`);
       return;
     }
-    // 폴링 시작 — 매 업데이트 콜백으로 상태 반영
-    pollStt(
-      Number(activityId),
-      ({ status, transcript, summary }) => {
-        setSttStatus(status);
-        if (transcript.length > 0) setSttLines(transcript);
-        if (summary) {
-          setAiSummary(
-            Object.entries(summary).map(([k, v], i) => ({
-              label: k,
-              text: String(v),
-              color: SUMMARY_COLORS[i % SUMMARY_COLORS.length],
-            })),
-          );
-        }
-      },
-    );
+    setSttStatus('PROCESSING');
+    setRightView('memo');
+    refetchRecordings();
+    if (result.recordingId) setPendingRecordingId(result.recordingId);
   };
 
   const startRec = async () => {
@@ -204,32 +213,28 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mt = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
       const rec = new MediaRecorder(stream, { mimeType: mt });
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); handleUpload(new Blob(chunksRef.current, { type: mt })); };
-      rec.start(1000); mediaRecRef.current = rec;
-      setRightView('recording');
-      timerRef.current = setInterval(() => setRecordSec((s) => s + 1), 1000);
-
-      // Mock 실시간 전사 — 2초마다 DEMO_LIVE_LINES에서 한 라인씩 추가.
-      // 후속 이슈에서 useTranscriptStream WS hook으로 교체.
-      let li = 0;
-      liveSegRef.current = setInterval(() => {
-        if (li >= DEMO_LIVE_LINES.length) {
-          if (liveSegRef.current) { clearInterval(liveSegRef.current); liveSegRef.current = null; }
-          return;
+      chunksRef.current = []; finalDurationRef.current = 0;
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          sendWsChunk(e.data);
         }
-        setLiveSegments((prev) => [...prev, DEMO_LIVE_LINES[li]]);
-        li += 1;
-      }, 2000);
+      };
+      rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); handleUpload(new Blob(chunksRef.current, { type: mt }), finalDurationRef.current); };
+      rec.start(2000); mediaRecRef.current = rec;
+      setRightView('recording');
+      timerRef.current = setInterval(() => setRecordSec((s) => { finalDurationRef.current = s + 1; return s + 1; }), 1000);
+      connectWs(Number(activityId), (line) => setLiveSegments((prev) => [...prev, line]));
+
     } catch { setRecError('마이크 접근 권한이 필요합니다.'); }
   };
 
   const stopRec = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (liveSegRef.current) { clearInterval(liveSegRef.current); liveSegRef.current = null; }
+    disconnectWs();
     if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') { mediaRecRef.current.stop(); mediaRecRef.current = null; }
-    setRecordSec(0); setRightView('stt');
+    setRecordSec(0); setRightView('memo');
   };
 
   const fetchBriefing = async () => {
@@ -378,10 +383,20 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                         type="file"
                         accept="audio/m4a,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a,audio/webm"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
-                          if (file) handleUpload(file);
+                          if (!file) return;
                           e.currentTarget.value = '';
+                          let durationSec = 0;
+                          try {
+                            durationSec = await new Promise<number>((resolve) => {
+                              const audio = new Audio();
+                              audio.onloadedmetadata = () => { URL.revokeObjectURL(audio.src); resolve(isFinite(audio.duration) ? Math.round(audio.duration) : 0); };
+                              audio.onerror = () => { URL.revokeObjectURL(audio.src); resolve(0); };
+                              audio.src = URL.createObjectURL(file);
+                            });
+                          } catch { durationSec = 0; }
+                          handleUpload(file, durationSec);
                         }}
                       />
                     </label>
@@ -413,9 +428,48 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             {/* 메모 탭 */}
             {(rightView === 'memo' || rightView === 'stt') && (
               <>
-                {(sttStatus || uploadingRec) && (
-                  <SttProgress status={sttStatus} uploading={uploadingRec} />
+                {/* 녹음 목록 — 메모 위에 표시. 항상 스크롤. */}
+                {(recordings.length > 0 || uploadingRec || sttStatus === 'PENDING' || sttStatus === 'PROCESSING') && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(uploadingRec || sttStatus === 'PENDING' || sttStatus === 'PROCESSING') && (
+                      <SttProgress status={sttStatus} uploading={uploadingRec} />
+                    )}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        maxHeight: isMobile ? '50vh' : 360,
+                        overflowY: 'auto',
+                        paddingRight: 2,
+                      }}
+                    >
+                      {recordings.map((rec, idx) => (
+                        <RecordingCard
+                          key={rec.recordingId}
+                          rec={rec}
+                          index={recordings.length - idx}
+                          isMobile={isMobile}
+                          deleting={deletingRecordingId === rec.recordingId}
+                          onDelete={async () => {
+                            if (!numericActivityId) return;
+                            if (!window.confirm(`${recordings.length - idx}번 녹음을 삭제할까요?`)) return;
+                            setDeletingRecordingId(rec.recordingId);
+                            const ok = await deleteRecording(numericActivityId, rec.recordingId);
+                            setDeletingRecordingId(null);
+                            if (ok) refetchRecordings();
+                          }}
+                          onTitleSave={async (title) => {
+                            if (!numericActivityId) return;
+                            const ok = await updateRecordingTitle(numericActivityId, rec.recordingId, title);
+                            if (ok) refetchRecordings();
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 )}
+
                 {sttStatus === 'COMPLETED' && (aiSummary.length > 0 || sttLines.length > 0) && (
                   <>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
@@ -741,6 +795,214 @@ export function SpeakerLine({ line, fallbackIndex }: { line: SttLine; fallbackIn
         )}
         <span style={{ fontSize: 13, lineHeight: 1.7, color: '#1F2126', whiteSpace: 'pre-wrap' }}>{line.text}</span>
       </div>
+    </div>
+  );
+}
+
+// ─── 녹음 기록 카드 ─────────────────────────────────────────────────────────
+function RecordingCard({
+  rec,
+  index,
+  isMobile,
+  deleting,
+  onDelete,
+  onTitleSave,
+}: {
+  rec: RecordingItem;
+  index: number;
+  isMobile: boolean;
+  deleting: boolean;
+  onDelete: () => void;
+  onTitleSave: (title: string) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(rec.title);
+  const [savingTitle, setSavingTitle] = useState(false);
+
+  // transcript 포맷 방어 — { segments: [...] } 외에 배열 직통도 처리
+  const rawSegs: { speaker_id?: string; text?: string; start_ms?: number; end_ms?: number }[] = (() => {
+    if (!rec.transcript) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t = rec.transcript as any;
+    if (Array.isArray(t)) return t;
+    if (Array.isArray(t.segments)) return t.segments;
+    return [];
+  })();
+  const lines: SttLine[] = rawSegs
+    .filter((s) => s.text?.trim())
+    .map((s) => {
+      const secs = Math.floor((s.start_ms ?? 0) / 1000);
+      return {
+        text: s.text ?? '',
+        speakerId: s.speaker_id,
+        startMs: s.start_ms,
+        endMs: s.end_ms,
+        timestamp: `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`,
+      };
+    });
+
+  const STATUS_LABEL: Record<string, string> = {
+    PENDING: '대기 중',
+    PROCESSING: '분석 중',
+    COMPLETED: '완료',
+    FAILED: '실패',
+  };
+  const STATUS_COLOR: Record<string, string> = {
+    PENDING: '#9CA193',
+    PROCESSING: '#F59E0B',
+    COMPLETED: '#22C55E',
+    FAILED: '#EF4444',
+  };
+
+  const durStr = rec.duration > 0
+    ? `${Math.floor(rec.duration / 60)}분 ${rec.duration % 60}초`
+    : null;
+
+  return (
+    <div
+      style={{
+        border: '1px solid #E5E6DE',
+        borderRadius: 8,
+        overflow: 'hidden',
+        backgroundColor: '#fff',
+      }}
+    >
+      {/* 헤더 행 — 클릭 전체 영역이 expand (COMPLETED일 때) */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '10px 14px',
+          cursor: rec.sttStatus === 'COMPLETED' ? 'pointer' : 'default',
+        }}
+        onClick={() => rec.sttStatus === 'COMPLETED' && setExpanded((e) => !e)}
+      >
+        {/* 제목 */}
+        {editingTitle ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (!titleDraft.trim()) return;
+                setSavingTitle(true);
+                await onTitleSave(titleDraft.trim());
+                setSavingTitle(false);
+                setEditingTitle(false);
+              } else if (e.key === 'Escape') {
+                setTitleDraft(rec.title);
+                setEditingTitle(false);
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            disabled={savingTitle}
+            style={{
+              flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: '#1F2126',
+              border: '1.5px solid #06B6D4', borderRadius: 4, padding: '2px 6px',
+              outline: 'none', background: '#fff',
+            }}
+          />
+        ) : (
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#1F2126', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {rec.title || `${index}번 미팅`}
+            {durStr && <span style={{ fontWeight: 400, color: '#9CA193', marginLeft: 6 }}>{durStr}</span>}
+          </span>
+        )}
+
+        {/* 편집 모드: 저장/취소 */}
+        {editingTitle ? (
+          <>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!titleDraft.trim()) return;
+                setSavingTitle(true);
+                await onTitleSave(titleDraft.trim());
+                setSavingTitle(false);
+                setEditingTitle(false);
+              }}
+              disabled={savingTitle}
+              style={{ border: 'none', background: 'none', color: '#06B6D4', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: '2px 4px' }}
+            >
+              {savingTitle ? '…' : '저장'}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setTitleDraft(rec.title); setEditingTitle(false); }}
+              style={{ border: 'none', background: 'none', color: '#9CA193', fontSize: 11, cursor: 'pointer', padding: '2px 4px' }}
+            >
+              취소
+            </button>
+          </>
+        ) : (
+          <>
+            {/* 연필 아이콘 — 제목 편집 진입 */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setTitleDraft(rec.title); setEditingTitle(true); }}
+              aria-label="제목 편집"
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#C4C9BC', padding: '2px 4px', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+            >
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                <path d="M8.5 1.5l2 2-7 7H1.5V8.5l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <span
+              style={{
+                fontSize: 11,
+                color: STATUS_COLOR[rec.sttStatus] ?? '#9CA193',
+                backgroundColor: `${STATUS_COLOR[rec.sttStatus] ?? '#9CA193'}1A`,
+                padding: '2px 7px', borderRadius: 10, fontWeight: 500, whiteSpace: 'nowrap',
+              }}
+            >
+              {STATUS_LABEL[rec.sttStatus] ?? rec.sttStatus}
+            </span>
+            {rec.sttStatus === 'COMPLETED' && (
+              <span style={{ fontSize: 10, color: '#9CA193' }}>{expanded ? '▴' : '▾'}</span>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              disabled={deleting}
+              aria-label="삭제"
+              style={{ border: 'none', background: 'none', cursor: deleting ? 'default' : 'pointer', color: '#9CA193', padding: '2px 4px', borderRadius: 4, display: 'flex', alignItems: 'center' }}
+            >
+              {deleting ? '…' : (
+                <svg width="13" height="13" viewBox="0 0 12 12" fill="none">
+                  <path d="M1.5 3h9M4.5 3V2a1 1 0 011-1h1a1 1 0 011 1v1m1.5 0v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V3h6z" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* 확장: transcript */}
+      {expanded && (
+        <div
+          style={{
+            borderTop: '1px solid #F0F0EE',
+            padding: '12px 14px',
+            maxHeight: isMobile ? '40vh' : 300,
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            backgroundColor: '#F8F8F5',
+          }}
+        >
+          {lines.length > 0 ? (
+            lines.map((line, i) => (
+              <SpeakerLine key={i} line={line} fallbackIndex={i % 2} />
+            ))
+          ) : (
+            <span style={{ fontSize: 12, color: '#9CA193', textAlign: 'center', padding: '8px 0' }}>
+              전사 내용이 없습니다.
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

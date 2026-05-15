@@ -17,8 +17,10 @@ vi.mock('@/hooks/useActivity', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useActivity')>('@/hooks/useActivity');
   return {
     ...actual,
-    useUploadRecording: () => ({ upload: vi.fn(async () => ({ ok: true, fileKey: 'k' })), uploading: false, error: null }),
+    useUploadRecording: () => ({ upload: vi.fn(async () => ({ ok: true, fileKey: 'k', recordingId: 1 })), uploading: false, error: null }),
     usePollSttStatus: () => ({ poll: vi.fn(async () => ({ status: 'COMPLETED', transcript: [], summary: null })), polling: false }),
+    useRecordingList: () => ({ recordings: [], loading: false, error: null, refetch: vi.fn() }),
+    useDeleteRecording: () => ({ remove: vi.fn(async () => true), loading: false }),
   };
 });
 
