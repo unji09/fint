@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { UserIcon } from '@/components/common/Icon';
 import LoginModal from '@/components/common/LoginModal';
 import NotificationPanel, { type NotificationItem } from '@/components/common/NotificationPanel';
 import { fetchWithAuth } from '@/hooks/useAuth';
+import { useNotificationSocket } from '@/hooks/useNotificationSocket';
 
 const F = "'Pretendard', -apple-system, sans-serif";
 const NAV = [
@@ -59,17 +60,28 @@ export default function GNB() {
   }, []);
 
   // 알림 로드 — GET /notifications
-  // 백엔드 응답: { data: { content: NotificationItemResponse[] } }
-  // findUnreadNotifications 이므로 응답은 항상 "읽지 않은" 항목만 (최대 10개).
-  // 따라서 unreadCount = content.length.
+  // 백엔드 응답: { data: { content: NotificationItemResponse[] } } (unread 최대 10개)
+  // 클라이언트는 한 번 받은 알림을 메모리에 보관 (읽음 처리되어 다음 GET 에서 빠져도 목록 유지).
+  // merge 규칙:
+  //  - 응답에 있는 알림 → 백엔드 데이터 우선 (isRead=false)
+  //  - 응답에 없고 기존 state 에만 있는 알림 → isRead=true 로 토글 후 유지
+  //  - createdAt desc 정렬
   const loadNotis = async () => {
     try {
       const res = await fetchWithAuth('/notifications');
       if (!res.ok) return;
       const j = await res.json();
-      const list: NotificationItem[] = Array.isArray(j?.data?.content) ? j.data.content : [];
-      setNotis(list);
-      setNotiCount(list.length);
+      const fresh: NotificationItem[] = Array.isArray(j?.data?.content) ? j.data.content : [];
+      const freshIds = new Set(fresh.map((n) => n.notificationId));
+      setNotis((prev) => {
+        const carried = prev
+          .filter((n) => !freshIds.has(n.notificationId))
+          .map((n) => ({ ...n, isRead: true }));
+        const merged = [...fresh, ...carried];
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return merged;
+      });
+      setNotiCount(fresh.length);
     } catch {
       /* ignore */
     }
@@ -82,6 +94,46 @@ export default function GNB() {
     if (!notiOpen) loadNotis();
     setNotiOpen((v) => !v);
   };
+
+  // ── 실시간 긴급 알림 (WebSocket STOMP) ──
+  // /user/queue/notifications 구독. 새 알림 수신 시 목록 push + 토스트 표시.
+  const [toast, setToast] = useState<NotificationItem | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onWsNotification = useCallback((noti: NotificationItem) => {
+    setNotis((prev) => {
+      // 중복(같은 notificationId) 방지
+      if (prev.some((n) => n.notificationId === noti.notificationId)) return prev;
+      return [noti, ...prev];
+    });
+    setNotiCount((c) => c + 1);
+    // 토스트 — 5초 자동 닫힘
+    setToast(noti);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 5_000);
+  }, []);
+  useNotificationSocket(onWsNotification);
+
+  // ── 시연용: 백엔드 WebSocket push 가 연결되기 전까지 새로고침 시 한 번 더미 알림 ──
+  // sessionStorage 로 세션당 1회만 트리거. 백엔드 정상 push 후 제거 예정.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (sessionStorage.getItem('fint:demo-noti-shown')) return;
+    const t = setTimeout(() => {
+      onWsNotification({
+        notificationId: -Date.now(),
+        title: '긴급: 삼성SDS CFO 교체 — 즉시 제안서 발송 권장',
+        category: 'MEETING',
+        signalSummary: '삼성SDS, 박성준 CFO 내정 발표 — 디지털 전환 가속 명시',
+        signalTypeBadge: 'News',
+        pipelineStage: '발굴',
+        accountName: '삼성SDS',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+      sessionStorage.setItem('fint:demo-noti-shown', '1');
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [onWsNotification]);
 
   return (
     <>
@@ -172,8 +224,56 @@ export default function GNB() {
         open={notiOpen}
         onClose={() => setNotiOpen(false)}
         notifications={notis}
-        onChanged={loadNotis}
+        onItemRead={(id) => {
+          // 백엔드 PATCH 와 별도로 클라이언트 메모리 isRead 즉시 토글 (목록 유지)
+          setNotis((prev) => prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n)));
+          setNotiCount((c) => Math.max(0, c - 1));
+        }}
+        onAllRead={() => {
+          setNotis((prev) => prev.map((n) => ({ ...n, isRead: true })));
+          setNotiCount(0);
+        }}
       />
+
+      {/* 긴급 알림 토스트 — WebSocket 으로 실시간 수신 시 우측 상단에 5초 노출 */}
+      {toast && (
+        <div
+          onClick={() => { setToast(null); setNotiOpen(true); }}
+          style={{
+            position: 'fixed',
+            top: 80,
+            right: 20,
+            zIndex: 1100,
+            maxWidth: 360,
+            backgroundColor: '#fff',
+            border: '1px solid #FECACA',
+            borderLeft: '3px solid #EF4444',
+            borderRadius: 10,
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
+            padding: '12px 14px',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            fontFamily: F,
+            animation: 'toastSlideIn 0.2s ease-out',
+          }}
+        >
+          <style>{`@keyframes toastSlideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#DC2626', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: 3 }}>긴급</span>
+            <span style={{ fontSize: 11, color: '#94A3B8' }}>{toast.accountName}</span>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#1F2126', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            {toast.title}
+          </div>
+          {toast.signalSummary && (
+            <div style={{ fontSize: 11, color: '#64748B', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {toast.signalSummary}
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }

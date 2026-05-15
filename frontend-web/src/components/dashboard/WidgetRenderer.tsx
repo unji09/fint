@@ -60,12 +60,18 @@ function PresetChartRenderer({ config, data }: { config: Record<string, unknown>
 
   const { type, data: chartData, options } = chartConfig;
 
+  // chart.js 의 ChartData/ChartOptions 가 generic chart type 별로 narrow 되어 있어,
+  // 동적 분기 시 'keyof ChartTypeRegistry' 와 'bar'/'line' 등이 호환되지 않음.
+  // 런타임 동작은 동일하므로 react-chartjs-2 컴포넌트 prop 타입에 맞춰 캐스팅.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const cd = chartData as any;
+  const op = options as any;
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {type === 'bar' && <Bar data={chartData} options={options} />}
-      {type === 'line' && <Line data={chartData} options={options} />}
-      {type === 'doughnut' && <Doughnut data={chartData} options={options} />}
-      {type === 'pie' && <Pie data={chartData} options={options} />}
+      {type === 'bar' && <Bar data={cd} options={op} />}
+      {type === 'line' && <Line data={cd} options={op} />}
+      {type === 'doughnut' && <Doughnut data={cd} options={op} />}
+      {type === 'pie' && <Pie data={cd} options={op} />}
     </div>
   );
 }

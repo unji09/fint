@@ -21,10 +21,14 @@ export interface ActivityListItem {
 /** STT 진행 상태 — 명세: NONE → PENDING → PROCESSING → COMPLETED / FAILED */
 export type SttStatus = 'NONE' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
-/** STT 전사 줄 단위 — 백엔드 응답 키는 timestamp/text 또는 ts/content 가능 */
+/** STT 전사 줄 단위 — 백엔드 응답 키는 timestamp/text 또는 ts/content 가능.
+ *  화자 분리(diarize=true) 시 speakerId / startMs / endMs 가 함께 옴. */
 export interface SttLine {
   timestamp?: string;
   text: string;
+  speakerId?: string;
+  startMs?: number;
+  endMs?: number;
 }
 
 export interface ActivityDetail {
@@ -189,10 +193,11 @@ export function useUpdateActivity() {
 }
 
 // ─── 녹음 업로드 + STT 트리거 ────────────────────────────────────────────────
-// 명세 흐름:
-//   1) POST /files/presigned-url { fileName, contentType }
-//        → { data: { url, fileKey } }
-//   2) PUT {url}  (S3 직통, body=Blob, header Content-Type 매칭)
+// 명세 흐름 (백엔드 PresignedUrlRequest / Response 와 일치):
+//   1) POST /files/presigned-url
+//        body: { fileName, contentType, fileType, purpose, fileSize, meetingId }
+//        response: { uploadUrl, fileKey, expiresIn, uploadType }
+//   2) PUT {uploadUrl}  (S3 직통, body=Blob, header Content-Type 매칭)
 //   3) POST /activities/{activityId}/recording { fileKey }
 //        → 202 Accepted (비동기 STT 시작)
 
@@ -204,26 +209,36 @@ export function useUploadRecording() {
     setUploading(true);
     setError(null);
     try {
-      // 1) Pre-signed URL 발급
+      // 1) Pre-signed URL 발급 — 백엔드 PresignedUrlRequest 풀스펙으로 전송
       const presRes = await fetchWithAuth('/files/presigned-url', {
         method: 'POST',
         body: JSON.stringify({
           fileName: `rec_${activityId}_${Date.now()}.${fileExt}`,
-          contentType: blob.type,
+          contentType: blob.type || 'audio/webm',
+          fileType: 'AUDIO',
+          purpose: 'MEETING_RECORD',
+          fileSize: blob.size,
+          meetingId: activityId,
         }),
       });
       if (!presRes.ok) throw new Error(`presigned URL 실패 (${presRes.status})`);
       const presJson = await presRes.json();
       const pres = presJson?.data ?? presJson;
-      const url: string | undefined = pres?.url;
+      // 백엔드는 uploadUrl 로 보냄. 과거 호환 위해 url 도 fallback.
+      const uploadUrl: string | undefined = pres?.uploadUrl ?? pres?.url;
       const fileKey: string | undefined = pres?.fileKey;
-      if (!url || !fileKey) throw new Error('presigned URL 응답 형식 오류');
+      if (!uploadUrl || !fileKey) throw new Error('presigned URL 응답 형식 오류');
 
-      // 2) S3 직통 업로드
-      const s3Res = await fetch(url, {
+      // 2) S3 직통 업로드 — 백엔드가 SSE-KMS 강제로 presign 했으므로
+      //    클라이언트도 동일한 암호화 헤더를 PUT 에 포함해야 서명 통과 (403 방지)
+      const s3Res = await fetch(uploadUrl, {
         method: 'PUT',
         body: blob,
-        headers: { 'Content-Type': blob.type },
+        headers: {
+          'Content-Type': blob.type || 'audio/webm',
+          'x-amz-server-side-encryption': 'aws:kms',
+          'x-amz-server-side-encryption-aws-kms-key-id': 'alias/crm-fint-s3-key',
+        },
       });
       if (!s3Res.ok) throw new Error(`S3 업로드 실패 (${s3Res.status})`);
 
@@ -268,9 +283,45 @@ export function usePollSttStatus() {
       opts?: { intervalMs?: number; timeoutMs?: number },
     ) => {
       const interval = opts?.intervalMs ?? 5_000;
-      const timeout = opts?.timeoutMs ?? 120_000;
+      // 긴 녹음(1시간+) STT 대비 30분 timeout. 기존 2분은 GPU 처리 시간을 못 견딤.
+      const timeout = opts?.timeoutMs ?? 30 * 60_000;
       const start = Date.now();
       setPolling(true);
+
+      // transcript 정규화 — 배열 / Map / 문자열 / segments 모두 처리.
+      // diarize 결과의 speaker_id / start_ms / end_ms 도 추출.
+      const normalize = (raw: unknown): SttLine[] => {
+        if (!raw) return [];
+        if (Array.isArray(raw)) {
+          return raw
+            .map((t): SttLine | null => {
+              if (typeof t === 'string') return t.trim() ? { text: t } : null;
+              if (t && typeof t === 'object') {
+                const o = t as Record<string, unknown>;
+                const text = (o.text ?? o.content ?? '') as string;
+                if (!text) return null;
+                const line: SttLine = { text, timestamp: (o.timestamp ?? o.ts ?? '') as string };
+                const sp = o.speaker_id ?? o.speakerId;
+                if (typeof sp === 'string') line.speakerId = sp;
+                const sm = o.start_ms ?? o.startMs;
+                if (typeof sm === 'number') line.startMs = sm;
+                const em = o.end_ms ?? o.endMs;
+                if (typeof em === 'number') line.endMs = em;
+                return line;
+              }
+              return null;
+            })
+            .filter((v): v is SttLine => v !== null);
+        }
+        if (typeof raw === 'string') return raw.trim() ? [{ text: raw }] : [];
+        if (typeof raw === 'object') {
+          const o = raw as Record<string, unknown>;
+          if (Array.isArray(o.segments)) return normalize(o.segments);
+          if (typeof o.text === 'string' && o.text.trim()) return [{ text: o.text }];
+        }
+        return [];
+      };
+
       try {
         while (Date.now() - start < timeout) {
           try {
@@ -279,13 +330,7 @@ export function usePollSttStatus() {
               const j = await r.json();
               const d = j?.data ?? j;
               const status: SttStatus = d?.sttStatus ?? 'NONE';
-              const rawTr = d?.sttTranscript ?? d?.transcript ?? [];
-              const transcript: SttLine[] = Array.isArray(rawTr)
-                ? rawTr.map((t: { timestamp?: string; ts?: string; text?: string; content?: string }) => ({
-                    timestamp: t.timestamp ?? t.ts ?? '',
-                    text: t.text ?? t.content ?? '',
-                  }))
-                : [];
+              const transcript: SttLine[] = normalize(d?.sttTranscript ?? d?.transcript);
               const summary =
                 d?.aiSummary && typeof d.aiSummary === 'object' ? (d.aiSummary as Record<string, string>) : null;
               onUpdate({ status, transcript, summary });
@@ -303,6 +348,82 @@ export function usePollSttStatus() {
   );
 
   return { poll, polling };
+}
+
+// ─── 활동 단위 분위기(날씨) 분석 결과 폴링 ───────────────────────────────
+// 백엔드: GET /activities/{activityId}/ai/mood
+//   응답: { activityId, moodStatus, mood, moodScore, reason, keySignals, analyzedAt }
+//   moodStatus: PENDING | PROCESSING | COMPLETED | FAILED
+//   mood: RAINBOW | SUNNY | CLOUDY | RAINY | THUNDER
+
+export type MoodAnalysisStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface MoodAnalysisResult {
+  activityId: number;
+  moodStatus: MoodAnalysisStatus;
+  mood: 'RAINBOW' | 'SUNNY' | 'CLOUDY' | 'RAINY' | 'THUNDER' | null;
+  moodScore: number | null;
+  reason: string | null;
+  keySignals: string[];
+  analyzedAt: string | null;
+}
+
+export function useMoodAnalysis(activityId: number | null) {
+  const [data, setData] = useState<MoodAnalysisResult | null>(null);
+  const [polling, setPolling] = useState(false);
+
+  const fetchOnce = useCallback(async (id: number): Promise<MoodAnalysisResult | null> => {
+    try {
+      const r = await fetchWithAuth(`/activities/${id}/ai/mood`);
+      if (!r.ok) return null;
+      const j = await r.json();
+      const d = j?.data ?? j;
+      if (!d) return null;
+      return {
+        activityId: d.activityId ?? id,
+        moodStatus: (d.moodStatus ?? 'PENDING') as MoodAnalysisStatus,
+        mood: d.mood ?? null,
+        moodScore: typeof d.moodScore === 'number' ? d.moodScore : null,
+        reason: d.reason ?? null,
+        keySignals: Array.isArray(d.keySignals) ? d.keySignals : [],
+        analyzedAt: d.analyzedAt ?? null,
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // 처음 1회 + 결과가 PENDING/PROCESSING 이면 폴링 (5초 간격, 5분 timeout)
+  useEffect(() => {
+    if (!activityId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const start = Date.now();
+    const TIMEOUT = 5 * 60_000;
+    const INTERVAL = 5_000;
+
+    const tick = async () => {
+      if (cancelled) return;
+      const result = await fetchOnce(activityId);
+      if (cancelled) return;
+      if (result) setData(result);
+      const done = !result
+        || result.moodStatus === 'COMPLETED'
+        || result.moodStatus === 'FAILED'
+        || Date.now() - start > TIMEOUT;
+      if (done) { setPolling(false); return; }
+      timer = setTimeout(tick, INTERVAL);
+    };
+
+    setPolling(true);
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [activityId, fetchOnce]);
+
+  return { data, polling, refetch: () => activityId && fetchOnce(activityId).then((r) => { if (r) setData(r); }) };
 }
 
 // ─── 활동 삭제 ───────────────────────────────────────────────────────────────
