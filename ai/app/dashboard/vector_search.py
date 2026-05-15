@@ -23,6 +23,8 @@ class SearchResult:
     published_at: str | None = None
 
 
+_MIN_SIMILARITY_SCORE = 0.3
+
 _NEWS_SEARCH_SQL = text("""
     SELECT * FROM (
         SELECT DISTINCT ON (n.news_article_id)
@@ -32,18 +34,22 @@ _NEWS_SEARCH_SQL = text("""
             n.publisher,
             n.published_at::text,
             n.link,
-            1 - (n.title_embedding <=> :query_vec::vector) AS title_score,
-            1 - (n.summary_embedding <=> :query_vec::vector) AS summary_score
+            1 - (n.title_embedding <=> CAST(:query_vec AS vector)) AS title_score,
+            1 - (n.summary_embedding <=> CAST(:query_vec AS vector)) AS summary_score
         FROM news_articles n
         JOIN account_news_articles ana ON n.news_article_id = ana.news_article_id
         JOIN accounts a ON ana.account_id = a.account_id
         JOIN account_user_assignment aua ON a.account_id = aua.account_id
         JOIN users u ON aua.user_id = u.user_id
         WHERE n.title_embedding IS NOT NULL AND u.tenant_id = :tenant_id
+            AND GREATEST(
+                1 - (n.title_embedding <=> CAST(:query_vec AS vector)),
+                1 - (n.summary_embedding <=> CAST(:query_vec AS vector))
+            ) >= :min_score
         ORDER BY n.news_article_id,
             GREATEST(
-                1 - (n.title_embedding <=> :query_vec::vector),
-                1 - (n.summary_embedding <=> :query_vec::vector)
+                1 - (n.title_embedding <=> CAST(:query_vec AS vector)),
+                1 - (n.summary_embedding <=> CAST(:query_vec AS vector))
             ) DESC
     ) sub
     ORDER BY GREATEST(sub.title_score, sub.summary_score) DESC
@@ -59,18 +65,22 @@ _DART_SEARCH_SQL = text("""
             d.corp_name,
             d.rcept_dt,
             d.rcept_no,
-            1 - (d.title_embedding <=> :query_vec::vector) AS title_score,
-            1 - (d.summary_embedding <=> :query_vec::vector) AS summary_score
+            1 - (d.title_embedding <=> CAST(:query_vec AS vector)) AS title_score,
+            1 - (d.summary_embedding <=> CAST(:query_vec AS vector)) AS summary_score
         FROM dart_disclosures d
         JOIN account_dart_disclosures add_ ON d.dart_disclosure_id = add_.dart_disclosure_id
         JOIN accounts a ON add_.account_id = a.account_id
         JOIN account_user_assignment aua ON a.account_id = aua.account_id
         JOIN users u ON aua.user_id = u.user_id
         WHERE d.title_embedding IS NOT NULL AND u.tenant_id = :tenant_id
+            AND GREATEST(
+                1 - (d.title_embedding <=> CAST(:query_vec AS vector)),
+                1 - (d.summary_embedding <=> CAST(:query_vec AS vector))
+            ) >= :min_score
         ORDER BY d.dart_disclosure_id,
             GREATEST(
-                1 - (d.title_embedding <=> :query_vec::vector),
-                1 - (d.summary_embedding <=> :query_vec::vector)
+                1 - (d.title_embedding <=> CAST(:query_vec AS vector)),
+                1 - (d.summary_embedding <=> CAST(:query_vec AS vector))
             ) DESC
     ) sub
     ORDER BY GREATEST(sub.title_score, sub.summary_score) DESC
@@ -118,7 +128,12 @@ async def semantic_search(
 
     query_vec = embedder.embed_query(spec.search_text)
     vec_str = "[" + ",".join(f"{v:.6f}" for v in query_vec.tolist()) + "]"
-    params = {"query_vec": vec_str, "top_k": spec.top_k, "tenant_id": tenant_id}
+    params = {
+        "query_vec": vec_str,
+        "top_k": spec.top_k,
+        "tenant_id": tenant_id,
+        "min_score": _MIN_SIMILARITY_SCORE,
+    }
 
     source = spec.source_filter
 

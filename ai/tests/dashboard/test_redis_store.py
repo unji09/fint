@@ -79,13 +79,13 @@ class TestUpdateStatus:
 
 class TestSetCompleted:
     async def test_completed_with_result(self, store, fake_redis):
-        result = {"widget_type": "BAR_CHART", "title": "매출 추이"}
+        result = {"widget_type": "CHART", "title": "매출 추이"}
         await store.set_completed("trace-1", result)
 
         raw = await fake_redis.get("dashboard:query:trace-1")
         data = json.loads(raw)
         assert data["status"] == "COMPLETED"
-        assert data["result"]["widget_type"] == "BAR_CHART"
+        assert data["result"]["widget_type"] == "CHART"
 
     async def test_completed_has_ttl(self, store, fake_redis):
         await store.set_completed("trace-1", {"title": "test"})
