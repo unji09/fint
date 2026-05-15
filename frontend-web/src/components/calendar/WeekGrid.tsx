@@ -53,6 +53,83 @@ const TIME_C = '#9CA193';
 const DAY_FULL = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 const DAY_COLOR = (i: number) => (i === 0 || i === 6 ? RED : '#888888');
 
+const NEAR_MS = 15 * 60_000;
+const OVERLAP_OFFSET = 10;
+
+interface OverlapLayout {
+  mode: 'side' | 'cascade';
+  colIdx: number;
+  totalCols: number;
+  cascadeIdx: number;
+}
+
+function computeOverlapLayout(evs: CalendarEvent[]): Map<string, OverlapLayout> {
+  if (evs.length === 0) return new Map();
+
+  const sorted = [...evs].sort((a, b) => {
+    const diff = new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
+    if (diff !== 0) return diff;
+    return new Date(b.endAt).getTime() - new Date(a.endAt).getTime();
+  });
+
+  const groups: CalendarEvent[][] = [];
+  let group: CalendarEvent[] = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const prevStart = new Date(sorted[i - 1].startAt).getTime();
+    const curStart = new Date(sorted[i].startAt).getTime();
+    if (curStart - prevStart <= NEAR_MS) {
+      group.push(sorted[i]);
+    } else {
+      groups.push(group);
+      group = [sorted[i]];
+    }
+  }
+  groups.push(group);
+
+  const result = new Map<string, OverlapLayout>();
+  let maxEndSoFar = 0;
+  let cascadeIdx = 0;
+
+  for (const g of groups) {
+    const gStart = new Date(g[0].startAt).getTime();
+    if (gStart < maxEndSoFar) {
+      cascadeIdx++;
+    } else {
+      cascadeIdx = 0;
+    }
+
+    if (g.length >= 2) {
+      const colEnds: number[] = [];
+      const assignments: number[] = [];
+      for (const ev of g) {
+        const evStart = new Date(ev.startAt).getTime();
+        let placed = -1;
+        for (let c = 0; c < colEnds.length; c++) {
+          if (evStart >= colEnds[c]) { placed = c; break; }
+        }
+        if (placed === -1) {
+          placed = colEnds.length;
+          colEnds.push(0);
+        }
+        colEnds[placed] = new Date(ev.endAt).getTime();
+        assignments.push(placed);
+      }
+      const totalCols = colEnds.length;
+      for (let i = 0; i < g.length; i++) {
+        result.set(g[i].eventId, { mode: 'side', colIdx: assignments[i], totalCols, cascadeIdx });
+      }
+    } else {
+      result.set(g[0].eventId, { mode: 'cascade', colIdx: 0, totalCols: 1, cascadeIdx });
+    }
+
+    for (const ev of g) {
+      maxEndSoFar = Math.max(maxEndSoFar, new Date(ev.endAt).getTime());
+    }
+  }
+
+  return result;
+}
+
 function fmtTime(iso: string) {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -99,7 +176,7 @@ function WeekCard({
         height: '100%',
         textAlign: 'left',
         cursor: 'pointer',
-        backgroundColor: '#F5F7FA',
+        backgroundColor: bg,
         borderLeft: `3px solid ${col}`,
         borderTop: 'none',
         borderRight: 'none',
@@ -114,10 +191,10 @@ function WeekCard({
         outlineOffset: -1,
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#ECEEF2';
+        (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(0.95)';
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#F5F7FA';
+        (e.currentTarget as HTMLButtonElement).style.filter = '';
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
@@ -683,6 +760,7 @@ export default function WeekGrid({
             드래그로 시간 범위 선택 가능 (구글 캘린더 패턴). */}
         {weekDays.map((day, colIdx) => {
           const dayEvs = events.filter((ev) => sameDay(ev, day));
+          const overlapLayout = computeOverlapLayout(dayEvs);
           const isDragCol = drag?.colIdx === colIdx;
           const dragTop = isDragCol ? Math.min(drag.startY, drag.currentY) : 0;
           const dragH = isDragCol ? Math.abs(drag.currentY - drag.startY) : 0;
@@ -793,6 +871,14 @@ export default function WeekGrid({
                 const moveTransform = isMoving
                   ? `translate(${(move.curColIdx - move.origColIdx) * 100}%, ${move.curMouseY - move.startMouseY}px)`
                   : undefined;
+                const layout = overlapLayout.get(ev.eventId) ?? { mode: 'cascade' as const, colIdx: 0, totalCols: 1, cascadeIdx: 0 };
+                const isSide = layout.mode === 'side';
+                const leftVal = isSide
+                  ? `calc(${(layout.colIdx / layout.totalCols) * 100}% + 1px)`
+                  : layout.cascadeIdx * OVERLAP_OFFSET + 1;
+                const sizeStyle = isSide
+                  ? { width: `calc(${(1 / layout.totalCols) * 100}% - 2px)` }
+                  : { right: 1 as const };
                 return (
                   <div
                     key={ev.eventId}
@@ -801,10 +887,10 @@ export default function WeekGrid({
                     style={{
                       position: 'absolute',
                       top: renderTop,
-                      left: 1,
-                      right: 1,
+                      left: leftVal,
+                      ...sizeStyle,
                       height: hPx,
-                      zIndex: isMoving ? 10 : isResizing ? 4 : 2,
+                      zIndex: isMoving ? 10 : isResizing ? 4 : (2 + layout.cascadeIdx),
                       transform: moveTransform,
                       transition: isMoving ? 'none' : undefined,
                       opacity: isMoving ? 0.85 : 1,

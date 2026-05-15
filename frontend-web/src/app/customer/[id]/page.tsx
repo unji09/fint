@@ -12,6 +12,7 @@ import { useAccountList, useAccountDetail } from '@/hooks/useCustomer';
 import { useCustomer } from '../CustomerContext';
 import { useDeleteContact, useUpdateContact } from '@/hooks/useContact';
 import { useCreateDeal } from '@/hooks/useDeal';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 import { useNextActions, fetchNextActionDetail } from '@/hooks/useNextActions';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import type { Deal, StrategyCard } from '@/types/customer';
@@ -51,6 +52,7 @@ export default function CustomerDetailPage() {
 
   // 사이드바와 공유하는 선택 상태 (layout 의 CustomerProvider)
   const { selContact, setSelContact } = useCustomer();
+  const confirm = useConfirm();
 
   const strats: StrategyCard[] = nextActions.map(a => ({ id: a.suggestionId, title: a.title, category: a.category, successRate: a.successRate }));
 
@@ -166,7 +168,7 @@ export default function CustomerDetailPage() {
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={() => setEditContact(v => !v)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>{editContact ? '취소' : '편집'}</button>
                           <button onClick={async () => {
-                            if (!selContact.contactId || !window.confirm(`${selContact.name} 삭제?`)) return;
+                            if (!selContact.contactId || !await confirm(`${selContact.name} 삭제?`)) return;
                             if (await delContact(selContact.contactId)) { setSelContact(null); refDetail(); }
                           }} style={{ fontFamily: F, fontSize: 11, color: '#94a3b8', cursor: 'pointer', background: 'none', border: 'none' }}>삭제</button>
                         </div>

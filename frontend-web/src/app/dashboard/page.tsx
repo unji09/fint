@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { useConfirm, useAlert } from '@/components/common/ConfirmDialog';
 import {
   useDashboardList,
   useDashboardTemplates,
@@ -16,6 +17,8 @@ export default function DashboardPage() {
   const { groups: templateGroups, loading: templatesLoading } = useDashboardTemplates();
   const { create, loading: creating } = useCreateDashboard();
   const { remove: deleteDashboard, loading: deleting } = useDeleteDashboard();
+  const confirm = useConfirm();
+  const alert = useAlert();
 
   // 자연어 검색 — 새 대시보드를 만들어서 그 화면에서 분석을 시작한다.
   // 502 (LLM/외부 API 장애) 같은 케이스에서는 빈 대시보드 생성으로 fallback,
@@ -34,7 +37,7 @@ export default function DashboardPage() {
         const msg = err instanceof Error ? err.message : '';
         if (msg === 'UNAUTHORIZED') {
           try { sessionStorage.removeItem('fint:pendingQuery'); } catch { /* ignore */ }
-          window.alert('로그인 세션이 만료되었어요.\n다시 로그인한 뒤 시도해 주세요.');
+          await alert('로그인 세션이 만료되었어요.\n다시 로그인한 뒤 시도해 주세요.');
           return;
         }
         // 502 (외부 API 장애) 또는 그 외 HTTP 에러 → 빈 대시보드 fallback
@@ -46,12 +49,12 @@ export default function DashboardPage() {
         }
         try { sessionStorage.removeItem('fint:pendingQuery'); } catch { /* ignore */ }
         if (msg.startsWith('HTTP_')) {
-          window.alert(
+          await alert(
             `분석 서버에서 응답을 받지 못했어요. (코드: ${msg.replace('HTTP_', '')})\n` +
             '잠시 후 다시 시도해 주세요.',
           );
         } else {
-          window.alert('서버에 연결할 수 없습니다.\n네트워크 상태를 확인해 주세요.');
+          await alert('서버에 연결할 수 없습니다.\n네트워크 상태를 확인해 주세요.');
         }
       }
     },
@@ -66,11 +69,11 @@ export default function DashboardPage() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : '';
         if (msg === 'UNAUTHORIZED') {
-          window.alert('로그인 세션이 만료되었어요.\n다시 로그인한 뒤 시도해 주세요.');
+          await alert('로그인 세션이 만료되었어요.\n다시 로그인한 뒤 시도해 주세요.');
         } else if (msg.startsWith('HTTP_')) {
-          window.alert(`서버에서 응답을 받지 못했어요. (코드: ${msg.replace('HTTP_', '')})`);
+          await alert(`서버에서 응답을 받지 못했어요. (코드: ${msg.replace('HTTP_', '')})`);
         } else {
-          window.alert('템플릿으로 대시보드를 만들지 못했어요.');
+          await alert('템플릿으로 대시보드를 만들지 못했어요.');
         }
       }
     },
@@ -83,19 +86,19 @@ export default function DashboardPage() {
   const handleDelete = useCallback(
     async (dashboardId: number, title: string) => {
       if (deleting) return;
-      const ok = window.confirm(
-        `'${title}' 대시보드를 삭제할까요?\n\n` +
-        `이 대시보드 안의 위젯과 분석 내용이 모두 사라지며,\n` +
-        `한 번 삭제하면 복구할 수 없습니다.`,
-      );
+      const ok = await confirm({
+        message: `'${title}' 대시보드를 삭제할까요?\n\n이 대시보드 안의 위젯과 분석 내용이 모두 사라지며,\n한 번 삭제하면 복구할 수 없습니다.`,
+        variant: 'danger',
+        confirmText: '삭제',
+      });
       if (!ok) return;
       const success = await deleteDashboard(dashboardId);
       if (success) {
         await refetchList();
         try { sessionStorage.removeItem('fint:allDashboards'); } catch { /* ignore */ }
-        window.alert(`'${title}' 대시보드를 삭제했어요.`);
+        await alert(`'${title}' 대시보드를 삭제했어요.`);
       } else {
-        window.alert(`'${title}' 대시보드를 삭제하지 못했습니다.\n잠시 후 다시 시도해 주세요.`);
+        await alert(`'${title}' 대시보드를 삭제하지 못했습니다.\n잠시 후 다시 시도해 주세요.`);
       }
     },
     [deleteDashboard, deleting, refetchList],
