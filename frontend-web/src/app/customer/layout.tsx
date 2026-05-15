@@ -17,7 +17,7 @@ function CustomerLayoutInner({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { accounts, loading: aL, error: aE, refetch: refA } = useAccountList();
-  const { contacts } = useAccountDetail(id ?? null);
+  const { contacts, refetch: refDetail } = useAccountDetail(id ?? null);
   const { register: regAccount, loading: regL } = useRegisterAccount();
   const { remove: delAccount } = useDeleteAccount();
   const { setSelContact, addAccountOpen, openAddAccount, closeAddAccount } = useCustomer();
@@ -43,6 +43,7 @@ function CustomerLayoutInner({ children }: { children: ReactNode }) {
           onRetry={refA}
           contacts={contacts}
           onContactSelect={setSelContact}
+          onContactAdded={refDetail}
           onAddAccount={openAddAccount}
           onDeleteAccount={async (accountId, name) => {
             const msg = `"${name}" 고객사를 삭제하시겠습니까?\n\n연결된 모든 담당자, 딜, 활동 데이터가 함께 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`;
