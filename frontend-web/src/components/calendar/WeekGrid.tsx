@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { CalendarEvent } from './types';
-import { CATEGORY_COLOR, CATEGORY_BG } from './types';
+import { getEventColor } from './types';
 import { getWeekDays, isToday } from './utils';
 import { resizeActivity } from '@/hooks/useCalendarEvents';
 
@@ -27,6 +27,8 @@ interface Props {
   /** 이벤트 카드 리사이즈로 endAt 이 변경되어 PATCH 성공한 직후 호출 (refetch 트리거용). */
   onResized?: () => void;
   pipeline?: readonly PipelineItem[] | PipelineItem[];
+  selectedPipeline?: string | null;
+  onPipelineClick?: (label: string) => void;
   /** 알림 카드 드롭 시 해당 날짜+시간과 드롭 데이터 전달. */
   onNotificationDrop?: (date: Date, data: string) => void;
 }
@@ -55,7 +57,7 @@ const TIME_C = '#9CA193';
 const DAY_FULL = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 const DAY_COLOR = (i: number) => (i === 0 || i === 6 ? RED : '#888888');
 
-const NEAR_MS = 15 * 60_000;
+const NEAR_MS = 60 * 60_000;
 const OVERLAP_OFFSET = 10;
 
 interface OverlapLayout {
@@ -153,17 +155,18 @@ function WeekCard({
   event,
   onClick,
   selected,
+  narrow,
   onResizeStartTop,
   onResizeStartBottom,
 }: {
   event: CalendarEvent;
   onClick: () => void;
   selected: boolean;
+  narrow?: boolean;
   onResizeStartTop?: (e: React.MouseEvent) => void;
   onResizeStartBottom?: (e: React.MouseEvent) => void;
 }) {
-  const col = event.category ? CATEGORY_COLOR[event.category] : '#7F77DD';
-  const bg = event.category ? CATEGORY_BG[event.category] : '#ECEBFA';
+  const { color: col, bg } = getEventColor(event);
   return (
     <button
       data-event="true"
@@ -199,7 +202,7 @@ function WeekCard({
         (e.currentTarget as HTMLButtonElement).style.filter = '';
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'flex-start' : 'center', gap: narrow ? 2 : 5, overflow: 'hidden' }}>
         <span
           style={{
             fontSize: 10,
@@ -219,6 +222,7 @@ function WeekCard({
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
+            minWidth: 0,
           }}
         >
           {event.title}
@@ -228,42 +232,45 @@ function WeekCard({
         style={{
           display: 'flex',
           gap: 4,
-          alignItems: 'center',
+          alignItems: 'flex-start',
           overflow: 'hidden',
-          flexWrap: 'nowrap',
+          flexWrap: 'wrap',
         }}
       >
         {event.category && (
-          <span
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3,
-              backgroundColor: bg,
-              borderRadius: 8,
-              padding: '2px 6px',
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: col }} />
-            <span style={{ fontSize: 9, fontWeight: 600, color: col }}>{event.category}</span>
-          </span>
+          <>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 3,
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: col }} />
+              <span style={{ fontSize: 9, fontWeight: 600, color: col }}>{event.category}</span>
+            </span>
+            <span style={{ flexBasis: '100%', height: 0 }} />
+          </>
         )}
         {event.pipelineStage && (
-          <span
-            style={{
-              backgroundColor: '#F0EDF7',
-              borderRadius: 4,
-              padding: '2px 6px',
-              fontSize: 8,
-              fontWeight: 600,
-              color: '#534AB7',
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {event.pipelineStage.stageName}
-          </span>
+          <>
+            <span
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.6)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: 8,
+                fontWeight: 600,
+                color: col,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {event.pipelineStage.stageName}
+            </span>
+            <span style={{ flexBasis: '100%', height: 0 }} />
+          </>
         )}
         {event.accountName && (
           <span
@@ -316,6 +323,8 @@ export default function WeekGrid({
   onTimeRangeSelect,
   onResized,
   pipeline,
+  selectedPipeline,
+  onPipelineClick,
   onNotificationDrop,
 }: Props) {
   const [now, setNow] = useState(new Date());
@@ -599,75 +608,85 @@ export default function WeekGrid({
         {pipeline && (
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: `${WEEK_TIME_COL}px repeat(7, 1fr)`,
+              display: 'flex',
               borderBottom: `1px solid ${BORDER}`,
-              height: 44, // 월간 뷰 파이프라인과 동일
+              height: 44,
             }}
           >
-            <div style={{ borderRight: `1px solid ${BORDER}` }} />
-            {pipeline.map((s, i) => (
-              <div
-                key={s.label}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '0 16px',
-                  boxShadow: dividerShadow(i),
-                  overflow: 'hidden',
-                  minWidth: 0,
-                }}
-              >
-                <span
+            <div style={{ width: WEEK_TIME_COL, flexShrink: 0, borderRight: `1px solid ${BORDER}` }} />
+            {pipeline.map((s, i) => {
+              const active = selectedPipeline === s.label;
+              return (
+                <button
+                  key={s.label}
+                  type="button"
+                  onClick={() => onPipelineClick?.(s.label)}
                   style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: s.dot,
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: '#1F2126',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
                     flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '0 16px',
+                    boxShadow: dividerShadow(i),
+                    overflow: 'hidden',
+                    minWidth: 0,
+                    cursor: 'pointer',
+                    backgroundColor: active ? s.cBg : 'transparent',
+                    transition: 'background-color 150ms ease',
+                    border: 'none',
+                    fontFamily: 'inherit',
                   }}
                 >
-                  {s.label}
-                </span>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: s.cTxt,
-                    backgroundColor: s.cBg,
-                    padding: '2px 7px',
-                    borderRadius: 10,
-                    flexShrink: 0,
-                  }}
-                >
-                  {s.count}
-                </span>
-              </div>
-            ))}
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: s.dot,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: active ? 700 : 500,
+                      color: active ? s.cTxt : '#1F2126',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      flex: 1,
+                      textAlign: 'left',
+                    }}
+                  >
+                    {s.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: active ? '#fff' : s.cTxt,
+                      backgroundColor: active ? s.dot : s.cBg,
+                      padding: '2px 7px',
+                      borderRadius: 10,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {s.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* 요일 헤더: 동일한 grid + 동일한 boxShadow */}
+        {/* 요일 헤더: 본문과 동일한 flex 레이아웃 */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: `${WEEK_TIME_COL}px repeat(7, 1fr)`,
+            display: 'flex',
             borderBottom: `1px solid ${BORDER}`,
           }}
         >
-          <div style={{ borderRight: `1px solid ${BORDER}` }} />
+          <div style={{ width: WEEK_TIME_COL, flexShrink: 0, borderRight: `1px solid ${BORDER}` }} />
           {weekDays.map((day, i) => {
             const today = isToday(day);
             const cnt = events.filter((ev) => sameDay(ev, day)).length;
@@ -675,12 +694,14 @@ export default function WeekGrid({
               <div
                 key={i}
                 style={{
+                  flex: 1,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '6px 8px 7px',
-                  boxShadow: dividerShadow(i), // ← 파이프라인과 동일
+                  boxShadow: dividerShadow(i),
                   gap: 5,
+                  minWidth: 0,
                 }}
               >
                 <span
@@ -893,11 +914,11 @@ export default function WeekGrid({
                 const layout = overlapLayout.get(ev.eventId) ?? { mode: 'cascade' as const, colIdx: 0, totalCols: 1, cascadeIdx: 0 };
                 const isSide = layout.mode === 'side';
                 const leftVal = isSide
-                  ? `calc(${(layout.colIdx / layout.totalCols) * 100}% + 1px)`
-                  : layout.cascadeIdx * OVERLAP_OFFSET + 1;
+                  ? `${(layout.colIdx / layout.totalCols) * 100}%`
+                  : layout.cascadeIdx * OVERLAP_OFFSET;
                 const sizeStyle = isSide
-                  ? { width: `calc(${(1 / layout.totalCols) * 100}% - 2px)` }
-                  : { right: 1 as const };
+                  ? { width: `${(1 / layout.totalCols) * 100}%` }
+                  : { right: 0 as const };
                 return (
                   <div
                     key={ev.eventId}
@@ -920,6 +941,7 @@ export default function WeekGrid({
                       event={ev}
                       onClick={() => onEventClick(ev)}
                       selected={selectedEvent?.eventId === ev.eventId}
+                      narrow={layout.mode === 'side' && layout.totalCols > 1}
                       onResizeStartTop={
                         ev.eventId.startsWith('act-')
                           ? (e) => handleResizeStart(ev, colIdx, day, 'start', e)

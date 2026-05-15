@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { CalendarEvent } from './types';
-import { CATEGORY_COLOR, CATEGORY_BG } from './types';
+import { getEventColor } from './types';
 import { getCalendarDays, isToday, isSameDay } from './utils';
 import { resizeActivity } from '@/hooks/useCalendarEvents';
 
@@ -70,8 +70,7 @@ function fmtTime(iso: string) {
 // isMulti / isFirst / isLast: 다일 이벤트의 시각적 연결 표시용
 // showContent: 시간/제목 텍스트를 이 셀에 표시할지 (다일 이벤트는 row 내 중앙 셀에만 true)
 function MonthEventCard({ event, onClick, onMouseDownCard, isMoving, isMulti, isFirst, isLast, showContent }: { event: CalendarEvent; onClick: () => void; onMouseDownCard?: (e: React.MouseEvent) => void; isMoving?: boolean; isMulti?: boolean; isFirst?: boolean; isLast?: boolean; showContent?: boolean }) {
-  const col = event.category ? CATEGORY_COLOR[event.category] : '#7F77DD';
-  const bg = event.category ? CATEGORY_BG[event.category] : '#ECEBFA';
+  const { color: col, bg } = getEventColor(event);
   // 단일 이벤트는 첫이자 마지막. 다일이면 first 셀만 좌측 모서리, last 셀만 우측 모서리.
   const showLeftEdge = !isMulti || isFirst;
   const showRightEdge = !isMulti || isLast;
