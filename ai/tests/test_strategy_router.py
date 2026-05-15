@@ -5,7 +5,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.clients import get_llm_client
+from app.core.db import get_db
 from app.main import create_app
+from app.strategy.context_builder import ContextData
 
 
 class _StubLLM:
@@ -16,10 +18,37 @@ class _StubLLM:
         return response_model.model_validate({})
 
 
+async def _mock_db():
+    yield None
+
+
+_VALID_BODY = {
+    "account_id": 1,
+    "trigger_type": "MANUAL_REQUEST",
+    "context": "한국 대형 보험사 PoC 진행 중",
+}
+
+_MOCK_CONTEXT = ContextData(
+    account_name="테스트기업",
+    account_industry="IT",
+    news_items=[],
+    dart_items=[],
+    meeting=None,
+    context_text="[고객사 정보]\n회사명: 테스트기업\n업종: IT\n\n[추가 컨텍스트]\n한국 대형 보험사 PoC 진행 중",
+)
+
+_EMPTY_CONTEXT = ContextData(
+    account_name="테스트기업",
+    account_industry="IT",
+    context_text="",
+)
+
+
 @pytest.fixture
 def app():
     application = create_app()
     application.dependency_overrides[get_llm_client] = _StubLLM
+    application.dependency_overrides[get_db] = _mock_db
     return application
 
 
@@ -30,96 +59,87 @@ async def client(app):
         yield ac
 
 
-MOCK_FEATURES = {
-    "FEAT_001": "enterprise",
-    "FEAT_002": "finance",
-    "FEAT_003": "korea",
-    "FEAT_007": "poc",
-    "FEAT_011": True,
-    "FEAT_015": "engaged",
-    "FEAT_049": "scoping",
-    "FEAT_055": [],
-    "FEAT_056": ["k_isms"],
-}
-
-
 class TestNextActionsEndpoint:
     @pytest.mark.asyncio
     async def test_returns_200_with_recommendations(self, client):
-        with patch(
-            "app.routers.strategy.extract_features",
-            new_callable=AsyncMock,
-            return_value=MOCK_FEATURES,
+        with (
+            patch("app.routers.strategy.build_context", new_callable=AsyncMock, return_value=_MOCK_CONTEXT),
+            patch("app.routers.strategy.load_pipeline_stages", new_callable=AsyncMock, return_value={}),
         ):
             resp = await client.post(
                 "/api/v1/ai/next-actions",
-                json={"accountId": 1, "context": "한국 대형 보험사 PoC 진행 중"},
+                json=_VALID_BODY,
                 headers={"X-Tenant-Id": "1"},
             )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == 200
-        assert isinstance(body["data"], list)
-        assert len(body["data"]) > 0
+        assert isinstance(body, list)
+        assert len(body) > 0
 
-        first = body["data"][0]
-        assert "nextActionId" in first
+        first = body[0]
         assert "action" in first
-        assert "successProbability" in first
+        assert "reason" in first
         assert "category" in first
-        assert "risk" in first
-        assert "recommendedScript" in first
+        assert "success_probability" in first
+        assert "importance_score" in first
+        assert "recommended_script" in first
         assert "sources" in first
-        assert first["priority"] == 1
+        assert "pipeline_stage_id" in first
 
     @pytest.mark.asyncio
-    async def test_missing_context_returns_400(self, client):
-        resp = await client.post(
-            "/api/v1/ai/next-actions",
-            json={"accountId": 1, "context": ""},
-            headers={"X-Tenant-Id": "1"},
-        )
+    async def test_empty_context_returns_400(self, client):
+        with (
+            patch("app.routers.strategy.build_context", new_callable=AsyncMock, return_value=_EMPTY_CONTEXT),
+            patch("app.routers.strategy.load_pipeline_stages", new_callable=AsyncMock, return_value={}),
+        ):
+            resp = await client.post(
+                "/api/v1/ai/next-actions",
+                json=_VALID_BODY,
+                headers={"X-Tenant-Id": "1"},
+            )
         assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_missing_tenant_returns_401(self, client):
         resp = await client.post(
             "/api/v1/ai/next-actions",
-            json={"accountId": 1, "context": "테스트 상황"},
+            json=_VALID_BODY,
         )
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
     async def test_feature_extraction_failure_returns_502(self, client):
-        with patch(
-            "app.routers.strategy.extract_features",
-            new_callable=AsyncMock,
-            return_value={},
+        with (
+            patch("app.routers.strategy.build_context", new_callable=AsyncMock, return_value=_MOCK_CONTEXT),
+            patch("app.routers.strategy.extract_features_dummy", return_value={}),
+            patch("app.routers.strategy.load_pipeline_stages", new_callable=AsyncMock, return_value={}),
         ):
             resp = await client.post(
                 "/api/v1/ai/next-actions",
-                json={"accountId": 1, "context": "상황 설명"},
+                json=_VALID_BODY,
                 headers={"X-Tenant-Id": "1"},
             )
         assert resp.status_code == 502
 
     @pytest.mark.asyncio
     async def test_response_fields_structure(self, client):
-        with patch(
-            "app.routers.strategy.extract_features",
-            new_callable=AsyncMock,
-            return_value=MOCK_FEATURES,
+        with (
+            patch("app.routers.strategy.build_context", new_callable=AsyncMock, return_value=_MOCK_CONTEXT),
+            patch("app.routers.strategy.load_pipeline_stages", new_callable=AsyncMock, return_value={}),
         ):
             resp = await client.post(
                 "/api/v1/ai/next-actions",
-                json={"accountId": 42, "context": "한국 대형 보험사 PoC scoping 단계"},
+                json={**_VALID_BODY, "account_id": 42},
                 headers={"X-Tenant-Id": "1"},
             )
         body = resp.json()
-        item = body["data"][0]
-        assert item["accountId"] == 42
-        assert isinstance(item["successProbability"], int)
-        assert 0 <= item["successProbability"] <= 99
+        assert isinstance(body, list)
+        assert len(body) > 0
+
+        item = body[0]
+        assert isinstance(item["success_probability"], int)
+        assert 0 <= item["success_probability"] <= 99
+        assert isinstance(item["importance_score"], (int, float))
         assert "sources" in item
         assert "news" in item["sources"]
         assert "dart" in item["sources"]
