@@ -115,13 +115,22 @@ def _derive_script(action: dict, features: dict) -> str:
     )
 
 
+_DART_BASE_URL = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo="
+
+
 def _build_sources(ctx) -> dict:
     news = [{"title": n.get("title", "")} for n in ctx.news_items]
 
-    dart = [
-        {"contentSummary": d.get("content_summary") or d.get("report_nm", "")}
-        for d in ctx.dart_items
-    ]
+    dart = []
+    for d in ctx.dart_items:
+        item: dict[str, str] = {
+            "title": d.get("report_nm", ""),
+            "summary": d.get("content_summary") or "",
+        }
+        rcept_no = d.get("rcept_no")
+        if rcept_no:
+            item["url"] = f"{_DART_BASE_URL}{rcept_no}"
+        dart.append(item)
 
     crm: list[dict] = []
     if ctx.meeting:

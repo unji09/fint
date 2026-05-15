@@ -124,8 +124,11 @@ export default function GNB() {
         notificationId: -Date.now(),
         title: '긴급: 삼성SDS CFO 교체 — 즉시 제안서 발송 권장',
         category: 'MEETING',
-        signalSummary: '삼성SDS, 박성준 CFO 내정 발표 — 디지털 전환 가속 명시',
-        signalTypeBadge: 'News',
+        sources: {
+          news: [{ title: '삼성SDS, 박성준 CFO 내정 발표', summary: '삼성SDS, 박성준 CFO 내정 발표 — 디지털 전환 가속 명시' }],
+          dart: [],
+          crm: [],
+        },
         pipelineStage: '발굴',
         accountName: '삼성SDS',
         isRead: false,
@@ -268,11 +271,17 @@ export default function GNB() {
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1F2126', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {toast.title}
           </div>
-          {toast.signalSummary && (
-            <div style={{ fontSize: 11, color: '#64748B', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {toast.signalSummary}
-            </div>
-          )}
+          {(() => {
+            if (!toast.sources) return null;
+            const items = Object.values(toast.sources).flat();
+            const text = items[0]?.summary || items[0]?.title;
+            if (!text) return null;
+            return (
+              <div style={{ fontSize: 11, color: '#64748B', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {text}
+              </div>
+            );
+          })()}
         </div>
       )}
     </>
