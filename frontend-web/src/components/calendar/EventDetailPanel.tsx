@@ -105,34 +105,6 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
 
   const SUMMARY_COLORS = ['#EF4444', '#F59E0B', '#0686D4', '#22C55E'];
 
-  // 데모 시나리오 — 백엔드 STT 미구현 시 fallback. PENDING → PROCESSING → COMPLETED 순차 시뮬레이션.
-  const runDemoStt = () => {
-    setSttStatus('PENDING');
-    setTimeout(() => setSttStatus('PROCESSING'), 1500);
-    setTimeout(() => {
-      setSttStatus('COMPLETED');
-      setSttLines([
-        { timestamp: '00:00', text: '안녕하세요, 오늘 미팅 시작하겠습니다.' },
-        { timestamp: '00:08', text: '먼저 지난 주 진행 상황을 정리해 드릴게요.' },
-        { timestamp: '00:23', text: '제안서 초안은 검토 완료했고, 가격 조건만 협의가 남았습니다.' },
-        { timestamp: '00:41', text: '저희 쪽에서는 분기 내 계약 체결을 목표로 하고 있어요.' },
-        { timestamp: '01:02', text: '예산 승인은 다음 주 임원 회의 후 확정될 예정입니다.' },
-        { timestamp: '01:18', text: '추가 자료가 필요하시면 메일로 보내드릴게요.' },
-      ]);
-      setAiSummary([
-        {
-          label: '',
-          text:
-            '제안서 가격 조건 협상이 주요 안건으로 다뤄졌고, 분기 내 계약 체결을 목표로 진행 중. ' +
-            '추가 자료는 이메일로 전달하기로 했으며, 다음 주 임원 회의 후 예산 승인이 확정될 예정. ' +
-            '가격 조건 최종안을 작성한 뒤 재미팅 일정을 조율하기로 함. ' +
-            '예산 승인이 지연되면 일정이 한 주 이상 밀릴 가능성이 있어 일정 관리에 주의 필요.',
-          color: '#737880',
-        },
-      ]);
-    }, 4500);
-  };
-
   const handleUpload = async (blob: Blob) => {
     if (!activityId) return;
     setRecError(null);
@@ -149,9 +121,10 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       : 'webm';
     const result = await uploadRecording(Number(activityId), blob, ext);
     if (!result.ok) {
-      // 백엔드 미구현 시 자동으로 데모 시나리오로 fallback
-      console.warn('[FINT] STT 백엔드 호출 실패 — 데모 시나리오로 진행:', result.error);
-      runDemoStt();
+      // 백엔드 호출 실패 — 실제 에러를 사용자에게 노출 (데모 fallback 제거)
+      console.error('[FINT] STT 업로드/호출 실패:', result.error);
+      setSttStatus('FAILED');
+      setRecError(`녹음 업로드 실패: ${result.error ?? '알 수 없는 오류'}`);
       return;
     }
     // 폴링 시작 — 매 업데이트 콜백으로 상태 반영

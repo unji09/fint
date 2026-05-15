@@ -11,8 +11,7 @@
 //
 // 시간 그룹: "방금 전" (5분 이내) / "오늘" / "이번 주" / "이전".
 
-import { useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { fetchWithAuth } from '@/hooks/useAuth';
 
 const F = "'Pretendard', -apple-system, sans-serif";
@@ -51,6 +50,10 @@ interface Props {
   onClose: () => void;
   notifications: NotificationItem[];
   onChanged?: () => void;
+  /** 단건 읽음 처리 직후 부모에 통보 — 부모는 메모리상의 isRead 만 토글 (백엔드 GET 은 unread 만 반환하므로 클라이언트 보관) */
+  onItemRead?: (notificationId: number) => void;
+  /** 전체 읽음 처리 후 부모에 통보 — 모든 알림 isRead=true 로 토글 */
+  onAllRead?: () => void;
 }
 
 // ── 시간 그룹 분류 ──────────────────────────────────────────
@@ -86,9 +89,10 @@ function signalBadge(type?: string): { label: string; bg: string; color: string 
   return { label: type, bg: '#F0F0EE', color: '#737880' };
 }
 
-export default function NotificationPanel({ open, onClose, notifications, onChanged }: Props) {
-  const router = useRouter();
+export default function NotificationPanel({ open, onClose, notifications, onItemRead, onAllRead }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // 클릭한 알림의 인라인 확장 — 한 번에 하나만 펼침
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   // ESC 닫기
   useEffect(() => {
@@ -128,26 +132,25 @@ export default function NotificationPanel({ open, onClose, notifications, onChan
   const handleMarkAllRead = async () => {
     try {
       const res = await fetchWithAuth('/notifications/read-all', { method: 'PATCH' });
-      if (res.ok || res.status === 204) onChanged?.();
+      if (res.ok || res.status === 204) onAllRead?.();
     } catch {
       /* ignore */
     }
   };
 
   const handleClick = async (n: NotificationItem) => {
-    // 읽음 처리
-    if (!n.isRead) {
+    // 인라인 토글 — 이미 펼쳐진 알림이면 접고, 아니면 펼침
+    const willExpand = expandedId !== n.notificationId;
+    setExpandedId(willExpand ? n.notificationId : null);
+    // 펼칠 때 미읽음이면 백엔드 PATCH + 부모 메모리 isRead 토글 (목록에서 사라지지 않고 읽음 표시만)
+    if (willExpand && !n.isRead) {
+      onItemRead?.(n.notificationId);
       try {
         await fetchWithAuth(`/notifications/${n.notificationId}/read`, { method: 'PATCH' });
       } catch {
         /* ignore */
       }
     }
-    // 관련 리소스로 점프 — accountId 가 응답에 들어오면 사용, 없으면 /customer 목록으로
-    if (n.accountId) router.push(`/customer?accountId=${n.accountId}`);
-    else if (n.accountName) router.push('/customer');
-    onChanged?.();
-    onClose();
   };
 
   return (
@@ -285,7 +288,12 @@ export default function NotificationPanel({ open, onClose, notifications, onChan
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
                     {items.map((n) => (
-                      <NotificationCard key={n.notificationId} n={n} onClick={() => handleClick(n)} />
+                      <NotificationCard
+                        key={n.notificationId}
+                        n={n}
+                        expanded={expandedId === n.notificationId}
+                        onClick={() => handleClick(n)}
+                      />
                     ))}
                   </div>
                 </section>
@@ -299,7 +307,7 @@ export default function NotificationPanel({ open, onClose, notifications, onChan
 }
 
 // ─── 알림 카드 ───────────────────────────────────────────────
-function NotificationCard({ n, onClick }: { n: NotificationItem; onClick: () => void }) {
+function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expanded: boolean; onClick: () => void }) {
   const badge = signalBadge(n.signalTypeBadge ?? undefined);
   const hasAccount = !!n.accountName;
   const hasSignal = !!n.signalSummary || !!badge;
@@ -311,8 +319,8 @@ function NotificationCard({ n, onClick }: { n: NotificationItem; onClick: () => 
       style={{
         width: '100%',
         textAlign: 'left',
-        backgroundColor: n.isRead ? '#FAFAF7' : '#fff',
-        border: '1px solid #ECEDE5',
+        backgroundColor: expanded ? '#fff' : n.isRead ? '#FAFAF7' : '#fff',
+        border: `1px solid ${expanded ? '#06B6D4' : '#ECEDE5'}`,
         borderRadius: 10,
         padding: '14px 16px',
         cursor: 'pointer',
@@ -323,10 +331,10 @@ function NotificationCard({ n, onClick }: { n: NotificationItem; onClick: () => 
         fontFamily: F,
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = '#D6D9CB';
+        if (!expanded) e.currentTarget.style.borderColor = '#D6D9CB';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#ECEDE5';
+        if (!expanded) e.currentTarget.style.borderColor = '#ECEDE5';
       }}
     >
       {/* 제목 */}
@@ -421,6 +429,59 @@ function NotificationCard({ n, onClick }: { n: NotificationItem; onClick: () => 
           </div>
         </div>
       )}
+
+      {/* ── 확장 영역 (인라인 상세) ── */}
+      {expanded && (
+        <div
+          style={{
+            marginTop: 4,
+            paddingTop: 12,
+            borderTop: '1px solid #ECEDE5',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          {n.category && (
+            <DetailRow label="활동 유형" value={n.category} />
+          )}
+          {n.signalSummary && (
+            <DetailRow label="시그널 본문" value={n.signalSummary} multiline />
+          )}
+          <DetailRow label="알림 시각" value={formatFullDateTime(n.createdAt)} />
+          <DetailRow label="상태" value={n.isRead ? '읽음' : '미읽음'} />
+        </div>
+      )}
     </button>
   );
+}
+
+function DetailRow({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: multiline ? 'flex-start' : 'center' }}>
+      <span style={{ fontSize: 11, color: '#9CA193', fontWeight: 600, minWidth: 64, flexShrink: 0, paddingTop: multiline ? 2 : 0 }}>
+        {label}
+      </span>
+      <span
+        style={{
+          flex: 1,
+          fontSize: 12,
+          color: '#475569',
+          lineHeight: multiline ? 1.6 : 1.4,
+          whiteSpace: multiline ? 'pre-wrap' : 'normal',
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function formatFullDateTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
 }
