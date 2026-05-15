@@ -49,6 +49,7 @@ packages = ["app"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-m 'not real_gpu'"
 markers = [
     "real_gpu: 실제 GPU 서버가 필요한 E2E 테스트 (GPU_SERVER_URL 환경변수 필요)",
 ]
