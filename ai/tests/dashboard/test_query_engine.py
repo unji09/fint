@@ -128,8 +128,19 @@ class FakeContextStore:
     async def add_entry(
         self, *, tenant_id: int, dashboard_id: int, user_id: int,
         input_text: str, search_type: str,
+        suggested_title: str | None = None,
+        source_query: str | None = None,
+        row_count: int | None = None,
+        columns: list[str] | None = None,
     ) -> None:
-        self._data.append({"input_text": input_text, "search_type": search_type})
+        self._data.append({
+            "input_text": input_text,
+            "search_type": search_type,
+            "suggested_title": suggested_title,
+            "source_query": source_query,
+            "row_count": row_count,
+            "columns": columns,
+        })
 
 
 # --- Helper ---
@@ -1270,3 +1281,66 @@ class TestHybridSourceBreakdown:
 
         assert result["status"] == "COMPLETED"
         assert result["result"].get("source_breakdown") is None
+
+
+class TestEnrichedContextPrompt:
+    """확장된 컨텍스트가 프롬프트에 제목/쿼리/건수 포함되는지 검증."""
+
+    async def test_context_with_title_in_prompt(self):
+        ctx = FakeContextStore()
+        ctx._data = [{
+            "input_text": "고객사목록 5개만 보여줘",
+            "search_type": "STRUCTURED",
+            "suggested_title": "고객사 목록",
+            "source_query": "SELECT name, industry FROM accounts LIMIT 5",
+            "row_count": 5,
+            "columns": ["name", "industry"],
+        }]
+        llm = FakeLLM()
+        engine = _make_engine(llm=llm, context_store=ctx)
+        await engine.run(_make_request(input_text="전부 보여줘"))
+
+        system_msg = llm.calls[0]["messages"][0]["content"]
+        assert "고객사 목록" in system_msg
+        assert "고객사목록 5개만 보여줘" in system_msg
+        assert "5건" in system_msg
+
+    async def test_context_with_source_query_in_prompt(self):
+        ctx = FakeContextStore()
+        ctx._data = [{
+            "input_text": "딜 목록",
+            "search_type": "STRUCTURED",
+            "suggested_title": "딜 목록",
+            "source_query": "SELECT title, amount FROM deals",
+            "row_count": 10,
+            "columns": ["title", "amount"],
+        }]
+        llm = FakeLLM()
+        engine = _make_engine(llm=llm, context_store=ctx)
+        await engine.run(_make_request(input_text="금액 큰 순으로"))
+
+        system_msg = llm.calls[0]["messages"][0]["content"]
+        assert "deals" in system_msg
+        assert "title, amount" in system_msg or "title" in system_msg
+
+    async def test_context_without_enriched_fields_still_works(self):
+        ctx = FakeContextStore()
+        ctx._data = [{"input_text": "이전 질의", "search_type": "STRUCTURED"}]
+        llm = FakeLLM()
+        engine = _make_engine(llm=llm, context_store=ctx)
+        await engine.run(_make_request())
+
+        system_msg = llm.calls[0]["messages"][0]["content"]
+        assert "이전 질의" in system_msg
+
+    async def test_add_entry_receives_enriched_fields(self):
+        ctx = FakeContextStore()
+        llm = FakeLLM()
+        engine = _make_engine(llm=llm, context_store=ctx)
+        await engine.run(_make_request(input_text="딜 목록 보여줘"))
+
+        entry = ctx._data[0]
+        assert entry.get("suggested_title") is not None
+        assert entry.get("source_query") is not None
+        assert entry.get("row_count") is not None
+        assert entry.get("columns") is not None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-MAX_ENTRIES = 5
+MAX_ENTRIES = 15
 TTL_SECONDS = 1800
 
 
@@ -30,6 +30,10 @@ class ContextStore:
         user_id: int,
         input_text: str,
         search_type: str,
+        suggested_title: str | None = None,
+        source_query: str | None = None,
+        row_count: int | None = None,
+        columns: list[str] | None = None,
     ) -> None:
         key = self._key(tenant_id, dashboard_id, user_id)
         entries = await self.get_context(tenant_id=tenant_id, dashboard_id=dashboard_id, user_id=user_id)
@@ -38,6 +42,10 @@ class ContextStore:
             {
                 "input_text": input_text,
                 "search_type": search_type,
+                "suggested_title": suggested_title,
+                "source_query": source_query,
+                "row_count": row_count,
+                "columns": columns,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
         )
