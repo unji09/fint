@@ -24,7 +24,7 @@ async def _mock_db():
 
 _VALID_BODY = {
     "account_id": 1,
-    "trigger_type": "MANUAL_REQUEST",
+    "trigger_type": "NEWS_UPDATED",
     "context": "한국 대형 보험사 PoC 진행 중",
 }
 
