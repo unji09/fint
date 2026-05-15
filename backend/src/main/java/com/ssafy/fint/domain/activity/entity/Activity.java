@@ -81,6 +81,9 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 
+    @Column(name = "recording_key", length = 100)
+    private String recordingKey;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "stt_status", nullable = false, length = 20)
     private SttStatus sttStatus;
@@ -88,9 +91,6 @@ public class Activity extends BaseUpdatableEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "mood_status", nullable = false, length = 20)
     private MoodStatus moodStatus;
-
-    @Column(name = "recording_key", length = 100)
-    private String recordingKey;
 
     @Builder
     private Activity(
@@ -118,6 +118,10 @@ public class Activity extends BaseUpdatableEntity {
         this.memo = memo;
         this.sttStatus = SttStatus.PENDING;
         this.moodStatus = MoodStatus.PENDING;
+        this.recordingKey = recordingKey;
+    }
+
+    public void updateRecordingKey(String recordingKey) {
         this.recordingKey = recordingKey;
     }
 

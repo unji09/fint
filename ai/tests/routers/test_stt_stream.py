@@ -1,3 +1,5 @@
+import base64
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -10,12 +12,18 @@ from app.main import create_app
 from app.routers.stt import get_gpu_stt_client
 from app.core.speaker_session import SpeakerSessionManager
 
-JWT_SECRET = "test-secret-key"
+# Spring JwtTokenProvider와 동일: base64url-encoded 시크릿 사용
+_RAW_TEST_KEY = b"test-secret-key-12345678901234"
+JWT_SECRET = base64.urlsafe_b64encode(_RAW_TEST_KEY).decode()
 WS_URL = "/api/v1/stt/stream/activity_001"
+
+# 실제 오디오 청크 로드 — WS 스트리밍은 청크 단위로 전송하므로 test_chunk.m4a 사용
+# (test.m4a는 57MB 전체 녹음본으로 1MB 청크 제한 초과)
+_TEST_AUDIO_CHUNK = (Path(__file__).parent.parent / "resources" / "test_chunk.m4a").read_bytes()
 
 
 def _make_token(tenant_id: int = 1) -> str:
-    return jwt.encode({"tenant_id": tenant_id}, JWT_SECRET, algorithm="HS256")
+    return jwt.encode({"tenant_id": tenant_id}, _RAW_TEST_KEY, algorithm="HS256")
 
 
 class FakeGpuStt:
@@ -55,7 +63,7 @@ def test_stream_success(mock_settings):
     token = _make_token()
 
     with client.websocket_connect(f"{WS_URL}?token={token}") as ws:
-        ws.send_bytes(b"fake-audio-data")
+        ws.send_bytes(_TEST_AUDIO_CHUNK)
         msg = ws.receive_json()
 
     assert msg["type"] == "transcript"
@@ -109,8 +117,8 @@ def test_stream_empty_text_no_response(mock_settings):
     token = _make_token()
 
     with client.websocket_connect(f"{WS_URL}?token={token}") as ws:
-        ws.send_bytes(b"silence-audio")
-        ws.send_bytes(b"silence-audio-2")
+        ws.send_bytes(_TEST_AUDIO_CHUNK)
+        ws.send_bytes(_TEST_AUDIO_CHUNK)
 
 
 @patch("app.core.security.get_settings")
@@ -120,7 +128,7 @@ def test_stream_gpu_error_sends_error_message(mock_settings):
     token = _make_token()
 
     with client.websocket_connect(f"{WS_URL}?token={token}") as ws:
-        ws.send_bytes(b"audio-data")
+        ws.send_bytes(_TEST_AUDIO_CHUNK)
         msg = ws.receive_json()
 
     assert msg["type"] == "error"
@@ -138,15 +146,15 @@ def test_stream_session_isolated_per_tenant(mock_settings):
     application.dependency_overrides[get_gpu_stt_client] = lambda: FakeGpuStt()
     client = TestClient(application, raise_server_exceptions=False)
 
-    token_t1 = jwt.encode({"tenant_id": 1}, JWT_SECRET, algorithm="HS256")
-    token_t2 = jwt.encode({"tenant_id": 2}, JWT_SECRET, algorithm="HS256")
+    token_t1 = jwt.encode({"tenant_id": 1}, _RAW_TEST_KEY, algorithm="HS256")
+    token_t2 = jwt.encode({"tenant_id": 2}, _RAW_TEST_KEY, algorithm="HS256")
 
     with client.websocket_connect(f"{WS_URL}?token={token_t1}") as ws:
-        ws.send_bytes(b"audio")
+        ws.send_bytes(_TEST_AUDIO_CHUNK)
         ws.receive_json()
 
     with client.websocket_connect(f"{WS_URL}?token={token_t2}") as ws:
-        ws.send_bytes(b"audio")
+        ws.send_bytes(_TEST_AUDIO_CHUNK)
         ws.receive_json()
 
     assert "1:activity_001" not in manager._sessions
