@@ -262,6 +262,37 @@ class TestScoreThreshold:
         assert params["min_score"] > 0
 
 
+class TestCustomMinScore:
+    """SemanticSearchSpec.min_score로 threshold를 제어할 수 있는지 검증."""
+
+    @pytest.mark.asyncio
+    async def test_custom_min_score_passed_to_params(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS", min_score=0.5)
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        params = db.execute.call_args[0][1]
+        assert params["min_score"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_default_min_score_is_0_3(self):
+        spec = SemanticSearchSpec(search_text="test", top_k=5)
+        assert spec.min_score == 0.3
+
+    @pytest.mark.asyncio
+    async def test_high_threshold_filters_more(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="DART", min_score=0.8)
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        params = db.execute.call_args[0][1]
+        assert params["min_score"] == 0.8
+
+
 class TestAllSourceFilter:
     @pytest.mark.asyncio
     async def test_all_filter_queries_both_sources(self):

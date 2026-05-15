@@ -132,7 +132,7 @@ async def semantic_search(
         "query_vec": vec_str,
         "top_k": spec.top_k,
         "tenant_id": tenant_id,
-        "min_score": _MIN_SIMILARITY_SCORE,
+        "min_score": spec.min_score,
     }
 
     source = spec.source_filter
