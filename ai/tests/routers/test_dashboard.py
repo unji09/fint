@@ -89,6 +89,23 @@ class FakeRedis:
         self._store.pop(key, None)
         self._ttls.pop(key, None)
 
+    async def incr(self, key: str) -> int:
+        raw = self._store.get(key)
+        val = int(raw) if raw else 0
+        val += 1
+        self._store[key] = str(val)
+        return val
+
+    async def decr(self, key: str) -> int:
+        raw = self._store.get(key)
+        val = int(raw) if raw else 0
+        val -= 1
+        self._store[key] = str(val)
+        return val
+
+    async def expire(self, key: str, seconds: int) -> None:
+        self._ttls[key] = seconds
+
 
 fake_redis_instance = FakeRedis()
 
@@ -231,7 +248,7 @@ class TestDashboardEndpoint:
                     "dashboard_id": 1,
                     "tenant_id": 42,
                     "user_id": 7,
-                    "current_widget": {"widget_type": "BAR_CHART", "title": "기존 바 차트"},
+                    "current_widget": {"widget_type": "CHART", "title": "기존 바 차트"},
                 },
             )
 
@@ -383,7 +400,7 @@ class TestRunQueryTask:
         redis = FakeRedis()
         request = self._make_request(
             action="MODIFY",
-            current_widget={"widget_type": "BAR_CHART", "title": "기존 바 차트"},
+            current_widget={"widget_type": "CHART", "title": "기존 바 차트"},
         )
 
         with patch("app.routers.dashboard.get_session_factory", return_value=FakeSessionFactory()):

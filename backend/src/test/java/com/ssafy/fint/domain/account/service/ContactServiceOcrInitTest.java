@@ -8,6 +8,7 @@ import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
 import com.ssafy.fint.domain.account.repository.ContactRepository;
 import com.ssafy.fint.domain.contact.dto.request.ContactOcrInitRequest;
 import com.ssafy.fint.domain.contact.dto.response.ContactOcrInitResult;
+import com.ssafy.fint.domain.contact.event.ContactCreatedEvent;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.security.CustomUserDetails;
@@ -15,9 +16,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
@@ -44,6 +47,7 @@ class ContactServiceOcrInitTest {
     @Mock private AccountRepository accountRepository;
     @Mock private AccountUserAssignmentRepository accountUserAssignmentRepository;
     @Mock private UserRepository userRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ContactService contactService;
@@ -84,6 +88,13 @@ class ContactServiceOcrInitTest {
             verify(accountRepository).save(any(Account.class));
             verify(accountUserAssignmentRepository).save(any(AccountUserAssignment.class));
             verify(contactRepository).save(any(Contact.class));
+
+            ArgumentCaptor<ContactCreatedEvent> captor = ArgumentCaptor.forClass(ContactCreatedEvent.class);
+            verify(eventPublisher).publishEvent(captor.capture());
+            ContactCreatedEvent event = captor.getValue();
+            assertThat(event.tenantId()).isEqualTo(TENANT_ID);
+            assertThat(event.accountId()).isEqualTo(ACCOUNT_ID);
+            assertThat(event.contactId()).isEqualTo(CONTACT_ID);
         }
     }
 
@@ -117,6 +128,7 @@ class ContactServiceOcrInitTest {
             assertThat(result.response().accountId()).isEqualTo(ACCOUNT_ID);
             verify(accountRepository, never()).save(any(Account.class));
             verify(contactRepository).save(any(Contact.class));
+            verify(eventPublisher, never()).publishEvent(any());
         }
     }
 
@@ -143,6 +155,7 @@ class ContactServiceOcrInitTest {
             assertThat(result.created()).isFalse();
             assertThat(result.response().contactId()).isEqualTo(CONTACT_ID);
             verify(contactRepository, never()).save(any(Contact.class));
+            verify(eventPublisher, never()).publishEvent(any());
         }
 
         @Test
@@ -164,6 +177,7 @@ class ContactServiceOcrInitTest {
             assertThat(result.created()).isFalse();
             assertThat(result.response().contactId()).isEqualTo(CONTACT_ID);
             verify(contactRepository, never()).save(any(Contact.class));
+            verify(eventPublisher, never()).publishEvent(any());
         }
 
         @Test
@@ -185,6 +199,7 @@ class ContactServiceOcrInitTest {
             assertThat(result.created()).isFalse();
             assertThat(result.response().contactId()).isEqualTo(CONTACT_ID);
             verify(contactRepository, never()).save(any(Contact.class));
+            verify(eventPublisher, never()).publishEvent(any());
         }
 
         @Test
@@ -208,6 +223,7 @@ class ContactServiceOcrInitTest {
 
             assertThat(result.created()).isFalse();
             assertThat(result.response().contactId()).isEqualTo(CONTACT_ID);
+            verify(eventPublisher, never()).publishEvent(any());
         }
     }
 

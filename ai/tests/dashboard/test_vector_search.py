@@ -186,6 +186,114 @@ class TestSourceFilter:
         assert "tenant_id" in sql_text
         assert "account_dart_disclosures" in sql_text
 
+class TestSqlAsyncpgCompat:
+    """asyncpg와 호환되는 SQL 구문인지 검증."""
+
+    @pytest.mark.asyncio
+    async def test_news_sql_uses_cast_not_double_colon(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert ":query_vec::vector" not in sql_text
+        assert "CAST(:query_vec AS vector)" in sql_text
+
+    @pytest.mark.asyncio
+    async def test_dart_sql_uses_cast_not_double_colon(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="DART")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert ":query_vec::vector" not in sql_text
+        assert "CAST(:query_vec AS vector)" in sql_text
+
+
+class TestScoreThreshold:
+    """유사도 점수 threshold 필터링 검증."""
+
+    @pytest.mark.asyncio
+    async def test_news_sql_contains_min_score_param(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert "min_score" in sql_text
+
+    @pytest.mark.asyncio
+    async def test_news_params_include_min_score(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        params = db.execute.call_args[0][1]
+        assert "min_score" in params
+
+    @pytest.mark.asyncio
+    async def test_dart_sql_contains_min_score_param(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="DART")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert "min_score" in sql_text
+
+    @pytest.mark.asyncio
+    async def test_min_score_value_is_positive(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS")
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        params = db.execute.call_args[0][1]
+        assert params["min_score"] > 0
+
+
+class TestCustomMinScore:
+    """SemanticSearchSpec.min_score로 threshold를 제어할 수 있는지 검증."""
+
+    @pytest.mark.asyncio
+    async def test_custom_min_score_passed_to_params(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="NEWS", min_score=0.5)
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        params = db.execute.call_args[0][1]
+        assert params["min_score"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_default_min_score_is_0_3(self):
+        spec = SemanticSearchSpec(search_text="test", top_k=5)
+        assert spec.min_score == 0.3
+
+    @pytest.mark.asyncio
+    async def test_high_threshold_filters_more(self):
+        embedder = _mock_embedder()
+        db = _mock_db_with_results([])
+        spec = SemanticSearchSpec(search_text="test", top_k=5, source_filter="DART", min_score=0.8)
+
+        await semantic_search(spec, tenant_id=1, embedder=embedder, db=db)
+
+        params = db.execute.call_args[0][1]
+        assert params["min_score"] == 0.8
+
+
+class TestAllSourceFilter:
     @pytest.mark.asyncio
     async def test_all_filter_queries_both_sources(self):
         embedder = _mock_embedder()

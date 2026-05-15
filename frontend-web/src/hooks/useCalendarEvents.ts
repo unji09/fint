@@ -28,6 +28,7 @@ function fmt(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toCalendarEvent(raw: any): CalendarEvent {
   return {
     eventId: raw.eventId,
@@ -80,6 +81,7 @@ export function useCalendarEvents({
       const res = await fetchWithAuth(`/calendar/events?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setEvents((json.data?.content ?? []).map((r: any) => toCalendarEvent(r)));
     } catch (err) {
       console.error('[useCalendarEvents]', err);

@@ -147,6 +147,7 @@ export function useAccountList(filter?: AccountListFilter) {
         res = await fetchWithAuth(`/accounts/searchable?keyword=${encodeURIComponent(fbKw)}&size=100`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         items = (json.data ?? []).map((a: any) => ({
           accountId: a.accountId,
           name: a.name,

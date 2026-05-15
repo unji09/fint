@@ -68,6 +68,7 @@ services:
       - "${AI_PORT:-8000}:8000"
     volumes:
       - ai-model:/app/model
+      - ../ai/app:/app/app
     depends_on:
       postgres:
         condition: service_healthy

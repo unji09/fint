@@ -37,10 +37,11 @@ class RedisStore:
             "result": result,
         })
 
-    async def set_failed(self, trace_id: str, error: str) -> None:
+    async def set_failed(self, trace_id: str, error: str, *, error_code: str | None = None) -> None:
         await self._merge_update(trace_id, {
             "status": QueryStatus.FAILED.value,
             "error": error,
+            "error_code": error_code,
             "result": None,
         })
 
@@ -49,3 +50,27 @@ class RedisStore:
         if not raw:
             return None
         return json.loads(raw)
+
+    # --- Rate limiting ---
+
+    _MAX_CONCURRENT = 3
+    _RATE_TTL = 60
+
+    def _rate_key(self, tenant_id: int, user_id: int) -> str:
+        return f"dashboard:rate:{tenant_id}:{user_id}"
+
+    async def acquire_rate_slot(self, *, tenant_id: int, user_id: int) -> bool:
+        key = self._rate_key(tenant_id, user_id)
+        count = await self._redis.incr(key)
+        if count == 1:
+            await self._redis.expire(key, self._RATE_TTL)
+        if count > self._MAX_CONCURRENT:
+            await self._redis.decr(key)
+            return False
+        return True
+
+    async def release_rate_slot(self, *, tenant_id: int, user_id: int) -> None:
+        key = self._rate_key(tenant_id, user_id)
+        val = await self._redis.decr(key)
+        if val <= 0:
+            await self._redis.delete(key)

@@ -1,3 +1,4 @@
+import base64
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +17,10 @@ async def _get_tenant(tenant_id: int = Depends(get_tenant_id)):
     return {"tenant_id": tenant_id}
 
 
-JWT_SECRET = "test-secret-key"
+# Spring JwtTokenProvider와 동일: base64url-encoded 시크릿 사용
+# _decode_secret()이 base64url decode하므로 테스트도 동일 방식을 적용해야 한다.
+_RAW_TEST_KEY = b"test-secret-key-12345678901234"
+JWT_SECRET = base64.urlsafe_b64encode(_RAW_TEST_KEY).decode()
 
 
 @pytest.fixture
@@ -34,7 +38,7 @@ async def client(app):
 
 
 def _make_token(payload: dict) -> str:
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, _RAW_TEST_KEY, algorithm="HS256")
 
 
 @pytest.mark.asyncio
