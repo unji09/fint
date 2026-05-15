@@ -170,7 +170,7 @@ class QueryEngine:
         try:
             check_input(request.input_text)
         except GuardrailError as e:
-            return {"status": "FAILED", "error": str(e)}
+            return {"status": "FAILED", "error": str(e), "error_code": "GUARDRAIL"}
 
         try:
             intent = await asyncio.wait_for(
@@ -178,15 +178,16 @@ class QueryEngine:
             )
         except asyncio.TimeoutError:
             logger.warning("LLM intent classification timed out")
-            return {"status": "FAILED", "error": "질의 분석 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."}
+            return {"status": "FAILED", "error": "질의 분석 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", "error_code": "QUERY_TIMEOUT"}
         except Exception:
             logger.exception("LLM intent classification failed")
-            return {"status": "FAILED", "error": "질의 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
+            return {"status": "FAILED", "error": "질의 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error_code": "LLM_ERROR"}
 
         if intent.search_type == "REJECTED":
             return {
                 "status": "REJECTED",
                 "rejection_reason": intent.rejection_reason or "요청을 처리할 수 없습니다.",
+                "error_code": "INVALID_QUERY",
             }
 
         await _notify(QueryStatus.DATA_QUERYING)
@@ -194,10 +195,10 @@ class QueryEngine:
         try:
             rows = await self._execute_query(intent, tenant_id=request.tenant_id)
         except QueryBuildError as e:
-            return {"status": "FAILED", "error": str(e)}
+            return {"status": "FAILED", "error": str(e), "error_code": "DB_ERROR"}
         except Exception:
             logger.exception("Database query execution failed")
-            return {"status": "FAILED", "error": "데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
+            return {"status": "FAILED", "error": "데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error_code": "DB_ERROR"}
 
         rows = _normalize_rows(rows)
 
@@ -205,6 +206,7 @@ class QueryEngine:
             len(rows) == 1
             and intent.query_spec
             and _has_aggregate(intent.query_spec)
+            and not intent.query_spec.group_by
         ):
             try:
                 detail_spec = _derive_detail_spec(intent.query_spec)
@@ -226,10 +228,10 @@ class QueryEngine:
             )
         except asyncio.TimeoutError:
             logger.warning("LLM insight generation timed out")
-            return {"status": "FAILED", "error": "인사이트 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."}
+            return {"status": "FAILED", "error": "인사이트 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", "error_code": "QUERY_TIMEOUT"}
         except Exception:
             logger.exception("LLM insight generation failed")
-            return {"status": "FAILED", "error": "인사이트 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}
+            return {"status": "FAILED", "error": "인사이트 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error_code": "LLM_ERROR"}
 
         await _notify(QueryStatus.STYLING)
 

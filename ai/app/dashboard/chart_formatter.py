@@ -2,7 +2,88 @@
 
 from __future__ import annotations
 
+import re
+
 from app.schemas.dashboard import InsightResult, WidgetType
+
+_COLUMN_LABEL_KO: dict[str, str] = {
+    "account_id": "고객사ID",
+    "deal_id": "딜ID",
+    "activity_id": "활동ID",
+    "contact_id": "담당자ID",
+    "user_id": "사용자ID",
+    "tenant_id": "테넌트ID",
+    "name": "이름",
+    "title": "제목",
+    "amount": "금액",
+    "industry": "업종",
+    "current_pipeline": "파이프라인",
+    "expected_close": "예상 종료일",
+    "probability": "성공 확률",
+    "created_at": "생성일",
+    "updated_at": "수정일",
+    "email": "이메일",
+    "phone": "전화번호",
+    "biz_no": "사업자번호",
+    "type": "유형",
+    "source": "출처",
+    "status": "상태",
+    "description": "설명",
+    "address": "주소",
+    "note": "비고",
+    "score": "점수",
+    "temperature": "온도",
+    "stage": "스테이지",
+    "company_name": "회사명",
+    "representative": "대표자",
+    "employee_count": "직원수",
+    "revenue": "매출액",
+    "fiscal_year": "회계연도",
+}
+
+_AGG_KO: dict[str, str] = {
+    "SUM": "합계",
+    "AVG": "평균",
+    "MIN": "최솟값",
+    "MAX": "최댓값",
+}
+
+_TRUNC_UNIT_KO: dict[str, str] = {
+    "day": "일",
+    "week": "주",
+    "month": "월",
+    "quarter": "분기",
+    "year": "연도",
+}
+
+_RE_AGG = re.compile(
+    r"^(SUM|AVG|COUNT|MIN|MAX)\((.+)\)$", re.IGNORECASE,
+)
+_RE_DATE_TRUNC = re.compile(
+    r"^DATE_TRUNC\(\s*'(\w+)'\s*,\s*.+\)$", re.IGNORECASE,
+)
+
+
+def _humanize_column(raw: str) -> str:
+    key = raw.strip()
+    if key in _COLUMN_LABEL_KO:
+        return _COLUMN_LABEL_KO[key]
+
+    m = _RE_AGG.match(key)
+    if m:
+        func, inner = m.group(1).upper(), m.group(2).strip()
+        if func == "COUNT":
+            return "건수"
+        col_label = _COLUMN_LABEL_KO.get(inner, inner)
+        return f"{col_label} {_AGG_KO[func]}"
+
+    m = _RE_DATE_TRUNC.match(key)
+    if m:
+        unit = m.group(1).lower()
+        return _TRUNC_UNIT_KO.get(unit, unit)
+
+    return raw
+
 
 _MAX_CHART_CATEGORIES = 20
 _MAX_PIE_SEGMENTS = 10
@@ -137,7 +218,7 @@ def _build_table_config(insight: InsightResult, rows: list[dict]) -> dict:
                 col["unit"] = insight.y_unit
             columns.append(col)
     elif rows:
-        columns = [{"label": k, "field": k} for k in rows[0].keys()]
+        columns = [{"label": _humanize_column(k), "field": k} for k in rows[0].keys()]
 
     return {
         "columns": columns,
