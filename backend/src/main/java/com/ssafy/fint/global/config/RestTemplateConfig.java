@@ -74,12 +74,12 @@ public class RestTemplateConfig {
 
     /**
      * STT 전용 RestTemplate.
-     * 오디오 길이에 따라 수 분 소요 가능. read timeout 300s.
+     * 30분 녹음 기준 Whisper + 화자분리 처리에 최대 10~15분 소요 가능. read timeout 1800s.
      */
     @Bean
     public RestTemplate sttRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(300)))
+                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(1800)))
                 .build();
     }
 
