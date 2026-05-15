@@ -98,11 +98,18 @@ def format_result(
     search_type: str,
 ) -> dict:
     """InsightResult + rows → Spring 전달용 result dict."""
+    source_breakdown: dict[str, int] | None = None
+    if search_type == "HYBRID":
+        structured_count = sum(1 for r in rows if r.get("_source_type") == "STRUCTURED")
+        semantic_count = sum(1 for r in rows if r.get("_source_type") == "SEMANTIC")
+        source_breakdown = {"structured": structured_count, "semantic": semantic_count}
+        rows = [{k: v for k, v in r.items() if k != "_source_type"} for r in rows]
+
     widget_type = _correct_widget_type(insight, rows)
     chart_type = _resolve_chart_type(widget_type, insight.chart_type, rows)
     title = (insight.title or "")[:_MAX_TITLE_LENGTH]
 
-    return {
+    result: dict = {
         "widget_type": widget_type.value,
         "chart_type": chart_type,
         "title": title,
@@ -116,6 +123,9 @@ def format_result(
         "source_query": source_query,
         "search_type": search_type,
     }
+    if source_breakdown is not None:
+        result["source_breakdown"] = source_breakdown
+    return result
 
 
 # --- widget type correction ---

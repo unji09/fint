@@ -378,10 +378,15 @@ class QueryEngine:
         structured_rows: list[dict] = []
         semantic_rows: list[dict] = []
 
+        is_hybrid = intent.search_type == "HYBRID"
+
         if intent.search_type in ("STRUCTURED", "HYBRID") and intent.query_spec:
             sql, params = build_query(intent.query_spec, tenant_id=tenant_id)
             result = await self._db.execute(text(sql), params)
             structured_rows = [dict(row) for row in result.mappings().all()]
+            if is_hybrid:
+                for row in structured_rows:
+                    row["_source_type"] = "STRUCTURED"
 
         if intent.search_type in ("SEMANTIC", "HYBRID") and intent.semantic_spec:
             search_results = await semantic_search(
@@ -401,8 +406,11 @@ class QueryEngine:
                 }
                 for r in search_results
             ]
+            if is_hybrid:
+                for row in semantic_rows:
+                    row["_source_type"] = "SEMANTIC"
 
-        if intent.search_type == "HYBRID":
+        if is_hybrid:
             return structured_rows + semantic_rows
         if intent.search_type == "SEMANTIC":
             return semantic_rows
