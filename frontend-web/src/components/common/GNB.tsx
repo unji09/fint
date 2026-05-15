@@ -100,6 +100,37 @@ export default function GNB() {
   // /user/queue/notifications 구독. 새 알림 수신 시 목록 push + 토스트 표시.
   const [toast, setToast] = useState<NotificationItem | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 토스트 swipe-dismiss — 우측/위로 드래그하면 사라짐
+  const [toastDrag, setToastDrag] = useState<{ startX: number; startY: number; dx: number; dy: number; dragging: boolean }>(
+    { startX: 0, startY: 0, dx: 0, dy: 0, dragging: false },
+  );
+  const dismissToast = useCallback(() => {
+    if (toastTimerRef.current) { clearTimeout(toastTimerRef.current); toastTimerRef.current = null; }
+    setToast(null);
+    setToastDrag({ startX: 0, startY: 0, dx: 0, dy: 0, dragging: false });
+  }, []);
+  useEffect(() => {
+    if (!toastDrag.dragging) return;
+    const onMv = (e: MouseEvent) => {
+      setToastDrag((d) => ({ ...d, dx: e.clientX - d.startX, dy: e.clientY - d.startY }));
+    };
+    const onUp = () => {
+      setToastDrag((d) => {
+        // 80px 이상 우측 또는 위로 던지면 dismiss
+        if (d.dx > 80 || d.dy < -80) {
+          dismissToast();
+          return d;
+        }
+        return { ...d, dragging: false, dx: 0, dy: 0 };
+      });
+    };
+    window.addEventListener('mousemove', onMv);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMv);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [toastDrag.dragging, dismissToast]);
   const onWsNotification = useCallback((noti: NotificationItem) => {
     setNotis((prev) => {
       // 중복(같은 notificationId) 방지
@@ -121,6 +152,8 @@ export default function GNB() {
     const now = Date.now();
     const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
     const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+    // 데모용 URL — 백엔드 실데이터 연결 전까지 네이버 뉴스 검색 결과로 대체
+    const newsSearch = (q: string) => `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(q)}`;
     const demoBase: NotificationItem[] = [
       {
         notificationId: -1,
@@ -130,11 +163,11 @@ export default function GNB() {
         isRead: false, createdAt: iso(2 * MIN),
         sources: {
           news: [
-            { title: '삼성SDS, 박성준 CFO 내정 발표', summary: '디지털 전환 가속 명시. 클라우드/AI 투자 확대 시사.', url: 'https://www.example.com/news/samsung-sds-cfo-1' },
-            { title: '재무총괄 교체 — 의사결정 가속 시그널', summary: '내부 의사결정 라인 정비.', url: 'https://www.example.com/news/samsung-sds-cfo-2' },
+            { title: '삼성SDS, 박성준 CFO 내정 발표', summary: '디지털 전환 가속 명시. 클라우드/AI 투자 확대 시사.', url: newsSearch('삼성SDS CFO 박성준') },
+            { title: '재무총괄 교체 — 의사결정 가속 시그널', summary: '내부 의사결정 라인 정비.', url: newsSearch('삼성SDS 재무총괄 교체') },
           ],
           dart: [
-            { title: '주요 경영사항 — 임원 변경', summary: '재무 총괄 임원(CFO) 신규 선임 공시.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515000851' },
+            { title: '주요 경영사항 — 임원 변경', summary: '재무 총괄 임원(CFO) 신규 선임 공시.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' },
           ],
         },
       },
@@ -145,7 +178,7 @@ export default function GNB() {
         pipelineStage: '제안 제출', accountName: 'LG CNS',
         isRead: false, createdAt: iso(45 * MIN),
         sources: {
-          dart: [{ title: '2026년 1분기 사업보고서', summary: '매출 12% 증가. 클라우드 부문 성장 견인.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515000900' }],
+          dart: [{ title: '2026년 1분기 사업보고서', summary: '매출 12% 증가. 클라우드 부문 성장 견인.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' }],
         },
       },
       {
@@ -156,8 +189,8 @@ export default function GNB() {
         isRead: false, createdAt: iso(3 * HOUR),
         sources: {
           dart: [
-            { title: '사외이사 신규 선임', summary: '플랫폼 사업 자문역 영입.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515001100' },
-            { title: '부사장 선임', summary: '플랫폼 사업 총괄 부사장 신규 선임.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515001200' },
+            { title: '사외이사 신규 선임', summary: '플랫폼 사업 자문역 영입.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' },
+            { title: '부사장 선임', summary: '플랫폼 사업 총괄 부사장 신규 선임.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' },
           ],
         },
       },
@@ -168,7 +201,7 @@ export default function GNB() {
         pipelineStage: '가치 제안', accountName: '네이버',
         isRead: false, createdAt: iso(DAY),
         sources: {
-          news: [{ title: '네이버, 엔터프라이즈 AI 분석 플랫폼 출시 임박', summary: 'B2B 시장 본격 진입. 파트너사 모집 시작.', url: 'https://www.example.com/news/naver-ai' }],
+          news: [{ title: '네이버, 엔터프라이즈 AI 분석 플랫폼 출시 임박', summary: 'B2B 시장 본격 진입. 파트너사 모집 시작.', url: newsSearch('네이버 AI 데이터 분석') }],
         },
       },
       {
@@ -178,7 +211,7 @@ export default function GNB() {
         pipelineStage: '계약 대기', accountName: '현대오토에버',
         isRead: true, createdAt: iso(3 * DAY),
         sources: {
-          dart: [{ title: '2026년 1분기 사업보고서', summary: '영업이익 8% 개선. SaaS 구독 매출 분기 최초 500억원 돌파.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260512000123' }],
+          dart: [{ title: '2026년 1분기 사업보고서', summary: '영업이익 8% 개선. SaaS 구독 매출 분기 최초 500억원 돌파.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' }],
         },
       },
       {
@@ -188,7 +221,7 @@ export default function GNB() {
         pipelineStage: '솔루션 설계', accountName: 'SK텔레콤',
         isRead: true, createdAt: iso(8 * DAY),
         sources: {
-          news: [{ title: 'SK텔레콤, 5G IoT 파트너 모집', summary: '제조업 IoT 파트너 모집 — F!NT 솔루션 적합도 검토 필요.', url: 'https://www.example.com/news/skt-iot' }],
+          news: [{ title: 'SK텔레콤, 5G IoT 파트너 모집', summary: '제조업 IoT 파트너 모집 — F!NT 솔루션 적합도 검토 필요.', url: newsSearch('SK텔레콤 5G IoT 플랫폼') }],
         },
       },
     ];
@@ -309,10 +342,29 @@ export default function GNB() {
         }}
       />
 
-      {/* 긴급 알림 토스트 — WebSocket 으로 실시간 수신 시 우측 상단에 5초 노출 */}
-      {toast && (
+      {/* 긴급 알림 토스트 — WebSocket 실시간. 우측/위로 swipe 시 dismiss. */}
+      {toast && (() => {
+        const dx = toastDrag.dx;
+        const dy = toastDrag.dy;
+        // 우측(>0) 또는 위(<0) 방향만 따라감
+        const tx = Math.max(0, dx);
+        const ty = Math.min(0, dy);
+        // dismiss 임계 80px — 점점 투명
+        const dist = Math.max(tx, -ty);
+        const opacity = toastDrag.dragging ? Math.max(0.3, 1 - dist / 120) : 1;
+        return (
         <div
-          onClick={() => { setToast(null); setNotiOpen(true); }}
+          onMouseDown={(e) => {
+            // 닫기 버튼 mousedown 은 drag 시작 안 함
+            if ((e.target as HTMLElement).closest('[data-toast-close]')) return;
+            setToastDrag({ startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, dragging: true });
+          }}
+          onClick={() => {
+            // 드래그 했으면 (4px 이상 이동) 패널 열지 않음 (의도치 않은 클릭 방지)
+            if (Math.abs(dx) > 4 || Math.abs(dy) > 4) return;
+            dismissToast();
+            setNotiOpen(true);
+          }}
           style={{
             position: 'fixed',
             top: 80,
@@ -325,12 +377,16 @@ export default function GNB() {
             borderRadius: 10,
             boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
             padding: '12px 14px',
-            cursor: 'pointer',
+            cursor: toastDrag.dragging ? 'grabbing' : 'grab',
+            userSelect: 'none',
             display: 'flex',
             flexDirection: 'column',
             gap: 6,
             fontFamily: F,
             animation: 'toastSlideIn 0.2s ease-out',
+            transform: `translate(${tx}px, ${ty}px)`,
+            opacity,
+            transition: toastDrag.dragging ? 'none' : 'transform 0.18s ease-out, opacity 0.18s ease-out',
           }}
         >
           <style>{`@keyframes toastSlideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
@@ -353,7 +409,8 @@ export default function GNB() {
             );
           })()}
         </div>
-      )}
+        );
+      })()}
     </>
   );
 }

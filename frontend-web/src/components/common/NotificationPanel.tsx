@@ -111,6 +111,24 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
   const panelRef = useRef<HTMLDivElement>(null);
   // 클릭한 알림의 인라인 확장 — 한 번에 하나만 펼침
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  // open 시점에 unread 였던 알림 ID 스냅샷.
+  // panel 이 열려 있는 동안에는 클릭으로 읽음 처리되어도 카드가 "새 알림" 섹션에 그대로 남도록
+  // (정렬 변경으로 expand 영역이 시야 밖으로 사라지는 문제 방지). panel 닫고 다시 열면 재정렬.
+  const [stickyUnreadIds, setStickyUnreadIds] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (!open) {
+      // 닫힐 때 expand 도 함께 초기화
+      setExpandedId(null);
+      setStickyUnreadIds(new Set());
+      return;
+    }
+    setStickyUnreadIds((prev) => {
+      const next = new Set(prev);
+      notifications.forEach((n) => { if (!n.isRead) next.add(n.notificationId); });
+      return next;
+    });
+    // 새 알림이 추가될 때도 sticky 에 포함되도록 notifications 의존성
+  }, [open, notifications]);
 
   // ESC 닫기
   useEffect(() => {
@@ -134,14 +152,17 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
 
   if (!open) return null;
 
-  // 안 읽음 위, 읽음 아래로 정렬 (각 그룹 내 최신순)
+  // sticky 기반 분리 — open 동안에는 isRead 변경되어도 sticky 안에 있으면 unread 섹션에 머무름.
+  const isUnreadDisplay = (n: NotificationItem) => !n.isRead || stickyUnreadIds.has(n.notificationId);
   const sortedNotis = [...notifications].sort((a, b) => {
-    if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
+    const au = isUnreadDisplay(a), bu = isUnreadDisplay(b);
+    if (au !== bu) return au ? -1 : 1;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
-  const unreadList = sortedNotis.filter((n) => !n.isRead);
-  const readList = sortedNotis.filter((n) => n.isRead);
-  const unreadCount = unreadList.length;
+  const unreadList = sortedNotis.filter(isUnreadDisplay);
+  const readList = sortedNotis.filter((n) => !isUnreadDisplay(n));
+  // 배지 카운트는 실제 isRead 기준 (sticky 무관)
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleMarkAllRead = async () => {
     try {

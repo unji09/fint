@@ -49,29 +49,52 @@ function mapList(r: RawNextActionList): NextAction {
   };
 }
 
-// sources 가 어떤 형태로 와도(객체 또는 배열) {type, content}[] 로 평탄화
+// sources 평탄화 — {type, content}[]
+//   - SourceItem 객체 { title, summary, url } 이면 summary || title 추출 (이전: String(obj) → "[object Object]")
+//   - 문자열이면 그대로
+//   - { type, content } 형태도 지원
 function parseSources(sources: unknown): { type: 'NEWS' | 'DART' | 'CRM'; content: string }[] {
   const allowed: Array<'NEWS' | 'DART' | 'CRM'> = ['NEWS', 'DART', 'CRM'];
   const normType = (s: string): 'NEWS' | 'DART' | 'CRM' => {
     const u = s.toUpperCase();
     return (allowed as string[]).includes(u) ? (u as 'NEWS' | 'DART' | 'CRM') : 'CRM';
   };
+  // 단일 source 객체/문자열을 표시용 content 문자열로 변환
+  const toContent = (c: unknown): string | null => {
+    if (c == null) return null;
+    if (typeof c === 'string') return c.trim() || null;
+    if (typeof c === 'object') {
+      const item = c as { title?: unknown; summary?: unknown; content?: unknown };
+      const candidates = [item.summary, item.title, item.content];
+      for (const v of candidates) {
+        if (typeof v === 'string' && v.trim()) return v.trim();
+      }
+      return null;
+    }
+    return String(c);
+  };
   if (!sources) return [];
   // 배열 형태: [{ type, content }]
   if (Array.isArray(sources)) {
     return sources
-      .filter((x): x is { type: string; content: string } => !!x && typeof x === 'object' && 'type' in x && 'content' in x)
-      .map((x) => ({ type: normType(String(x.type)), content: String(x.content) }));
+      .filter((x): x is { type: string; content: unknown } => !!x && typeof x === 'object' && 'type' in x)
+      .map((x) => ({ type: normType(String(x.type)), content: toContent(x.content) ?? '' }))
+      .filter((x) => x.content !== '');
   }
-  // 객체 형태: { NEWS: ["..."] | "...", DART: [...], CRM: [...] }
+  // 객체 형태: { news: [SourceItem...], dart: [...], crm: [...] } (소문자 키, 명세)
+  //          또는  { NEWS: ["..."], DART: [...] } (구버전)
   if (typeof sources === 'object') {
     const out: { type: 'NEWS' | 'DART' | 'CRM'; content: string }[] = [];
     for (const [k, v] of Object.entries(sources as Record<string, unknown>)) {
       const t = normType(k);
       if (Array.isArray(v)) {
-        for (const c of v) out.push({ type: t, content: String(c) });
-      } else if (v != null) {
-        out.push({ type: t, content: String(v) });
+        for (const c of v) {
+          const text = toContent(c);
+          if (text) out.push({ type: t, content: text });
+        }
+      } else {
+        const text = toContent(v);
+        if (text) out.push({ type: t, content: text });
       }
     }
     return out;
