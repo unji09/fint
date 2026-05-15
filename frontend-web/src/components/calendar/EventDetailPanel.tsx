@@ -37,6 +37,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const [aiSummary, setAiSummary] = useState<{ label: string; text: string; color: string }[]>([]);
   const { upload: uploadRecording, uploading: uploadingRec } = useUploadRecording();
   const { poll: pollStt } = usePollSttStatus();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [briefingData, setBriefingData] = useState<any | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
   const [briefingError, setBriefingError] = useState<string | null>(null);
@@ -175,7 +176,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       const r = await fetch(`${API_BASE}/activities/${activityId}/ai/briefing`, { headers: authHeader() });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setBriefingData((await r.json()).data ?? {});
-    } catch (e: any) { setBriefingError(e?.message ?? '브리핑 조회 실패'); }
+    } catch (e: unknown) { setBriefingError(e instanceof Error ? e.message : '브리핑 조회 실패'); }
     finally { setBriefingLoading(false); }
   };
 
@@ -538,6 +539,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                     </div>)}
                     {briefingData.signals?.length > 0 && (<div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA193', marginBottom: 6 }}>시그널</div>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {briefingData.signals.map((s: any, i: number) => (<div key={i} style={{ padding: '8px 10px', backgroundColor: '#F8F8F5', borderRadius: 6, borderLeft: '3px solid #06B6D4', marginBottom: 4 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: '#1F2126', marginBottom: 2 }}>{s.title ?? s.name ?? ''}</div>
                         <div style={{ fontSize: 11, color: '#737880', lineHeight: 1.5 }}>{s.content ?? s.description ?? ''}</div>
@@ -545,6 +547,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                     </div>)}
                     {briefingData.nextActions?.length > 0 && (<div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA193', marginBottom: 6 }}>Next Actions</div>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {briefingData.nextActions.map((a: any, i: number) => (<div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
                         <span style={{ fontSize: 11, color: '#06B6D4', fontWeight: 700, marginTop: 1 }}>{i + 1}.</span>
                         <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>{typeof a === 'string' ? a : (a.action ?? a.content ?? '')}</span>

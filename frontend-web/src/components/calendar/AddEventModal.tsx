@@ -223,11 +223,13 @@ export default function AddEventModal({
         fetch(`${API_BASE}/accounts/${ev.accountId}/contacts`, { headers }).then(r => r.json()),
       ]).then(([detailRes, contactsRes]) => {
         if (detailRes.status === 'fulfilled') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           setAccountDeals((detailRes.value.data?.deals ?? []).map((d: any) => ({
             dealId: d.dealId, title: d.title, amount: d.amount, stage: d.stage,
           })));
         }
         if (contactsRes.status === 'fulfilled') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const contacts = (contactsRes.value.data ?? []).map((c: any) => ({
             contactId: c.contactId, name: c.name, title: c.title,
           }));
@@ -311,11 +313,13 @@ export default function AddEventModal({
       fetch(`${API_BASE}/accounts/${accountId}/contacts`, { headers }).then(r => r.json()),
     ]);
     if (detailRes.status === 'fulfilled') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setAccountDeals((detailRes.value.data?.deals ?? []).map((d: any) => ({
         dealId: d.dealId, title: d.title, amount: d.amount, stage: d.stage,
       })));
     }
     if (contactsRes.status === 'fulfilled') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setAccountContacts((contactsRes.value.data ?? []).map((c: any) => ({
         contactId: c.contactId, name: c.name, title: c.title,
       })));
