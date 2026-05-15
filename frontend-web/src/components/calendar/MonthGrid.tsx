@@ -29,6 +29,8 @@ interface Props {
   onDayRangeSelect?: (start: Date, end: Date) => void;
   /** 카드 가로 리사이즈로 endAt 이 변경되어 PATCH 성공한 직후 호출 (refetch 트리거). */
   onResized?: () => void;
+  /** 알림 카드 드롭 시 해당 날짜와 드롭 데이터 전달. */
+  onNotificationDrop?: (date: Date, data: string) => void;
 }
 
 function fmtKstIso(d: Date): string {
@@ -168,6 +170,7 @@ export default function MonthGrid({
   onMoreClick,
   onDayRangeSelect,
   onResized,
+  onNotificationDrop,
 }: Props) {
   const flat = getCalendarDays(currentDate.getFullYear(), currentDate.getMonth());
   const weeks = Array.from({ length: 6 }, (_, i) => flat.slice(i * 7, i * 7 + 7));
@@ -454,6 +457,21 @@ export default function MonthGrid({
                   data-cell-day={`${day.getFullYear()}-${day.getMonth() + 1}-${day.getDate()}`}
                   onMouseDown={(e) => handleCellMouseDown(e, day)}
                   onMouseEnter={() => handleCellMouseEnter(day)}
+                  onDragOver={(e) => {
+                    if (e.dataTransfer.types.includes('application/x-fint-notification')) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'copy';
+                    }
+                  }}
+                  onDrop={(e) => {
+                    const raw = e.dataTransfer.getData('application/x-fint-notification');
+                    if (raw && onNotificationDrop) {
+                      e.preventDefault();
+                      const d = new Date(day);
+                      d.setHours(9, 0, 0, 0);
+                      onNotificationDrop(d, raw);
+                    }
+                  }}
                   style={{
                     // cell 우측 구분선을 borderRight 대신 inset boxShadow 로 cell 안쪽 1px 에 그림 →
                     // 다일 이벤트 카드가 negative margin 으로 이 1px 을 덮어 시각 연결.

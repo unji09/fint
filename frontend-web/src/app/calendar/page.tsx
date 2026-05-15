@@ -189,6 +189,7 @@ function DayTimeView({
   onTimeClick,
   onTimeRangeSelect,
   onResized,
+  onNotificationDrop,
 }: {
   events: CalendarEvent[];
   selectedDate: Date;
@@ -196,6 +197,7 @@ function DayTimeView({
   onTimeClick?: (d: Date) => void;
   onTimeRangeSelect?: (start: Date, end: Date) => void;
   onResized?: () => void;
+  onNotificationDrop?: (date: Date, data: string) => void;
 }) {
   // SSR 시점의 시각과 client hydration 시점의 시각이 달라 hydration mismatch 가 발생할 수 있다.
   // 따라서 초기엔 null 로 두고 mount 후에만 현재 시각 라인을 렌더한다.
@@ -402,6 +404,21 @@ function DayTimeView({
       <div
         ref={colRef}
         onMouseDown={handleMouseDown}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('application/x-fint-notification')) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }
+        }}
+        onDrop={(e) => {
+          const raw = e.dataTransfer.getData('application/x-fint-notification');
+          if (raw && onNotificationDrop) {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            onNotificationDrop(yToDate(y), raw);
+          }
+        }}
         style={{ position: 'relative', height: total, cursor: 'crosshair', userSelect: 'none' }}
       >
         {/* 드래그 highlight overlay */}
@@ -791,10 +808,28 @@ export default function CalendarPage() {
   };
   const miniWk = getMondayWeek(selectedDate);
 
+  // ── 알림 드롭 → 일정 추가 prefill ──
+  const [dropPrefill, setDropPrefill] = useState<{
+    title?: string; category?: string; accountId?: number; accountName?: string;
+  } | null>(null);
+
   const openAdd = (d: Date, endD?: Date) => {
     setAddDate(new Date(d));
     setAddEndDate(endD ? new Date(endD) : undefined);
     setIsAddOpen(true);
+  };
+
+  const handleNotificationDrop = (date: Date, raw: string) => {
+    try {
+      const data = JSON.parse(raw);
+      setDropPrefill({
+        title: data.title,
+        accountName: data.accountName,
+        accountId: data.accountId,
+        category: data.category,
+      });
+      openAdd(date);
+    } catch { /* ignore malformed data */ }
   };
   const onDayClick = (d: Date) => {
     const dt = new Date(d);
@@ -963,6 +998,7 @@ export default function CalendarPage() {
               onTimeClick={onTimeClick}
               onTimeRangeSelect={onTimeRangeSelect}
               onResized={() => refetch()}
+              onNotificationDrop={handleNotificationDrop}
             />
           </aside>
         </div>
@@ -1229,8 +1265,6 @@ export default function CalendarPage() {
                 onDayClick={onDayClick}
                 onEventClick={(ev) => {
                   setSelectedDate(new Date(ev.startAt));
-                  // events 배열의 객체는 캘린더 응답 (memo 누락) 이므로
-                  // handleEventClick 으로 활동 상세 API 까지 받아온다.
                   handleEventClick(ev);
                 }}
                 onMoreClick={(d) => {
@@ -1239,6 +1273,7 @@ export default function CalendarPage() {
                 }}
                 onDayRangeSelect={onDayRangeSelect}
                 onResized={() => refetch()}
+                onNotificationDrop={handleNotificationDrop}
               />
             ) : (
               <WeekGrid
@@ -1253,6 +1288,7 @@ export default function CalendarPage() {
                 onTimeRangeSelect={onTimeRangeSelect}
                 onResized={() => refetch()}
                 pipeline={pipeline}
+                onNotificationDrop={handleNotificationDrop}
               />
             )}
             {/* FAB */}
@@ -1308,13 +1344,19 @@ export default function CalendarPage() {
         onClose={() => {
           setIsAddOpen(false);
           setEditEvent(null);
+          setDropPrefill(null);
         }}
         onSaved={() => {
           refetch();
           setEditEvent(null);
+          setDropPrefill(null);
         }}
         defaultDate={addDate}
         defaultEndDate={addEndDate}
+        defaultTitle={dropPrefill?.title}
+        defaultCategory={dropPrefill?.category ?? undefined}
+        defaultAccountId={dropPrefill?.accountId}
+        defaultAccountName={dropPrefill?.accountName}
         editEvent={editEvent}
       />
     </div>

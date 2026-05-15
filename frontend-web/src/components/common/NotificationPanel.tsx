@@ -12,6 +12,7 @@
 // 시간 그룹: "방금 전" (5분 이내) / "오늘" / "이번 주" / "이전".
 
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { fetchWithAuth } from '@/hooks/useAuth';
 
 const F = "'Pretendard', -apple-system, sans-serif";
@@ -112,8 +113,18 @@ function getFirstSummary(sources: Record<string, SourceItem[]> | null | undefine
 
 export default function NotificationPanel({ open, onClose, notifications, onItemRead, onAllRead }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+  const isCalendar = pathname === '/calendar';
   // 클릭한 알림의 인라인 확장 — 한 번에 하나만 펼침
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  // 드래그 중 패널/backdrop 숨김 (캘린더 드롭 가능하도록)
+  const [isDragging, setIsDragging] = useState(false);
+  const handleCardDragEnd = (dropEffect: string) => {
+    if (dropEffect !== 'none') {
+      onClose();
+    }
+    setIsDragging(false);
+  };
 
   // ESC 닫기
   useEffect(() => {
@@ -185,12 +196,17 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
           backgroundColor: 'rgba(0, 0, 0, 0.32)',
           zIndex: 999,
           animation: 'noti-backdrop-in 0.18s ease-out',
+          ...(isDragging ? { opacity: 0, pointerEvents: 'none' as const, transition: 'opacity 0.15s' } : {}),
         }}
       />
 
       {/* Panel */}
       <aside
         ref={panelRef}
+        onDragStart={(e) => {
+          const el = e.target as HTMLElement;
+          if (!el.closest('[draggable="true"]')) e.preventDefault();
+        }}
         style={{
           position: 'fixed',
           top: 0,
@@ -205,6 +221,7 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
           flexDirection: 'column',
           fontFamily: F,
           animation: 'noti-panel-in 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+          ...(isDragging ? { transform: 'translateX(100%)', pointerEvents: 'none' as const, transition: 'transform 0.15s' } : {}),
         }}
       >
         <style>{`
@@ -314,6 +331,9 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
                         n={n}
                         expanded={expandedId === n.notificationId}
                         onClick={() => handleClick(n)}
+                        draggable={isCalendar}
+                        onDragStart={() => setIsDragging(true)}
+                        onCardDragEnd={handleCardDragEnd}
                       />
                     ))}
                   </div>
@@ -327,17 +347,114 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
   );
 }
 
+// ─── 드래그 커스텀 고스트 (모듈 레벨) ────────────────────────
+let _ghostEl: HTMLDivElement | null = null;
+let _ghostMove: ((e: DragEvent) => void) | null = null;
+let _ghostOffsetX = 0;
+let _ghostOffsetY = 0;
+const GHOST_OPACITY = 0.85;
+
+function cleanupGhost() {
+  if (_ghostEl) { _ghostEl.remove(); _ghostEl = null; }
+  if (_ghostMove) { document.removeEventListener('dragover', _ghostMove); _ghostMove = null; }
+}
+
 // ─── 알림 카드 ───────────────────────────────────────────────
-function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expanded: boolean; onClick: () => void }) {
+function NotificationCard({ n, expanded, onClick, draggable, onDragStart: onDragStartCb, onCardDragEnd }: {
+  n: NotificationItem; expanded: boolean; onClick: () => void; draggable?: boolean;
+  onDragStart?: () => void; onCardDragEnd?: (dropEffect: string) => void;
+}) {
   const activeTypes = getActiveSourceTypes(n.sources);
   const firstSummary = getFirstSummary(n.sources);
   const hasAccount = !!n.accountName;
   const hasSignal = activeTypes.length > 0 || !!firstSummary;
   const hasRecommendation = !!n.recommendation?.title;
 
+  const handleDragStart = (e: React.DragEvent) => {
+    // 텍스트 선택 상태에서 드래그 시작 시 브라우저 기본 텍스트 드래그 방지
+    const sel = window.getSelection();
+    if (sel && sel.toString().length > 0) {
+      sel.removeAllRanges();
+    }
+
+    const payload = {
+      title: n.title,
+      accountName: n.accountName ?? undefined,
+      accountId: n.accountId ?? undefined,
+      category: n.category ?? undefined,
+    };
+    e.dataTransfer.setData('application/x-fint-notification', JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = 'copy';
+
+    // 브라우저 기본 고스트 숨기기 (1x1 투명 이미지)
+    const blank = document.createElement('canvas');
+    blank.width = 1;
+    blank.height = 1;
+    e.dataTransfer.setDragImage(blank, 0, 0);
+
+    // 커스텀 고스트 생성
+    cleanupGhost();
+    const ghost = document.createElement('div');
+    ghost.style.cssText = `width:130px;padding:10px 8px;background:#fff;border:1px solid #ECEDE5;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.10);opacity:${GHOST_OPACITY};font-family:Pretendard,-apple-system,sans-serif;position:fixed;top:-9999px;left:-9999px;z-index:99999;display:flex;flex-direction:column;gap:3px;pointer-events:none;`;
+    const titleEl = document.createElement('div');
+    titleEl.textContent = n.title;
+    titleEl.style.cssText = 'font-size:7.5px;font-weight:600;color:#1F2126;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    ghost.appendChild(titleEl);
+    if (n.accountName || n.pipelineStage) {
+      const meta = document.createElement('div');
+      meta.style.cssText = 'font-size:7.5px;color:#737880;display:flex;align-items:center;gap:2px;';
+      if (n.accountName) {
+        const s = document.createElement('span');
+        s.textContent = n.accountName;
+        meta.appendChild(s);
+      }
+      if (n.pipelineStage) {
+        if (n.accountName) {
+          const dot = document.createElement('span');
+          dot.textContent = '·';
+          dot.style.color = '#CBD5E1';
+          meta.appendChild(dot);
+        }
+        const s = document.createElement('span');
+        s.textContent = n.pipelineStage;
+        s.style.cssText = 'font-size:7.5px;color:#534AB7;background:#F0EDF7;padding:1px 3px;border-radius:2px;font-weight:500;';
+        meta.appendChild(s);
+      }
+      ghost.appendChild(meta);
+    }
+    document.body.appendChild(ghost);
+    _ghostEl = ghost;
+
+    // 카드 내 클릭 비율을 고스트 크기에 비례 매핑
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratioX = (e.clientX - rect.left) / rect.width;
+    const ratioY = (e.clientY - rect.top) / rect.height;
+    _ghostOffsetX = ratioX * ghost.offsetWidth;
+    _ghostOffsetY = ratioY * ghost.offsetHeight;
+
+    // 마우스 추적
+    _ghostMove = (ev: DragEvent) => {
+      if (_ghostEl && ev.clientX > 0 && ev.clientY > 0) {
+        _ghostEl.style.left = `${ev.clientX - _ghostOffsetX}px`;
+        _ghostEl.style.top = `${ev.clientY - _ghostOffsetY}px`;
+      }
+    };
+    document.addEventListener('dragover', _ghostMove);
+
+    setTimeout(() => onDragStartCb?.(), 0);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    cleanupGhost();
+    onCardDragEnd?.(e.dataTransfer.dropEffect);
+  };
+
   return (
     <button
       onClick={onClick}
+      draggable={draggable}
+      onDragStart={draggable ? handleDragStart : undefined}
+      onDragEnd={draggable ? handleDragEnd : undefined}
       style={{
         width: '100%',
         textAlign: 'left',
@@ -345,7 +462,9 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
         border: `1px solid ${expanded ? '#06B6D4' : '#ECEDE5'}`,
         borderRadius: 10,
         padding: '14px 16px',
-        cursor: 'pointer',
+        cursor: draggable ? 'grab' : 'pointer',
+        userSelect: draggable ? 'none' : undefined,
+        WebkitUserSelect: draggable ? 'none' : undefined,
         display: 'flex',
         flexDirection: 'column',
         gap: 10,

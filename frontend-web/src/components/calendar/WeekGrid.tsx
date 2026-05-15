@@ -27,6 +27,8 @@ interface Props {
   /** 이벤트 카드 리사이즈로 endAt 이 변경되어 PATCH 성공한 직후 호출 (refetch 트리거용). */
   onResized?: () => void;
   pipeline?: readonly PipelineItem[] | PipelineItem[];
+  /** 알림 카드 드롭 시 해당 날짜+시간과 드롭 데이터 전달. */
+  onNotificationDrop?: (date: Date, data: string) => void;
 }
 
 // PATCH body 직렬화 (KST). useCalendarEvents.resizeActivity 와 한 쌍.
@@ -314,6 +316,7 @@ export default function WeekGrid({
   onTimeRangeSelect,
   onResized,
   pipeline,
+  onNotificationDrop,
 }: Props) {
   const [now, setNow] = useState(new Date());
   const [scrollTop, setST] = useState(0);
@@ -769,6 +772,22 @@ export default function WeekGrid({
               key={colIdx}
               data-week-col={colIdx}
               onMouseDown={(e) => handleColMouseDown(e, colIdx, day)}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('application/x-fint-notification')) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'copy';
+                }
+              }}
+              onDrop={(e) => {
+                const raw = e.dataTransfer.getData('application/x-fint-notification');
+                if (raw && onNotificationDrop) {
+                  e.preventDefault();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const y = e.clientY - rect.top + scrollTop;
+                  const dropDate = yToDate(y, day);
+                  onNotificationDrop(dropDate, raw);
+                }
+              }}
               style={{
                 flex: 1,
                 boxShadow: dividerShadow(colIdx),
