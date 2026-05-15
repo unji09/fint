@@ -37,6 +37,7 @@ export interface SourceItem {
 export interface NotificationItem {
   notificationId: number;
   title: string;
+  /** 전략 카테고리 — NextAction.data.category (예: "ROI 기반 전략") */
   category: string | null;
   sources: Record<string, SourceItem[]> | null;
   pipelineStage: string | null;
@@ -50,6 +51,25 @@ export interface NotificationItem {
   recommendation?: { title?: string; sub?: string; predictedDelta?: number };
 }
 
+// 7일 이내 상대(방금 전/N분 전/오늘/어제/N일 전), 그 이상은 MM/DD
+function formatRelativeOrDate(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const now = Date.now();
+  const diffMs = now - t;
+  if (diffMs < 5 * 60_000) return '방금 전';
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 60) return `${diffMin}분 전`;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(t); target.setHours(0, 0, 0, 0);
+  const dayDelta = Math.round((today.getTime() - target.getTime()) / (24 * 60 * 60_000));
+  if (dayDelta <= 0) return '오늘';
+  if (dayDelta === 1) return '어제';
+  if (dayDelta <= 6) return `${dayDelta}일 전`;
+  const d = new Date(t);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -60,29 +80,6 @@ interface Props {
   /** 전체 읽음 처리 후 부모에 통보 — 모든 알림 isRead=true 로 토글 */
   onAllRead?: () => void;
 }
-
-// ── 시간 그룹 분류 ──────────────────────────────────────────
-type Bucket = '방금 전' | '오늘' | '이번 주' | '이전';
-
-function classifyBucket(iso: string): Bucket {
-  const now = Date.now();
-  const t = new Date(iso).getTime();
-  const diff = now - t;
-  if (diff < 5 * 60_000) return '방금 전';
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (t >= today.getTime()) return '오늘';
-  if (diff < 7 * 24 * 60 * 60_000) return '이번 주';
-  return '이전';
-}
-
-const BUCKET_ORDER: Bucket[] = ['방금 전', '오늘', '이번 주', '이전'];
-const BUCKET_COLOR: Record<Bucket, string> = {
-  '방금 전': '#EF4444',
-  오늘: '#737880',
-  '이번 주': '#737880',
-  이전: '#9CA193',
-};
 
 // ── 소스 타입별 뱃지 스타일 ─────────────────────────────────
 const SOURCE_BADGE_STYLE: Record<string, { label: string; bg: string; color: string }> = {
@@ -137,18 +134,14 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
 
   if (!open) return null;
 
-  // 시간 그룹화
-  const grouped: Record<Bucket, NotificationItem[]> = {
-    '방금 전': [],
-    오늘: [],
-    '이번 주': [],
-    이전: [],
-  };
-  notifications.forEach((n) => {
-    grouped[classifyBucket(n.createdAt)].push(n);
+  // 안 읽음 위, 읽음 아래로 정렬 (각 그룹 내 최신순)
+  const sortedNotis = [...notifications].sort((a, b) => {
+    if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
-
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadList = sortedNotis.filter((n) => !n.isRead);
+  const readList = sortedNotis.filter((n) => n.isRead);
+  const unreadCount = unreadList.length;
 
   const handleMarkAllRead = async () => {
     try {
@@ -284,42 +277,39 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
           </div>
         </div>
 
-        {/* 본문 */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 32px' }}>
+        {/* 본문 — 안 읽음 위, 읽음 아래 */}
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 0 32px', minWidth: 0 }}>
           {notifications.length === 0 ? (
             <div style={{ padding: '48px 24px', textAlign: 'center', color: '#9CA193', fontSize: 13 }}>
               새로운 알림이 없어요.
             </div>
           ) : (
-            BUCKET_ORDER.map((bucket) => {
-              const items = grouped[bucket];
-              if (items.length === 0) return null;
-              return (
-                <section key={bucket} style={{ marginTop: 16 }}>
-                  <div
-                    style={{
-                      padding: '0 24px 8px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: BUCKET_COLOR[bucket],
-                      letterSpacing: '0.02em',
-                    }}
-                  >
-                    {bucket}
+            <>
+              {unreadList.length > 0 && (
+                <section>
+                  <div style={{ padding: '0 24px 8px', fontSize: 11, fontWeight: 600, color: '#EF4444', letterSpacing: '0.02em' }}>
+                    새 알림 {unreadList.length}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
-                    {items.map((n) => (
-                      <NotificationCard
-                        key={n.notificationId}
-                        n={n}
-                        expanded={expandedId === n.notificationId}
-                        onClick={() => handleClick(n)}
-                      />
+                    {unreadList.map((n) => (
+                      <NotificationCard key={n.notificationId} n={n} expanded={expandedId === n.notificationId} onClick={() => handleClick(n)} />
                     ))}
                   </div>
                 </section>
-              );
-            })
+              )}
+              {readList.length > 0 && (
+                <section style={{ marginTop: unreadList.length > 0 ? 20 : 0 }}>
+                  <div style={{ padding: '0 24px 8px', fontSize: 11, fontWeight: 600, color: '#9CA193', letterSpacing: '0.02em' }}>
+                    읽은 알림
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
+                    {readList.map((n) => (
+                      <NotificationCard key={n.notificationId} n={n} expanded={expandedId === n.notificationId} onClick={() => handleClick(n)} />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           )}
         </div>
       </aside>
@@ -334,33 +324,115 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
   const hasAccount = !!n.accountName;
   const hasSignal = activeTypes.length > 0 || !!firstSummary;
   const hasRecommendation = !!n.recommendation?.title;
+  // 좌상단 — NextAction 전략 카테고리 (data.category)
+  const categoryLabel = n.category ?? null;
 
   return (
     <button
       onClick={onClick}
       style={{
+        position: 'relative',
         width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
         textAlign: 'left',
         backgroundColor: expanded ? '#fff' : n.isRead ? '#FAFAF7' : '#fff',
-        border: `1px solid ${expanded ? '#06B6D4' : '#ECEDE5'}`,
+        border: `1px solid ${expanded ? '#06B6D4' : n.isRead ? '#ECEDE5' : '#cffafe'}`,
         borderRadius: 10,
-        padding: '14px 16px',
+        // 우상단 dot(8) / 우하단 시간 영역 확보
+        padding: '14px 18px 26px 16px',
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
         transition: 'background-color 0.12s, border-color 0.12s',
         fontFamily: F,
+        opacity: n.isRead && !expanded ? 0.75 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!expanded) e.currentTarget.style.borderColor = '#D6D9CB';
+        if (!expanded) e.currentTarget.style.borderColor = '#06B6D4';
       }}
       onMouseLeave={(e) => {
-        if (!expanded) e.currentTarget.style.borderColor = '#ECEDE5';
+        if (!expanded) e.currentTarget.style.borderColor = n.isRead ? '#ECEDE5' : '#cffafe';
       }}
     >
-      {/* 제목 */}
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#1F2126', lineHeight: 1.45, letterSpacing: '-0.005em' }}>
+      {/* 좌상단 — 전략 카테고리 (NextAction.category) */}
+      {categoryLabel && (
+        <div>
+          <span
+            style={{
+              display: 'inline-block',
+              fontSize: 10,
+              fontWeight: 600,
+              color: '#0686D4',
+              backgroundColor: '#EEF6FF',
+              padding: '3px 9px',
+              borderRadius: 4,
+              letterSpacing: '0.02em',
+            }}
+          >
+            {categoryLabel}
+          </span>
+        </div>
+      )}
+      {/* 우상단 — 읽음/안 읽음 표시 (텍스트 + dot) */}
+      <div
+        aria-label={n.isRead ? '읽은 알림' : '안 읽은 알림'}
+        style={{
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          pointerEvents: 'none',
+        }}
+      >
+        {!n.isRead ? (
+          <>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#EF4444',
+                letterSpacing: '0.04em',
+              }}
+            >
+              NEW
+            </span>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#EF4444' }} />
+          </>
+        ) : (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 500,
+              color: '#94A3B8',
+              letterSpacing: '0.04em',
+            }}
+          >
+            읽음
+          </span>
+        )}
+      </div>
+      {/* 우하단 — 시간 */}
+      <span
+        style={{
+          position: 'absolute',
+          bottom: 10,
+          right: 12,
+          fontSize: 11,
+          color: '#94A3B8',
+          fontWeight: 400,
+          fontVariantNumeric: 'tabular-nums',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {formatRelativeOrDate(n.createdAt)}
+      </span>
+      {/* 제목 — 우상단 NEW/읽음 라벨 공간 확보 */}
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#1F2126', lineHeight: 1.45, letterSpacing: '-0.005em', paddingRight: !n.isRead ? 44 : 30, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
         {n.title}
       </div>
 
@@ -456,8 +528,8 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
         </div>
       )}
 
-      {/* ── 확장 영역 (인라인 상세) ── */}
-      {expanded && (
+      {/* ── 확장 영역 — sources 의 각 source 카드 클릭 시 원문 새 탭 ── */}
+      {expanded && n.sources && activeTypes.length > 0 && (
         <div
           style={{
             marginTop: 4,
@@ -465,58 +537,80 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
             borderTop: '1px solid #ECEDE5',
             display: 'flex',
             flexDirection: 'column',
-            gap: 10,
+            gap: 8,
           }}
         >
-          {n.category && (
-            <DetailRow label="활동 유형" value={n.category} />
-          )}
-          {n.sources && activeTypes.map((type) => {
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#737880' }}>근거 데이터</span>
+          {activeTypes.flatMap((type) => {
             const items = n.sources![type];
-            const style = SOURCE_BADGE_STYLE[type] ?? { label: type };
+            const style = SOURCE_BADGE_STYLE[type] ?? { label: type, bg: '#F0F0EE', color: '#737880' };
             return items.map((item, i) => (
-              <DetailRow
+              <a
                 key={`${type}-${i}`}
-                label={`${style.label} ${items.length > 1 ? i + 1 : ''}`}
-                value={item.summary || item.title || ''}
-                multiline
-              />
+                href={item.url || undefined}
+                target={item.url ? '_blank' : undefined}
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  textDecoration: 'none',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #ECEDE5',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  cursor: item.url ? 'pointer' : 'default',
+                  transition: 'background-color 0.12s, border-color 0.12s',
+                  maxWidth: '100%',
+                  minWidth: 0,
+                }}
+                onMouseEnter={(e) => {
+                  if (item.url) {
+                    (e.currentTarget as HTMLAnchorElement).style.backgroundColor = '#fff';
+                    (e.currentTarget as HTMLAnchorElement).style.borderColor = '#06B6D4';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLAnchorElement).style.backgroundColor = '#F8FAFC';
+                  (e.currentTarget as HTMLAnchorElement).style.borderColor = '#ECEDE5';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: style.color,
+                      backgroundColor: style.bg,
+                      padding: '2px 7px',
+                      borderRadius: 3,
+                      letterSpacing: '0.02em',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {style.label}
+                  </span>
+                  {item.title && (
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: '#1F2126', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.title}
+                    </span>
+                  )}
+                  {item.url && (
+                    <span style={{ fontSize: 10, color: '#0686d4', fontWeight: 500, flexShrink: 0 }}>원문 →</span>
+                  )}
+                </div>
+                {item.summary && (
+                  <p style={{ margin: 0, fontSize: 11, lineHeight: 1.5, color: '#475569', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>
+                    {item.summary}
+                  </p>
+                )}
+              </a>
             ));
           })}
-          <DetailRow label="알림 시각" value={formatFullDateTime(n.createdAt)} />
-          <DetailRow label="상태" value={n.isRead ? '읽음' : '미읽음'} />
         </div>
       )}
     </button>
   );
 }
 
-function DetailRow({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
-  return (
-    <div style={{ display: 'flex', gap: 10, alignItems: multiline ? 'flex-start' : 'center' }}>
-      <span style={{ fontSize: 11, color: '#9CA193', fontWeight: 600, minWidth: 64, flexShrink: 0, paddingTop: multiline ? 2 : 0 }}>
-        {label}
-      </span>
-      <span
-        style={{
-          flex: 1,
-          fontSize: 12,
-          color: '#475569',
-          lineHeight: multiline ? 1.6 : 1.4,
-          whiteSpace: multiline ? 'pre-wrap' : 'normal',
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function formatFullDateTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return iso;
-  }
-}

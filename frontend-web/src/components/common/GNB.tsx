@@ -114,30 +114,100 @@ export default function GNB() {
   }, []);
   useNotificationSocket(onWsNotification);
 
-  // ── 시연용: 백엔드 WebSocket push 가 연결되기 전까지 새로고침 시 한 번 더미 알림 ──
-  // sessionStorage 로 세션당 1회만 트리거. 백엔드 정상 push 후 제거 예정.
+  // ── 시연용: 백엔드 WebSocket push 가 연결되기 전까지 매 새로고침 시 더미 알림 ──
+  // 패널 시각 검증용. 백엔드 정상 push 후 제거 예정.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (sessionStorage.getItem('fint:demo-noti-shown')) return;
-    const t = setTimeout(() => {
-      onWsNotification({
-        notificationId: -Date.now(),
+    const now = Date.now();
+    const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
+    const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+    const demoBase: NotificationItem[] = [
+      {
+        notificationId: -1,
         title: '긴급: 삼성SDS CFO 교체 — 즉시 제안서 발송 권장',
-        category: 'MEETING',
+        category: '긴급 대응',
+        pipelineStage: '발굴', accountName: '삼성SDS',
+        isRead: false, createdAt: iso(2 * MIN),
         sources: {
-          news: [{ title: '삼성SDS, 박성준 CFO 내정 발표', summary: '삼성SDS, 박성준 CFO 내정 발표 — 디지털 전환 가속 명시' }],
-          dart: [],
-          crm: [],
+          news: [
+            { title: '삼성SDS, 박성준 CFO 내정 발표', summary: '디지털 전환 가속 명시. 클라우드/AI 투자 확대 시사.', url: 'https://www.example.com/news/samsung-sds-cfo-1' },
+            { title: '재무총괄 교체 — 의사결정 가속 시그널', summary: '내부 의사결정 라인 정비.', url: 'https://www.example.com/news/samsung-sds-cfo-2' },
+          ],
+          dart: [
+            { title: '주요 경영사항 — 임원 변경', summary: '재무 총괄 임원(CFO) 신규 선임 공시.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515000851' },
+          ],
         },
-        pipelineStage: '발굴',
-        accountName: '삼성SDS',
-        isRead: false,
-        createdAt: new Date().toISOString(),
-      });
-      sessionStorage.setItem('fint:demo-noti-shown', '1');
-    }, 1500);
+      },
+      {
+        notificationId: -2,
+        title: 'LG CNS — 1분기 사업보고서 공시',
+        category: '실적 기반 제안',
+        pipelineStage: '제안 제출', accountName: 'LG CNS',
+        isRead: false, createdAt: iso(45 * MIN),
+        sources: {
+          dart: [{ title: '2026년 1분기 사업보고서', summary: '매출 12% 증가. 클라우드 부문 성장 견인.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515000900' }],
+        },
+      },
+      {
+        notificationId: -3,
+        title: '카카오 — 신규 임원 선임 공시 다수',
+        category: '관계 강화',
+        pipelineStage: '협상', accountName: '카카오',
+        isRead: false, createdAt: iso(3 * HOUR),
+        sources: {
+          dart: [
+            { title: '사외이사 신규 선임', summary: '플랫폼 사업 자문역 영입.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515001100' },
+            { title: '부사장 선임', summary: '플랫폼 사업 총괄 부사장 신규 선임.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260515001200' },
+          ],
+        },
+      },
+      {
+        notificationId: -4,
+        title: '네이버 — AI 데이터 분석 플랫폼 출시 예고',
+        category: '경쟁 대응',
+        pipelineStage: '가치 제안', accountName: '네이버',
+        isRead: false, createdAt: iso(DAY),
+        sources: {
+          news: [{ title: '네이버, 엔터프라이즈 AI 분석 플랫폼 출시 임박', summary: 'B2B 시장 본격 진입. 파트너사 모집 시작.', url: 'https://www.example.com/news/naver-ai' }],
+        },
+      },
+      {
+        notificationId: -5,
+        title: '현대오토에버 — 분기 실적 발표',
+        category: 'ROI 기반 전략',
+        pipelineStage: '계약 대기', accountName: '현대오토에버',
+        isRead: true, createdAt: iso(3 * DAY),
+        sources: {
+          dart: [{ title: '2026년 1분기 사업보고서', summary: '영업이익 8% 개선. SaaS 구독 매출 분기 최초 500억원 돌파.', url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260512000123' }],
+        },
+      },
+      {
+        notificationId: -6,
+        title: 'SK텔레콤 — 5G IoT 플랫폼 파트너십 보도',
+        category: '신규 기회 발굴',
+        pipelineStage: '솔루션 설계', accountName: 'SK텔레콤',
+        isRead: true, createdAt: iso(8 * DAY),
+        sources: {
+          news: [{ title: 'SK텔레콤, 5G IoT 파트너 모집', summary: '제조업 IoT 파트너 모집 — F!NT 솔루션 적합도 검토 필요.', url: 'https://www.example.com/news/skt-iot' }],
+        },
+      },
+    ];
+    setNotis((prev) => {
+      const ids = new Set(prev.map((n) => n.notificationId));
+      const merged = [...prev, ...demoBase.filter((d) => !ids.has(d.notificationId))];
+      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return merged;
+    });
+    setNotiCount((c) => c + demoBase.filter((d) => !d.isRead).length);
+    // 토스트 — 가장 최신 안 읽음 알림으로 즉시 띄움 (8초 표시)
+    const t = setTimeout(() => {
+      setToast(demoBase[0]);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setToast(null), 8_000);
+    }, 500);
     return () => clearTimeout(t);
-  }, [onWsNotification]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
