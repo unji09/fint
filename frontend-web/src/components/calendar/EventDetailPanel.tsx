@@ -7,6 +7,7 @@ import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
 import { formatTime, formatFullDate } from './utils';
 import { useUploadRecording, usePollSttStatus, type SttLine } from '@/hooks/useActivity';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 
 interface Props {
   event: CalendarEvent | null;
@@ -24,6 +25,7 @@ function authHeader(): HeadersInit {
 type RightView = 'memo' | 'recording' | 'stt' | 'briefing';
 
 export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: Props) {
+  const confirm = useConfirm();
   const [rightView, setRightView] = useState<RightView>('memo');
   const [deleting, setDeleting] = useState(false);
   const [recordSec, setRecordSec] = useState(0);
@@ -75,7 +77,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
 
   const handleDelete = async () => {
     if (!isFint || !activityId) return;
-    if (!window.confirm('이 일정을 삭제할까요?')) return;
+    if (!await confirm('이 일정을 삭제할까요?')) return;
     setDeleting(true);
     try {
       const res = await fetch(`${API_BASE}/activities/${activityId}`, { method: 'DELETE', headers: authHeader() });

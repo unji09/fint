@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import CustomerSidebar from '@/components/customer/CustomerSidebar';
 import { useAccountList, useAccountDetail, useRegisterAccount, useDeleteAccount } from '@/hooks/useCustomer';
 import { CustomerProvider, useCustomer } from './CustomerContext';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 
 const F = 'Pretendard,sans-serif';
 
@@ -21,6 +22,7 @@ function CustomerLayoutInner({ children }: { children: ReactNode }) {
   const { register: regAccount, loading: regL } = useRegisterAccount();
   const { remove: delAccount } = useDeleteAccount();
   const { setSelContact, addAccountOpen, openAddAccount, closeAddAccount } = useCustomer();
+  const confirm = useConfirm();
 
   // 고객사 추가 모달 폼
   const [nAName, setNAName] = useState('');
@@ -47,8 +49,8 @@ function CustomerLayoutInner({ children }: { children: ReactNode }) {
           onAddAccount={openAddAccount}
           onDeleteAccount={async (accountId, name) => {
             const msg = `"${name}" 고객사를 삭제하시겠습니까?\n\n연결된 모든 담당자, 딜, 활동 데이터가 함께 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`;
-            if (!window.confirm(msg)) return;
-            if (!window.confirm(`정말로 "${name}"을(를) 삭제합니까?`)) return;
+            if (!await confirm({ message: msg, variant: 'danger' })) return;
+            if (!await confirm({ message: `정말로 "${name}"을(를) 삭제합니까?`, variant: 'danger', confirmText: '삭제' })) return;
             if (await delAccount(accountId)) {
               refA();
               router.push('/customer/1');

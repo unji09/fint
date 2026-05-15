@@ -18,6 +18,7 @@ import {
   useDeleteWidget,
   useThumbnailUpload,
 } from '@/hooks/useDashboard';
+import { useConfirm, useAlert } from '@/components/common/ConfirmDialog';
 import html2canvas from 'html2canvas';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -32,6 +33,8 @@ export default function DashboardDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const confirm = useConfirm();
+  const alert = useAlert();
 
   // SSR/hydration mismatch 방지: 초기값은 항상 [], 마운트 후 useEffect에서 캐시 복원
   const [allDashboards, setAllDashboards] = useState<Dashboard[]>([]);
@@ -140,22 +143,22 @@ export default function DashboardDetailPage() {
       // 다음 페이지 마운트 시 새 목록을 새로 받도록 캐시 무효화
       try { sessionStorage.removeItem('fint:allDashboards'); } catch { /* ignore */ }
     } catch {
-      window.alert('새 대시보드를 만들지 못했습니다.\n잠시 후 다시 시도해 주세요.');
+      await alert('새 대시보드를 만들지 못했습니다.\n잠시 후 다시 시도해 주세요.');
     }
   }, [createDashboard, creatingDashboard]);
 
   const handleDeleteDashboard = useCallback(
     async (targetId: number, title: string) => {
       if (deletingDashboard) return;
-      const proceed = window.confirm(
-        `'${title}' 대시보드를 삭제할까요?\n\n` +
-        `이 대시보드 안의 위젯과 분석 내용이 모두 사라지며,\n` +
-        `한 번 삭제하면 복구할 수 없습니다.`,
-      );
+      const proceed = await confirm({
+        message: `'${title}' 대시보드를 삭제할까요?\n\n이 대시보드 안의 위젯과 분석 내용이 모두 사라지며,\n한 번 삭제하면 복구할 수 없습니다.`,
+        variant: 'danger',
+        confirmText: '삭제',
+      });
       if (!proceed) return;
       const ok = await deleteDashboard(targetId);
       if (!ok) {
-        window.alert(`'${title}' 대시보드를 삭제하지 못했습니다.\n잠시 후 다시 시도해 주세요.`);
+        await alert(`'${title}' 대시보드를 삭제하지 못했습니다.\n잠시 후 다시 시도해 주세요.`);
         return;
       }
       setAllDashboards((prev) => {
@@ -167,7 +170,7 @@ export default function DashboardDetailPage() {
         }
         return next;
       });
-      window.alert(`'${title}' 대시보드를 삭제했어요.`);
+      await alert(`'${title}' 대시보드를 삭제했어요.`);
     },
     [deleteDashboard, deletingDashboard, id, router],
   );
@@ -361,7 +364,7 @@ export default function DashboardDetailPage() {
   const removeWidget = useCallback(async (wid: number) => {
     const target = canvasWidgets.find((w) => w.widgetId === wid);
     if (!target) return;
-    if (!window.confirm(`'${target.title}' 위젯을 삭제할까요?`)) return;
+    if (!await confirm(`'${target.title}' 위젯을 삭제할까요?`)) return;
     // 낙관적 제거 + 캐시 갱신
     setCanvasWidgets((prev) => {
       const next = prev.filter((w) => w.widgetId !== wid);
