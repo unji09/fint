@@ -10,7 +10,7 @@
 // 오늘버튼: bg-[#f5f7fa] border-[#e5e6de] rounded-[6px] pt-[6px] pb-[7px] px-[11px]
 // ‹ › : Pretendard 18px #6d7164
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import MonthGrid from '@/components/calendar/MonthGrid';
 import WeekGrid, { PipelineItem } from '@/components/calendar/WeekGrid';
 import EventDetailPanel from '@/components/calendar/EventDetailPanel';
@@ -27,12 +27,6 @@ import {
 } from '@/components/calendar/utils';
 
 // ── 피그마 수치 상수 ─────────────────────────────────────────
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-function authHeader(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : {};
-}
-
 const BG = '#F8F8F5'; // 페이지 배경 (linear-gradient 근사)
 const WHITE = '#FFFFFF';
 const BORDER = '#E5E6DE'; // Figma: var(--color/yellow/89, #e5e6de)
@@ -718,36 +712,31 @@ export default function CalendarPage() {
   const [asideWidth, setAsideWidth] = useState(300); // Figma: w-[300px]
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
 
-  // ── 파이프라인 state (API에서 집계) ──────────────────────────
-  const [pipeline, setPipeline] = useState<PipelineItem[]>(
-    PIPELINE_STYLES.map((s) => ({ ...s, count: 0 })),
-  );
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/deals?size=200`, { headers: authHeader() });
-        if (!res.ok) return;
-        const json = await res.json();
-        // 백엔드 응답: { status, message, data: { data: [...], totalElements } }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const deals: any[] = Array.isArray(json?.data?.data) ? json.data.data : [];
-        const counts: Record<string, number> = {};
-        deals.forEach((d) => {
-          // 백엔드 DealListResponse: currentPipelineStage (DealDetailResponse 와 동일 명명 가정)
-          // 또는 currentPipeline. 둘 다 한글 stage 이름.
-          const code = d?.currentPipelineStage ?? d?.currentPipeline ?? '';
-          if (code) counts[code] = (counts[code] ?? 0) + 1;
-        });
-        setPipeline(PIPELINE_STYLES.map((s) => ({ ...s, count: counts[s.code] ?? 0 })));
-      } catch { /* count 0 유지 */ }
-    })();
-  }, []);
-
   // ── API 연동 ──────────────────────────────────────────────────
   const { events: apiEvents, refetch } = useCalendarEvents({ currentDate, viewMode });
 
-  const events = apiEvents;
+  // ── 파이프라인 필터 ──────────────────────────────────────────
+  const [selectedPipeline, setSelectedPipeline] = useState<string | null>(null);
+
+  const pipeline: PipelineItem[] = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const y = currentDate.getFullYear();
+    const m = currentDate.getMonth();
+    apiEvents.forEach((ev) => {
+      const stage = ev.pipelineStage?.stageName;
+      if (!stage) return;
+      const d = new Date(ev.startAt);
+      if (d.getFullYear() === y && d.getMonth() === m) {
+        counts[stage] = (counts[stage] ?? 0) + 1;
+      }
+    });
+    return PIPELINE_STYLES.map((s) => ({ ...s, count: counts[s.label] ?? 0 }));
+  }, [apiEvents, currentDate]);
+
+  const events = useMemo(() => {
+    if (!selectedPipeline) return apiEvents;
+    return apiEvents.filter((ev) => ev.pipelineStage?.stageName === selectedPipeline);
+  }, [apiEvents, selectedPipeline]);
 
   const dragRef = useRef<{ on: boolean; x0: number; w0: number }>({ on: false, x0: 0, w0: 300 });
   const onDragStart = useCallback(
@@ -1163,59 +1152,70 @@ export default function CalendarPage() {
                 height: 44,
               }}
             >
-              {pipeline.map((s, i) => (
-                <div
-                  key={s.label}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '0 16px',
-                    // MonthGrid 셀 우측 구분선과 동일한 색(`#D6D6D6`) 사용해 시각 정렬
-                    borderRight: i < 6 ? `1px solid #D6D6D6` : 'none',
-                    overflow: 'hidden',
-                    minWidth: 0,
-                  }}
-                >
-                  <span
+              {pipeline.map((s, i) => {
+                const active = selectedPipeline === s.label;
+                return (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => setSelectedPipeline(active ? null : s.label)}
                     style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      backgroundColor: s.dot,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: TXT1,
-                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '0 16px',
+                      borderRight: i < 6 ? '1px solid #D6D6D6' : 'none',
+                      borderTop: 'none',
+                      borderBottom: 'none',
+                      borderLeft: 'none',
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      flex: 1,
+                      minWidth: 0,
+                      cursor: 'pointer',
+                      backgroundColor: active ? s.cBg : 'transparent',
+                      transition: 'background-color 150ms ease',
                       fontFamily: F_INTER,
                     }}
                   >
-                    {s.label}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: s.cTxt,
-                      backgroundColor: s.cBg,
-                      padding: '2px 7px',
-                      borderRadius: 10,
-                      flexShrink: 0,
-                      fontFamily: F_INTER,
-                    }}
-                  >
-                    {s.count}
-                  </span>
-                </div>
-              ))}
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: s.dot,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: active ? 700 : 500,
+                        color: active ? s.cTxt : TXT1,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flex: 1,
+                        textAlign: 'left',
+                      }}
+                    >
+                      {s.label}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: s.cTxt,
+                        backgroundColor: active ? s.dot : s.cBg,
+                        ...(active ? { color: WHITE } : {}),
+                        padding: '2px 7px',
+                        borderRadius: 10,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {s.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
 
