@@ -330,6 +330,7 @@ export default function WeekGrid({
   const [now, setNow] = useState(new Date());
   const [scrollTop, setST] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const justMovedRef = useRef(false);
 
   // ─── 드래그 상태 ─────────────────────────────────────────
   // colIdx: 어느 요일 컬럼, startY / currentY: 컬럼 내부 픽셀 좌표 (스크롤 포함)
@@ -510,7 +511,8 @@ export default function WeekGrid({
       document.body.style.cursor = '';
       const m = move;
       setMove(null);
-      if (!m.moved) return; // 임계치 미만 → button onClick 으로 상세 열림
+      if (!m.moved) return;
+      justMovedRef.current = true;
       const dy = m.curMouseY - m.startMouseY;
       const minutesDelta = Math.round((dy / HOUR_H) * 60 / 15) * 15; // 15분 스냅
       const dayDelta = m.curColIdx - m.origColIdx;
@@ -759,7 +761,7 @@ export default function WeekGrid({
           {HOURS.map((h) => (
             <div
               key={h}
-              style={{ height: HOUR_H, borderTop: `1px solid ${BORDER}`, position: 'relative' }}
+              style={{ height: HOUR_H, boxShadow: `inset 0 1px 0 0 ${BORDER}`, position: 'relative' }}
             >
               {h < END && (
                 <span
@@ -821,7 +823,7 @@ export default function WeekGrid({
               {HOURS.map((h) => (
                 <div
                   key={h}
-                  style={{ height: HOUR_H, borderTop: `1px solid ${BORDER}`, position: 'relative' }}
+                  style={{ height: HOUR_H, boxShadow: `inset 0 1px 0 0 ${BORDER}`, position: 'relative' }}
                 />
               ))}
 
@@ -906,7 +908,7 @@ export default function WeekGrid({
                     hPx = Math.max(50, resize.endY - resize.currentY - 2);
                   }
                 } else {
-                  hPx = Math.max(50, (Math.min(hEnd, END) - Math.max(hStart, START)) * HOUR_H - 2);
+                  hPx = Math.max(50, (Math.min(hEnd, END) - Math.max(hStart, START)) * HOUR_H);
                 }
                 const moveTransform = isMoving
                   ? `translate(${(move.curColIdx - move.origColIdx) * 100}%, ${move.curMouseY - move.startMouseY}px)`
@@ -939,7 +941,10 @@ export default function WeekGrid({
                   >
                     <WeekCard
                       event={ev}
-                      onClick={() => onEventClick(ev)}
+                      onClick={() => {
+                        if (justMovedRef.current) { justMovedRef.current = false; return; }
+                        onEventClick(ev);
+                      }}
                       selected={selectedEvent?.eventId === ev.eventId}
                       narrow={layout.mode === 'side' && layout.totalCols > 1}
                       onResizeStartTop={

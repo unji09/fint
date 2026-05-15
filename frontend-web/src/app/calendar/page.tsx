@@ -233,6 +233,7 @@ function DayTimeView({
     curMouseY: number;
     moved: boolean;
   } | null>(null);
+  const justMovedRef = useRef(false);
   const colRef = useRef<HTMLDivElement>(null);
 
   const yToDate = (y: number): Date => {
@@ -328,6 +329,7 @@ function DayTimeView({
       const m = move;
       setMove(null);
       if (!m.moved) return;
+      justMovedRef.current = true;
       const dy = m.curMouseY - m.startMouseY;
       const minutesDelta = Math.round((dy / A_H) * 60 / 15) * 15;
       const newStart = new Date(m.event.startAt);
@@ -567,8 +569,8 @@ function DayTimeView({
           }
           const moveTransform = isMoving ? `translateY(${move.curMouseY - move.startMouseY}px)` : undefined;
           const ol = colAssign.get(ev.eventId) ?? { colIdx: 0, totalCols: 1 };
-          const colW = ol.totalCols > 1 ? `calc((100% - 48px) / ${ol.totalCols})` : undefined;
-          const colL = ol.totalCols > 1 ? `calc(42px + (100% - 48px) * ${ol.colIdx} / ${ol.totalCols})` : 42;
+          const colW = ol.totalCols > 1 ? `calc((100% - 56px) / ${ol.totalCols})` : undefined;
+          const colL = ol.totalCols > 1 ? `calc(50px + (100% - 56px) * ${ol.colIdx} / ${ol.totalCols})` : 50;
           return (
             <div
               key={ev.eventId}
@@ -589,7 +591,10 @@ function DayTimeView({
             >
               <AsideCard
                 event={ev}
-                onClick={() => onEventClick(ev)}
+                onClick={() => {
+                  if (justMovedRef.current) { justMovedRef.current = false; return; }
+                  onEventClick(ev);
+                }}
                 height={wrapperHeight}
               />
               {/* 리사이즈 핸들 — button 밖 형제 div (이벤트 충돌 방지). FINT 활동만. */}
