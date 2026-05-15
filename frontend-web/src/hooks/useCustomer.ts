@@ -43,6 +43,25 @@ function mapApiContact(c: ApiContact, idx: number): ContactInfo {
   };
 }
 
+// DART 공시 URL 합성.
+//   백엔드 url 필드는 dart_disclosures.rcept_no(14자 접수번호) 또는 쿼리스트링 형태로 옴.
+//   DART 공식 뷰어: https://dart.fss.or.kr/dsaf001/main.do?rcpNo={접수번호}
+//   허용 입력:
+//     1) "https://..."         → 이미 full URL  → 그대로
+//     2) "?rcpNo=20250515..." → base + raw
+//     3) "rcpNo=20250515..."  → base + "?" + raw
+//     4) "20250515000123"     → base + "?rcpNo=" + raw (값만)
+const DART_BASE = 'https://dart.fss.or.kr/dsaf001/main.do';
+function composeDartUrl(raw: string): string {
+  const v = raw.trim();
+  if (!v) return DART_BASE;
+  if (/^https?:\/\//i.test(v)) return v;
+  if (v.startsWith('?')) return `${DART_BASE}${v}`;
+  if (v.includes('=')) return `${DART_BASE}?${v}`;
+  // rcept_no 만 온 경우 — 숫자/문자 검증 없이 그대로 쿼리 키에 붙임 (안전)
+  return `${DART_BASE}?rcpNo=${encodeURIComponent(v)}`;
+}
+
 function mapApiSignal(s: ApiSignal): Signal {
   const diffMs = Date.now() - new Date(s.occurredAt).getTime();
   const diffHours = Math.floor(diffMs / 3600000);
@@ -50,10 +69,19 @@ function mapApiSignal(s: ApiSignal): Signal {
   const time =
     diffDays > 0 ? `${diffDays}일 전` : diffHours > 0 ? `${diffHours}시간 전` : '방금 전';
 
+  // DART: 백엔드 title = report_nm (공시명 raw), content = content_summary (AI 요약).
+  //   사용자에게 의미 있는 건 요약 → title 위치에 content, 호버 위치에 원문 공시명.
+  // NEWS: 백엔드 title = 뉴스 제목, content = content_summary (또는 article).
+  //   매핑 그대로. url 은 original_link 또는 link 가 full URL 로 옴.
+  const isDart = s.source === 'DART';
+  const summary = (s.content ?? '').trim();
+  const rawUrl = (s.url ?? '').trim();
   return {
     type: s.source,
     time,
-    content: s.content ? `${s.title} - ${s.content}` : s.title,
+    title: isDart && summary ? summary : s.title,
+    content: isDart ? (s.title ?? '') : (s.content ?? ''),
+    url: rawUrl ? (isDart ? composeDartUrl(rawUrl) : rawUrl) : undefined,
   };
 }
 
