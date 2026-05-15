@@ -147,7 +147,7 @@ class NextActionClientTest {
                 .thenReturn(new ResponseEntity<>(responseJson, HttpStatus.OK));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
-                ACCOUNT_ID, TriggerType.MANUAL_REQUEST,
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED,
                 null, null, null, "추가 맥락");
         nextActionClient.generate(TENANT_ID, request);
 
@@ -164,7 +164,7 @@ class NextActionClientTest {
                 .thenThrow(new RestClientException("Connection refused"));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
-                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED, null, null, null, null);
 
         assertThatThrownBy(() -> nextActionClient.generate(TENANT_ID, request))
                 .isInstanceOf(BusinessException.class)
@@ -179,7 +179,7 @@ class NextActionClientTest {
                 .thenReturn(new ResponseEntity<>("", HttpStatus.OK));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
-                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED, null, null, null, null);
 
         assertThatThrownBy(() -> nextActionClient.generate(TENANT_ID, request))
                 .isInstanceOf(BusinessException.class)
@@ -194,7 +194,7 @@ class NextActionClientTest {
                 .thenReturn(new ResponseEntity<>("[]", HttpStatus.OK));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
-                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED, null, null, null, null);
 
         assertThatThrownBy(() -> nextActionClient.generate(TENANT_ID, request))
                 .isInstanceOf(BusinessException.class)
@@ -216,7 +216,7 @@ class NextActionClientTest {
                 .thenReturn(new ResponseEntity<>(responseJson, HttpStatus.OK));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
-                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED, null, null, null, null);
 
         assertThatThrownBy(() -> nextActionClient.generate(TENANT_ID, request))
                 .isInstanceOf(BusinessException.class)

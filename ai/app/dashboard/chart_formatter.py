@@ -2,19 +2,93 @@
 
 from __future__ import annotations
 
+import re
+
 from app.schemas.dashboard import InsightResult, WidgetType
+
+_COLUMN_LABEL_KO: dict[str, str] = {
+    "account_id": "고객사ID",
+    "deal_id": "딜ID",
+    "activity_id": "활동ID",
+    "contact_id": "담당자ID",
+    "user_id": "사용자ID",
+    "tenant_id": "테넌트ID",
+    "name": "이름",
+    "title": "제목",
+    "amount": "금액",
+    "industry": "업종",
+    "current_pipeline": "파이프라인",
+    "expected_close": "예상 종료일",
+    "probability": "성공 확률",
+    "created_at": "생성일",
+    "updated_at": "수정일",
+    "email": "이메일",
+    "phone": "전화번호",
+    "biz_no": "사업자번호",
+    "type": "유형",
+    "source": "출처",
+    "status": "상태",
+    "description": "설명",
+    "address": "주소",
+    "note": "비고",
+    "score": "점수",
+    "temperature": "온도",
+    "stage": "스테이지",
+    "company_name": "회사명",
+    "representative": "대표자",
+    "employee_count": "직원수",
+    "revenue": "매출액",
+    "fiscal_year": "회계연도",
+}
+
+_AGG_KO: dict[str, str] = {
+    "SUM": "합계",
+    "AVG": "평균",
+    "MIN": "최솟값",
+    "MAX": "최댓값",
+}
+
+_TRUNC_UNIT_KO: dict[str, str] = {
+    "day": "일",
+    "week": "주",
+    "month": "월",
+    "quarter": "분기",
+    "year": "연도",
+}
+
+_RE_AGG = re.compile(
+    r"^(SUM|AVG|COUNT|MIN|MAX)\((.+)\)$", re.IGNORECASE,
+)
+_RE_DATE_TRUNC = re.compile(
+    r"^DATE_TRUNC\(\s*'(\w+)'\s*,\s*.+\)$", re.IGNORECASE,
+)
+
+
+def _humanize_column(raw: str) -> str:
+    key = raw.strip()
+    if key in _COLUMN_LABEL_KO:
+        return _COLUMN_LABEL_KO[key]
+
+    m = _RE_AGG.match(key)
+    if m:
+        func, inner = m.group(1).upper(), m.group(2).strip()
+        if func == "COUNT":
+            return "건수"
+        col_label = _COLUMN_LABEL_KO.get(inner, inner)
+        return f"{col_label} {_AGG_KO[func]}"
+
+    m = _RE_DATE_TRUNC.match(key)
+    if m:
+        unit = m.group(1).lower()
+        return _TRUNC_UNIT_KO.get(unit, unit)
+
+    return raw
+
 
 _MAX_CHART_CATEGORIES = 20
 _MAX_PIE_SEGMENTS = 10
 _TABLE_MIN_COLUMNS = 5
 _MAX_TITLE_LENGTH = 100
-
-_WIDGET_TO_CHART_TYPE = {
-    WidgetType.BAR: "bar",
-    WidgetType.LINE: "line",
-    WidgetType.PIE: "pie",
-}
-
 
 def format_result(
     insight: InsightResult,
@@ -25,14 +99,14 @@ def format_result(
 ) -> dict:
     """InsightResult + rows → Spring 전달용 result dict."""
     widget_type = _correct_widget_type(insight, rows)
-    chart_type = _resolve_chart_type(widget_type, insight.chart_type)
+    chart_type = _resolve_chart_type(widget_type, insight.chart_type, rows)
     title = (insight.title or "")[:_MAX_TITLE_LENGTH]
 
     return {
         "widget_type": widget_type.value,
         "chart_type": chart_type,
         "title": title,
-        "config": _build_config(widget_type, insight, rows),
+        "config": _build_config(widget_type, chart_type, insight, rows),
         "data": _build_data(rows),
         "column_metadata": _build_column_metadata(insight),
         "insight_text": insight.insight_text,
@@ -51,40 +125,43 @@ def _correct_widget_type(insight: InsightResult, rows: list[dict]) -> WidgetType
     wt = insight.widget_type
     if not rows:
         return wt
-    if wt == WidgetType.KPI and len(rows) > 1:
+    if wt == WidgetType.CARD and len(rows) > 1:
         return WidgetType.TABLE
-    if wt in (WidgetType.KPI, WidgetType.TABLE):
+    if wt in (WidgetType.CARD, WidgetType.TABLE):
         return wt
     if len(rows) == 1 and not insight.labels_field and insight.datasets:
-        return WidgetType.KPI
+        return WidgetType.CARD
     if len(rows[0]) >= _TABLE_MIN_COLUMNS:
         return WidgetType.TABLE
     if len(rows) > _MAX_CHART_CATEGORIES:
         return WidgetType.TABLE
-    if wt == WidgetType.PIE and len(rows) > _MAX_PIE_SEGMENTS:
-        return WidgetType.BAR
     return wt
 
 
-def _resolve_chart_type(widget_type: WidgetType, insight_chart_type: str | None) -> str | None:
-    if widget_type in (WidgetType.KPI, WidgetType.TABLE):
+def _resolve_chart_type(
+    widget_type: WidgetType, insight_chart_type: str | None, rows: list[dict],
+) -> str | None:
+    if widget_type in (WidgetType.CARD, WidgetType.TABLE):
         return None
-    return insight_chart_type or _WIDGET_TO_CHART_TYPE.get(widget_type)
+    if insight_chart_type == "pie" and rows and len(rows) > _MAX_PIE_SEGMENTS:
+        return "bar"
+    return insight_chart_type
 
 
 # --- config builders ---
 
 
-def _build_config(widget_type: WidgetType, insight: InsightResult, rows: list[dict]) -> dict:
-    if widget_type == WidgetType.KPI:
+def _build_config(
+    widget_type: WidgetType, chart_type: str | None, insight: InsightResult, rows: list[dict],
+) -> dict:
+    if widget_type == WidgetType.CARD:
         return _build_kpi_config(insight)
     if widget_type == WidgetType.TABLE:
         return _build_table_config(insight, rows)
-    return _build_chart_config(widget_type, insight)
+    return _build_chart_config(chart_type, insight)
 
 
-def _build_chart_config(widget_type: WidgetType, insight: InsightResult) -> dict:
-    chart_type = _resolve_chart_type(widget_type, insight.chart_type)
+def _build_chart_config(chart_type: str | None, insight: InsightResult) -> dict:
     options: dict = {}
     if insight.x_label:
         options["xAxis"] = {"label": insight.x_label}
@@ -141,7 +218,7 @@ def _build_table_config(insight: InsightResult, rows: list[dict]) -> dict:
                 col["unit"] = insight.y_unit
             columns.append(col)
     elif rows:
-        columns = [{"label": k, "field": k} for k in rows[0].keys()]
+        columns = [{"label": _humanize_column(k), "field": k} for k in rows[0].keys()]
 
     return {
         "columns": columns,

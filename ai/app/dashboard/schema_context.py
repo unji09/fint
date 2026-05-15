@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from sqlalchemy import text
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 ALLOWED_TABLES: dict[str, TableMeta] = {}
 
@@ -51,7 +57,7 @@ def _build_schema() -> dict[str, TableMeta]:
         columns=[
             ColumnMeta("account_id", "BIGINT", "고객사 PK"),
             ColumnMeta("name", "VARCHAR", "고객사명"),
-            ColumnMeta("industry", "VARCHAR", "업종 (예: IT, 제조, 금융, 유통)"),
+            ColumnMeta("industry", "VARCHAR", "업종. 정확한 값을 모르면 LIKE 매칭 권장"),
             ColumnMeta("biz_no", "VARCHAR", "사업자등록번호"),
             ColumnMeta("created_at", "TIMESTAMPTZ", "생성일"),
             ColumnMeta("updated_at", "TIMESTAMPTZ", "수정일"),
@@ -257,6 +263,19 @@ def get_allowed_join_targets(table_name: str) -> dict[str, JoinPath]:
     if not meta:
         return {}
     return {j.target_table: j for j in meta.allowed_joins}
+
+
+async def fetch_account_names(db: AsyncSession, *, tenant_id: int) -> list[str]:
+    sql = text("""
+        SELECT DISTINCT a.name
+        FROM accounts a
+        JOIN account_user_assignment aua ON a.account_id = aua.account_id
+        JOIN users u ON aua.user_id = u.user_id
+        WHERE u.tenant_id = :tenant_id AND a.is_deleted = FALSE
+        ORDER BY a.name
+    """)
+    result = await db.execute(sql, {"tenant_id": tenant_id})
+    return [row[0] for row in result.all()]
 
 
 def build_llm_schema_prompt() -> str:

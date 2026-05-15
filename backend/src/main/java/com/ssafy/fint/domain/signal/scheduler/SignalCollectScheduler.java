@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.signal.scheduler;
 
+import com.ssafy.fint.domain.ai.service.NextActionTriggerService;
 import com.ssafy.fint.domain.signal.service.SignalCollectService;
 import com.ssafy.fint.domain.signal.service.SignalCollectService.SignalCollectResult;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ public class SignalCollectScheduler {
     private static final Long SYSTEM_TENANT_ID = 1L;
 
     private final SignalCollectService signalCollectService;
+    private final NextActionTriggerService nextActionTriggerService;
     private final AtomicBoolean enabled = new AtomicBoolean(true);
 
     @Scheduled(fixedRate = 600_000) // 1시간 = 3_600_000, 6분 = 360_000, 10분 = 600_000
@@ -31,6 +33,8 @@ public class SignalCollectScheduler {
             SignalCollectResult result = signalCollectService.collectAndSave(SYSTEM_TENANT_ID);
             log.info("[SignalScheduler] done. news={} dart={} errors={}",
                     result.newsInserted(), result.dartInserted(), result.errors().size());
+
+            nextActionTriggerService.triggerFromCollectResult(SYSTEM_TENANT_ID, result);
         } catch (Exception e) {
             log.error("[SignalScheduler] failed", e);
         }

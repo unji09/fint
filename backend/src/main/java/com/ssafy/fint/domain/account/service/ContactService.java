@@ -13,6 +13,7 @@ import com.ssafy.fint.domain.contact.dto.response.ContactCreateResponse;
 import com.ssafy.fint.domain.contact.dto.response.ContactListResponse;
 import com.ssafy.fint.domain.contact.dto.response.ContactOcrInitResponse;
 import com.ssafy.fint.domain.contact.dto.response.ContactOcrInitResult;
+import com.ssafy.fint.domain.contact.event.ContactCreatedEvent;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AccountErrorCode;
@@ -20,6 +21,7 @@ import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +43,7 @@ public class ContactService {
     private final AccountRepository accountRepository;
     private final AccountUserAssignmentRepository accountUserAssignmentRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Contact getByIdAndAccount(Long contactId, Long accountId) {
         return contactRepository.findByIdAndAccount(contactId, accountId)
@@ -91,7 +94,8 @@ public class ContactService {
     public ContactOcrInitResult initContactByOcr(CustomUserDetails me, ContactOcrInitRequest request) {
         Long tenantId = me.getTenantId();
 
-        Account account = findOrCreateAccount(request.getAccountName(), tenantId, me.getUserId());
+        AccountLookupResult accountResult = findOrCreateAccount(request.getAccountName(), tenantId, me.getUserId());
+        Account account = accountResult.account();
 
         Optional<Contact> existing = findDuplicate(account.getAccountId(), request);
         if (existing.isPresent()) {
@@ -109,13 +113,16 @@ public class ContactService {
                 .build();
         Contact saved = contactRepository.save(contact);
         log.info("[ContactOcrInit] created contactId={} accountId={}", saved.getContactId(), account.getAccountId());
+        if (accountResult.created()) {
+            eventPublisher.publishEvent(new ContactCreatedEvent(tenantId, account.getAccountId(), saved.getContactId()));
+        }
         return new ContactOcrInitResult(ContactOcrInitResponse.from(saved), true);
     }
 
-    private Account findOrCreateAccount(String accountName, Long tenantId, Long userId) {
+    private AccountLookupResult findOrCreateAccount(String accountName, Long tenantId, Long userId) {
         List<Account> accounts = accountRepository.findByNameAndTenantId(accountName, tenantId);
         if (!accounts.isEmpty()) {
-            return accounts.getFirst();
+            return new AccountLookupResult(accounts.getFirst(), false);
         }
 
         Account saved = accountRepository.save(
@@ -129,7 +136,10 @@ public class ContactService {
                 AccountUserAssignment.builder().account(saved).user(owner).build());
 
         log.info("[ContactOcrInit] new account accountId={} name={}", saved.getAccountId(), accountName);
-        return saved;
+        return new AccountLookupResult(saved, true);
+    }
+
+    record AccountLookupResult(Account account, boolean created) {
     }
 
     private Optional<Contact> findDuplicate(Long accountId, ContactOcrInitRequest request) {

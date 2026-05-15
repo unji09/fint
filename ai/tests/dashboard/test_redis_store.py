@@ -25,6 +25,23 @@ def fake_redis():
             self._store.pop(key, None)
             self._ttls.pop(key, None)
 
+        async def incr(self, key: str) -> int:
+            raw = self._store.get(key)
+            val = int(raw) if raw else 0
+            val += 1
+            self._store[key] = str(val)
+            return val
+
+        async def decr(self, key: str) -> int:
+            raw = self._store.get(key)
+            val = int(raw) if raw else 0
+            val -= 1
+            self._store[key] = str(val)
+            return val
+
+        async def expire(self, key: str, seconds: int) -> None:
+            self._ttls[key] = seconds
+
     return FakeRedis()
 
 
@@ -79,13 +96,13 @@ class TestUpdateStatus:
 
 class TestSetCompleted:
     async def test_completed_with_result(self, store, fake_redis):
-        result = {"widget_type": "BAR_CHART", "title": "매출 추이"}
+        result = {"widget_type": "CHART", "title": "매출 추이"}
         await store.set_completed("trace-1", result)
 
         raw = await fake_redis.get("dashboard:query:trace-1")
         data = json.loads(raw)
         assert data["status"] == "COMPLETED"
-        assert data["result"]["widget_type"] == "BAR_CHART"
+        assert data["result"]["widget_type"] == "CHART"
 
     async def test_completed_has_ttl(self, store, fake_redis):
         await store.set_completed("trace-1", {"title": "test"})
@@ -106,6 +123,21 @@ class TestSetFailed:
         await store.set_failed("trace-1", "에러")
 
         assert fake_redis._ttls["dashboard:query:trace-1"] == RESULT_TTL
+
+    async def test_failed_with_error_code(self, store, fake_redis):
+        await store.set_failed("trace-1", "DB 오류", error_code="DB_ERROR")
+
+        raw = await fake_redis.get("dashboard:query:trace-1")
+        data = json.loads(raw)
+        assert data["error_code"] == "DB_ERROR"
+        assert data["error"] == "DB 오류"
+
+    async def test_failed_without_error_code_defaults_none(self, store, fake_redis):
+        await store.set_failed("trace-1", "에러")
+
+        raw = await fake_redis.get("dashboard:query:trace-1")
+        data = json.loads(raw)
+        assert data.get("error_code") is None
 
 
 class TestGetResult:
@@ -129,3 +161,28 @@ class TestDifferentTraceIds:
         r2 = await store.get_result("trace-2")
         assert r1["status"] == "COMPLETED"
         assert r2["status"] == "FAILED"
+
+
+class TestRateLimit:
+    async def test_acquire_within_limit(self, store):
+        ok = await store.acquire_rate_slot(tenant_id=1, user_id=7)
+        assert ok is True
+
+    async def test_acquire_exceeds_limit(self, store):
+        for _ in range(3):
+            await store.acquire_rate_slot(tenant_id=1, user_id=7)
+        ok = await store.acquire_rate_slot(tenant_id=1, user_id=7)
+        assert ok is False
+
+    async def test_release_allows_new_slot(self, store):
+        for _ in range(3):
+            await store.acquire_rate_slot(tenant_id=1, user_id=7)
+        await store.release_rate_slot(tenant_id=1, user_id=7)
+        ok = await store.acquire_rate_slot(tenant_id=1, user_id=7)
+        assert ok is True
+
+    async def test_different_users_isolated(self, store):
+        for _ in range(3):
+            await store.acquire_rate_slot(tenant_id=1, user_id=7)
+        ok = await store.acquire_rate_slot(tenant_id=1, user_id=8)
+        assert ok is True

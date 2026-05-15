@@ -33,6 +33,8 @@ import java.util.Map;
 @Transactional(readOnly = true)
 public class AiSuggestionService {
 
+    private static final double URGENT_NOTIFICATION_THRESHOLD = 80.0;
+
     private final AccountRepository accountRepository;
     private final AiSuggestionRepository aiSuggestionRepository;
     private final PipelineStageRepository pipelineStageRepository;
@@ -78,11 +80,55 @@ public class AiSuggestionService {
                     .build();
 
             AiSuggestion saved = aiSuggestionRepository.save(suggestion);
-            notificationService.pushNotification(saved);
+            if (saved.getImportanceScore() >= URGENT_NOTIFICATION_THRESHOLD) {
+                notificationService.pushNotification(saved);
+            }
             results.add(NextActionCreateResponse.from(saved));
         }
 
         return results;
+    }
+
+    @Transactional
+    public void createNextActionBySystem(Long tenantId, NextActionCreateRequest request) {
+        Long accountId = request.accountId();
+
+        Account account = accountRepository.findByIdAndTenantId(accountId, tenantId)
+                .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
+
+        List<NextActionAiResponse> aiResponses = nextActionClient.generate(tenantId, request);
+
+        for (NextActionAiResponse aiResponse : aiResponses) {
+            PipelineStage stage = pipelineStageRepository
+                    .findByPipelineStageIdAndTenant_TenantId(aiResponse.pipelineStageId(), tenantId)
+                    .orElseThrow(() -> new BusinessException(AiErrorCode.INVALID_AI_RESPONSE));
+
+            AiSuggestionRelatedType relatedType = resolveRelatedType(aiResponse, request);
+            String category = aiResponse.category() != null ? aiResponse.category() : "GENERAL";
+            int successProbability = aiResponse.successProbability() != null ? aiResponse.successProbability() : 0;
+            double importanceScore = aiResponse.importanceScore() != null ? aiResponse.importanceScore() : 0.0;
+
+            Map<String, Object> reason = new HashMap<>();
+            reason.put("sources", aiResponse.sources());
+            reason.put("recommendedScript", aiResponse.recommendedScript());
+
+            AiSuggestion suggestion = AiSuggestion.builder()
+                    .account(account)
+                    .pipelineStage(stage)
+                    .title(aiResponse.action())
+                    .content(aiResponse.reason())
+                    .relatedType(relatedType)
+                    .category(category)
+                    .successProbability(successProbability)
+                    .importanceScore(importanceScore)
+                    .reason(reason)
+                    .build();
+
+            AiSuggestion saved = aiSuggestionRepository.save(suggestion);
+            if (saved.getImportanceScore() >= URGENT_NOTIFICATION_THRESHOLD) {
+                notificationService.pushNotification(saved);
+            }
+        }
     }
 
     public List<NextActionListResponse> findNextActions(CustomUserDetails me, Long accountId) {

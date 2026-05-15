@@ -64,18 +64,39 @@ async def run_query_task(
     async def _on_status(status: QueryStatus) -> None:
         await redis_store.update_status(request.trace_id, status)
 
+    acquired = await redis_store.acquire_rate_slot(
+        tenant_id=request.tenant_id, user_id=request.user_id,
+    )
+    if not acquired:
+        await redis_store.set_failed(
+            request.trace_id,
+            "동시 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.",
+            error_code="RATE_LIMIT",
+        )
+        return
+
     try:
         async with session_factory() as db:
             engine = QueryEngine(llm=llm, db=db, context_store=context_store, embedder=embedder)
             result = await engine.run(request, on_status=_on_status)
 
+        error_code = result.get("error_code")
+
         if result["status"] == "COMPLETED":
             await redis_store.set_completed(request.trace_id, result["result"])
         elif result["status"] == "REJECTED":
             error = result.get("rejection_reason", "요청을 처리할 수 없습니다.")
-            await redis_store.set_failed(request.trace_id, error)
+            await redis_store.set_failed(request.trace_id, error, error_code=error_code)
         else:
-            await redis_store.set_failed(request.trace_id, result.get("error", "처리 중 오류가 발생했습니다."))
+            await redis_store.set_failed(
+                request.trace_id,
+                result.get("error", "처리 중 오류가 발생했습니다."),
+                error_code=error_code,
+            )
     except Exception as e:
         logger.exception("Dashboard query task failed: trace_id=%s", request.trace_id)
-        await redis_store.set_failed(request.trace_id, str(e))
+        await redis_store.set_failed(request.trace_id, str(e), error_code="DB_ERROR")
+    finally:
+        await redis_store.release_rate_slot(
+            tenant_id=request.tenant_id, user_id=request.user_id,
+        )

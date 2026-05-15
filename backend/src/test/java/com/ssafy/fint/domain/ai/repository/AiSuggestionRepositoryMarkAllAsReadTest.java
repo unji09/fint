@@ -151,6 +151,9 @@ class AiSuggestionRepositoryMarkAllAsReadTest {
                 .title("테스트 알림")
                 .content("내용")
                 .relatedType(AiSuggestionRelatedType.ACCOUNT)
+                .category("GENERAL")
+                .successProbability(0)
+                .importanceScore(0.0)
                 .reason(Map.of("activityType", "미팅"))
                 .build();
         em.persist(suggestion);
