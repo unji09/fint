@@ -51,8 +51,9 @@ class BatchProcessor:
 
         cp = load_checkpoint(self._checkpoint_path)
         total_inserted = 0
+        dsn = self._db_url.replace("+asyncpg", "")
 
-        conn = await asyncpg.connect(self._db_url.replace("+asyncpg", ""))
+        conn = await asyncpg.connect(dsn)
         try:
             for csv_file in self._csv_files:
                 filename = csv_file.name
@@ -70,6 +71,7 @@ class BatchProcessor:
                 total_failed = 0
                 async for batch, new_offset in self._iter_batches(csv_file, byte_offset=byte_offset):
                     prepared = self._prepare_batch(batch)
+                    conn = await self._ensure_conn(conn, dsn)
                     inserted = await self._insert_batch(prepared, conn)
                     total_inserted += inserted
                     batch_failed = len(batch) - inserted
@@ -98,6 +100,15 @@ class BatchProcessor:
             await conn.close()
 
         return {"total_inserted": total_inserted}
+
+    @staticmethod
+    async def _ensure_conn(conn: Any, dsn: str) -> Any:
+        import asyncpg
+
+        if conn.is_closed():
+            logger.warning("DB connection lost — reconnecting")
+            return await asyncpg.connect(dsn)
+        return conn
 
     async def _iter_batches(
         self, csv_file: Path, *, byte_offset: int = 0

@@ -7,11 +7,10 @@ from pydantic import BaseModel, Field
 
 
 class WidgetType(StrEnum):
-    BAR = "BAR_CHART"
-    LINE = "LINE_CHART"
-    PIE = "PIE"
-    KPI = "KPI"
+    CHART = "CHART"
+    CARD = "CARD"
     TABLE = "TABLE"
+    LIST = "LIST"
 
 
 class FilterOperator(StrEnum):

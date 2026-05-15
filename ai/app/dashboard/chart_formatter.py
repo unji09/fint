@@ -9,13 +9,6 @@ _MAX_PIE_SEGMENTS = 10
 _TABLE_MIN_COLUMNS = 5
 _MAX_TITLE_LENGTH = 100
 
-_WIDGET_TO_CHART_TYPE = {
-    WidgetType.BAR: "bar",
-    WidgetType.LINE: "line",
-    WidgetType.PIE: "pie",
-}
-
-
 def format_result(
     insight: InsightResult,
     rows: list[dict],
@@ -25,14 +18,14 @@ def format_result(
 ) -> dict:
     """InsightResult + rows → Spring 전달용 result dict."""
     widget_type = _correct_widget_type(insight, rows)
-    chart_type = _resolve_chart_type(widget_type, insight.chart_type)
+    chart_type = _resolve_chart_type(widget_type, insight.chart_type, rows)
     title = (insight.title or "")[:_MAX_TITLE_LENGTH]
 
     return {
         "widget_type": widget_type.value,
         "chart_type": chart_type,
         "title": title,
-        "config": _build_config(widget_type, insight, rows),
+        "config": _build_config(widget_type, chart_type, insight, rows),
         "data": _build_data(rows),
         "column_metadata": _build_column_metadata(insight),
         "insight_text": insight.insight_text,
@@ -51,40 +44,43 @@ def _correct_widget_type(insight: InsightResult, rows: list[dict]) -> WidgetType
     wt = insight.widget_type
     if not rows:
         return wt
-    if wt == WidgetType.KPI and len(rows) > 1:
+    if wt == WidgetType.CARD and len(rows) > 1:
         return WidgetType.TABLE
-    if wt in (WidgetType.KPI, WidgetType.TABLE):
+    if wt in (WidgetType.CARD, WidgetType.TABLE):
         return wt
     if len(rows) == 1 and not insight.labels_field and insight.datasets:
-        return WidgetType.KPI
+        return WidgetType.CARD
     if len(rows[0]) >= _TABLE_MIN_COLUMNS:
         return WidgetType.TABLE
     if len(rows) > _MAX_CHART_CATEGORIES:
         return WidgetType.TABLE
-    if wt == WidgetType.PIE and len(rows) > _MAX_PIE_SEGMENTS:
-        return WidgetType.BAR
     return wt
 
 
-def _resolve_chart_type(widget_type: WidgetType, insight_chart_type: str | None) -> str | None:
-    if widget_type in (WidgetType.KPI, WidgetType.TABLE):
+def _resolve_chart_type(
+    widget_type: WidgetType, insight_chart_type: str | None, rows: list[dict],
+) -> str | None:
+    if widget_type in (WidgetType.CARD, WidgetType.TABLE):
         return None
-    return insight_chart_type or _WIDGET_TO_CHART_TYPE.get(widget_type)
+    if insight_chart_type == "pie" and rows and len(rows) > _MAX_PIE_SEGMENTS:
+        return "bar"
+    return insight_chart_type
 
 
 # --- config builders ---
 
 
-def _build_config(widget_type: WidgetType, insight: InsightResult, rows: list[dict]) -> dict:
-    if widget_type == WidgetType.KPI:
+def _build_config(
+    widget_type: WidgetType, chart_type: str | None, insight: InsightResult, rows: list[dict],
+) -> dict:
+    if widget_type == WidgetType.CARD:
         return _build_kpi_config(insight)
     if widget_type == WidgetType.TABLE:
         return _build_table_config(insight, rows)
-    return _build_chart_config(widget_type, insight)
+    return _build_chart_config(chart_type, insight)
 
 
-def _build_chart_config(widget_type: WidgetType, insight: InsightResult) -> dict:
-    chart_type = _resolve_chart_type(widget_type, insight.chart_type)
+def _build_chart_config(chart_type: str | None, insight: InsightResult) -> dict:
     options: dict = {}
     if insight.x_label:
         options["xAxis"] = {"label": insight.x_label}

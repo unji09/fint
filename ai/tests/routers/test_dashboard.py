@@ -231,7 +231,7 @@ class TestDashboardEndpoint:
                     "dashboard_id": 1,
                     "tenant_id": 42,
                     "user_id": 7,
-                    "current_widget": {"widget_type": "BAR_CHART", "title": "기존 바 차트"},
+                    "current_widget": {"widget_type": "CHART", "title": "기존 바 차트"},
                 },
             )
 
@@ -383,7 +383,7 @@ class TestRunQueryTask:
         redis = FakeRedis()
         request = self._make_request(
             action="MODIFY",
-            current_widget={"widget_type": "BAR_CHART", "title": "기존 바 차트"},
+            current_widget={"widget_type": "CHART", "title": "기존 바 차트"},
         )
 
         with patch("app.routers.dashboard.get_session_factory", return_value=FakeSessionFactory()):

@@ -1,6 +1,11 @@
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from app.dashboard.schema_context import (
     ALLOWED_TABLES,
     build_llm_schema_prompt,
+    fetch_account_names,
     get_allowed_columns,
     get_allowed_join_targets,
     get_filterable_columns,
@@ -59,6 +64,54 @@ class TestSchemaPromptExamples:
         prompt = build_llm_schema_prompt()
         lines = [l for l in prompt.split("\n") if "current_pipeline" in l]
         assert any("예:" in l for l in lines)
+
+
+class TestFetchAccountNames:
+    @pytest.mark.asyncio
+    async def test_returns_account_names(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = [("삼성SDS",), ("LG CNS",), ("SK텔레콤",)]
+        db.execute.return_value = result
+
+        names = await fetch_account_names(db, tenant_id=1)
+
+        assert names == ["삼성SDS", "LG CNS", "SK텔레콤"]
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_accounts(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = []
+        db.execute.return_value = result
+
+        names = await fetch_account_names(db, tenant_id=1)
+
+        assert names == []
+
+    @pytest.mark.asyncio
+    async def test_passes_tenant_id_to_query(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = []
+        db.execute.return_value = result
+
+        await fetch_account_names(db, tenant_id=42)
+
+        params = db.execute.call_args[0][1]
+        assert params["tenant_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_sql_filters_deleted_accounts(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = []
+        db.execute.return_value = result
+
+        await fetch_account_names(db, tenant_id=1)
+
+        sql_text = str(db.execute.call_args[0][0])
+        assert "is_deleted" in sql_text
 
 
 class TestActivitiesSchema:

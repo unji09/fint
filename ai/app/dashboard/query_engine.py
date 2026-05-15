@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.dashboard.chart_formatter import format_result
 from app.dashboard.guardrails import GuardrailError, check_input
 from app.dashboard.query_builder import QueryBuildError, build_query
-from app.dashboard.schema_context import build_llm_schema_prompt
+from app.dashboard.schema_context import build_llm_schema_prompt, fetch_account_names
 from app.dashboard.tools import ALL_TOOLS, parse_tool_calls
 from app.dashboard.vector_search import semantic_search
 from app.schemas.dashboard import (
@@ -43,8 +43,10 @@ _SYSTEM_PROMPT_FC = """당신은 B2B CRM 데이터 분석 전문가입니다.
 - SQL을 직접 작성하지 마세요. query_structured_data의 파라미터 구조로 응답하세요.
 - 집계가 필요하면 columns에 "COUNT(*)", "SUM(column)" 등을 사용하세요.
 - columns에 별칭(AS)을 사용하지 마세요. "SUM(amount)"처럼 순수 표현식만 작성하세요.
-- 회사명/고객사명으로 필터링할 때는 LIKE 연산자를 사용하세요.
+- 회사명/고객사명 필터링: 고객사 목록에 정확한 이름이 있으면 EQ, 부분 키워드면 LIKE를 사용하세요.
   예: "삼성" → operator="LIKE", value="%삼성%"
+- 업종(industry) 필터링: 정확한 값을 모르면 반드시 LIKE를 사용하세요.
+  예: "IT 업종" → operator="LIKE", value="%IT%"
 - 다른 테이블의 컬럼을 참조할 때는 반드시 joins에 해당 테이블을 추가하고,
   컬럼명을 "table.column" 형식으로 작성하세요.
 
@@ -76,8 +78,10 @@ _SYSTEM_PROMPT_INSTRUCTOR = """당신은 B2B CRM 데이터 분석 전문가입�
 - SQL을 직접 작성하지 마세요. QuerySpec 구조로만 응답하세요.
 - 집계가 필요하면 columns에 "COUNT(*)", "SUM(column)" 등을 사용하세요.
 - columns에 별칭(AS)을 사용하지 마세요. "SUM(amount)"처럼 순수 표현식만 작성하세요.
-- 회사명/고객사명으로 필터링할 때는 정확한 이름을 모를 수 있으므로 LIKE 연산자를 사용하세요.
+- 회사명/고객사명 필터링: 고객사 목록에 정확한 이름이 있으면 EQ, 부분 키워드면 LIKE를 사용하세요.
   예: "삼성" → operator="LIKE", value="%삼성%"
+- 업종(industry) 필터링: 정확한 값을 모르면 반드시 LIKE를 사용하세요.
+  예: "IT 업종" → operator="LIKE", value="%IT%"
 - 다른 테이블의 컬럼을 참조할 때는 반드시 joins에 해당 테이블을 추가하고,
   컬럼명을 "table.column" 형식으로 작성하세요. 메인 테이블 접두사는 불필요합니다.
   예: deals 조회 시 고객사명 필터링 → joins에 accounts 추가, filter column에 "accounts.name"
@@ -115,21 +119,21 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 ## 필드 작성 가이드
 
 ### widget_type (순서대로 적용)
-1. 결과 1행 + 수치 1개 → **KPI**
+1. 결과 1행 + 수치 1개 → **CARD**
 2. 컬럼 5개 이상 또는 행 20개 초과 목록 → **TABLE**
-3. 날짜/기간 축 시계열 → **LINE_CHART**
-4. 카테고리 3~10개 비율/구성 → **PIE**
-5. 카테고리별 수치 비교 → **BAR_CHART**
+3. 날짜/기간 축 시계열 → **CHART**
+4. 카테고리 3~10개 비율/구성 → **CHART**
+5. 카테고리별 수치 비교 → **CHART**
 6. 기타 → **TABLE**
 
 ### chart_type
-- BAR_CHART → "bar", LINE_CHART → "line", PIE → "pie" 또는 "doughnut"
-- KPI/TABLE → null
+- CHART일 때 반드시 지정: "bar", "line", "pie", "doughnut" 중 택1
+- CARD/TABLE → null
 
 ### labels_field / datasets
 - labels_field: X축(카테고리) 컬럼명. **데이터에 있는 key 그대로** 사용하세요.
 - datasets: Y축 데이터 시리즈. label은 한글 표시명, value_field는 데이터의 key 그대로.
-- KPI: labels_field는 null, datasets에 표시할 지표의 value_field 지정.
+- CARD: labels_field는 null, datasets에 표시할 지표의 value_field 지정.
 - TABLE: labels_field와 datasets로 주요 컬럼 나열.
 
 ### x_label / y_label / y_unit
@@ -140,7 +144,7 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 - "currency" (금액), "number" (숫자), "percent" (비율), "date" (날짜), "text" (텍스트)
 
 ### suggested_chart_types
-- 현재 chart_type 외에 대안 차트 1~2개. KPI/TABLE은 빈 배열.
+- 현재 chart_type 외에 대안 차트 1~2개. CARD/TABLE은 빈 배열.
 """
 
 
@@ -255,9 +259,17 @@ class QueryEngine:
             user_id=request.user_id,
         )
 
+        try:
+            account_names = await fetch_account_names(self._db, tenant_id=request.tenant_id)
+        except Exception:
+            logger.debug("Failed to fetch account names", exc_info=True)
+            account_names = []
+
         if hasattr(self._llm, "chat_with_tools"):
             try:
-                messages = self._build_intent_messages(request, context, use_fc=True)
+                messages = self._build_intent_messages(
+                    request, context, use_fc=True, account_names=account_names
+                )
                 response = await self._llm.chat_with_tools(messages, ALL_TOOLS)
                 tool_calls = parse_tool_calls(response)
                 if tool_calls:
@@ -269,7 +281,9 @@ class QueryEngine:
                     "Function calling failed, falling back to Instructor", exc_info=True
                 )
 
-        messages = self._build_intent_messages(request, context, use_fc=False)
+        messages = self._build_intent_messages(
+            request, context, use_fc=False, account_names=account_names
+        )
         return await self._llm.chat_structured(messages, IntentResult)
 
     def _build_intent_messages(
@@ -278,10 +292,22 @@ class QueryEngine:
         context: list[dict],
         *,
         use_fc: bool,
+        account_names: list[str] | None = None,
     ) -> list[dict]:
         schema_text = build_llm_schema_prompt()
         base_prompt = _SYSTEM_PROMPT_FC if use_fc else _SYSTEM_PROMPT_INSTRUCTOR
         system_content = base_prompt.format(schema=schema_text)
+
+        if account_names:
+            display_names = account_names[:100]
+            names_csv = ", ".join(display_names)
+            truncated = f"\n(외 {len(account_names) - 100}개)" if len(account_names) > 100 else ""
+            system_content += (
+                "\n\n## 현재 고객사 목록\n"
+                f"{names_csv}{truncated}\n"
+                "회사명 필터링 시 이 목록에서 정확한 이름으로 EQ 매칭하세요.\n"
+                "목록에 없는 이름이거나 부분 키워드('삼성', 'LG' 등)면 LIKE를 사용하세요."
+            )
 
         if context:
             context_lines = [f"- {e['input_text']} ({e['search_type']})" for e in context]
