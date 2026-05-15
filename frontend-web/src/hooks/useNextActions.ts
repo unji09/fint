@@ -15,12 +15,22 @@ export interface NextAction {
   importanceScore?: number;
 }
 
+// API 명세 SourceItem
+export interface NextActionBasis {
+  type: 'NEWS' | 'DART' | 'CRM';
+  title?: string;
+  summary?: string;
+  url?: string;
+  /** 호환 폴백 — title/summary 없으면 사용 */
+  content?: string;
+}
+
 export interface NextActionDetail extends NextAction {
-  /** 백엔드 sources(Map) 를 평탄화한 근거 데이터 */
-  basisData?: { type: 'NEWS' | 'DART' | 'CRM'; content: string }[];
+  /** 백엔드 sources(Map<news|dart|crm, SourceItem[]>) 를 평탄화 */
+  basisData?: NextActionBasis[];
   /** 백엔드 recommendedScript */
   aiComment?: string;
-  /** 백엔드 미제공 (구 UI 호환용) */
+  /** 백엔드 caution — 주의사항 */
   warning?: string;
 }
 
@@ -37,6 +47,8 @@ interface RawNextActionList {
 interface RawNextActionDetail extends RawNextActionList {
   sources?: unknown;
   recommendedScript?: string;
+  /** API 명세 data.caution — 주의사항 */
+  caution?: string;
 }
 
 function mapList(r: RawNextActionList): NextAction {
@@ -49,52 +61,55 @@ function mapList(r: RawNextActionList): NextAction {
   };
 }
 
-// sources 평탄화 — {type, content}[]
-//   - SourceItem 객체 { title, summary, url } 이면 summary || title 추출 (이전: String(obj) → "[object Object]")
-//   - 문자열이면 그대로
-//   - { type, content } 형태도 지원
-function parseSources(sources: unknown): { type: 'NEWS' | 'DART' | 'CRM'; content: string }[] {
+// 명세 sources = { news: SourceItem[], dart: SourceItem[], crm: SourceItem[] }
+// SourceItem = { title?, summary?, url? } — 객체를 그대로 보존해 title/summary/url 모두 노출.
+function parseSources(sources: unknown): NextActionBasis[] {
   const allowed: Array<'NEWS' | 'DART' | 'CRM'> = ['NEWS', 'DART', 'CRM'];
   const normType = (s: string): 'NEWS' | 'DART' | 'CRM' => {
     const u = s.toUpperCase();
     return (allowed as string[]).includes(u) ? (u as 'NEWS' | 'DART' | 'CRM') : 'CRM';
   };
-  // 단일 source 객체/문자열을 표시용 content 문자열로 변환
-  const toContent = (c: unknown): string | null => {
+  const pickStr = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  // 단일 source(객체 또는 문자열) → NextActionBasis (type 제외)
+  const toBasis = (c: unknown): Omit<NextActionBasis, 'type'> | null => {
     if (c == null) return null;
-    if (typeof c === 'string') return c.trim() || null;
-    if (typeof c === 'object') {
-      const item = c as { title?: unknown; summary?: unknown; content?: unknown };
-      const candidates = [item.summary, item.title, item.content];
-      for (const v of candidates) {
-        if (typeof v === 'string' && v.trim()) return v.trim();
-      }
-      return null;
+    if (typeof c === 'string') {
+      const s = c.trim();
+      return s ? { content: s } : null;
     }
-    return String(c);
+    if (typeof c === 'object') {
+      const item = c as Record<string, unknown>;
+      const title = pickStr(item.title);
+      const summary = pickStr(item.summary);
+      const url = pickStr(item.url);
+      const content = pickStr(item.content);
+      if (!title && !summary && !url && !content) return null;
+      return { title, summary, url, content };
+    }
+    return null;
   };
   if (!sources) return [];
-  // 배열 형태: [{ type, content }]
+  // 배열 형태: [{ type, ...SourceItem }]
   if (Array.isArray(sources)) {
-    return sources
-      .filter((x): x is { type: string; content: unknown } => !!x && typeof x === 'object' && 'type' in x)
-      .map((x) => ({ type: normType(String(x.type)), content: toContent(x.content) ?? '' }))
-      .filter((x) => x.content !== '');
+    const out: NextActionBasis[] = [];
+    for (const x of sources) {
+      if (!x || typeof x !== 'object') continue;
+      const obj = x as Record<string, unknown>;
+      if (!obj.type) continue;
+      const b = toBasis(obj);
+      if (b) out.push({ type: normType(String(obj.type)), ...b });
+    }
+    return out;
   }
-  // 객체 형태: { news: [SourceItem...], dart: [...], crm: [...] } (소문자 키, 명세)
-  //          또는  { NEWS: ["..."], DART: [...] } (구버전)
+  // 객체 형태: { news: [SourceItem...], dart: [...], crm: [...] }
   if (typeof sources === 'object') {
-    const out: { type: 'NEWS' | 'DART' | 'CRM'; content: string }[] = [];
+    const out: NextActionBasis[] = [];
     for (const [k, v] of Object.entries(sources as Record<string, unknown>)) {
       const t = normType(k);
-      if (Array.isArray(v)) {
-        for (const c of v) {
-          const text = toContent(c);
-          if (text) out.push({ type: t, content: text });
-        }
-      } else {
-        const text = toContent(v);
-        if (text) out.push({ type: t, content: text });
+      const arr = Array.isArray(v) ? v : v != null ? [v] : [];
+      for (const c of arr) {
+        const b = toBasis(c);
+        if (b) out.push({ type: t, ...b });
       }
     }
     return out;
@@ -102,11 +117,27 @@ function parseSources(sources: unknown): { type: 'NEWS' | 'DART' | 'CRM'; conten
   return [];
 }
 
+// dedup — 같은 (type + url) 또는 (type + title + summary) 기준
+function dedupBasisData(arr: NextActionBasis[]) {
+  const seen = new Set<string>();
+  const out: NextActionBasis[] = [];
+  for (const item of arr) {
+    const key = item.url
+      ? `${item.type}::url::${item.url}`
+      : `${item.type}::${item.title ?? ''}::${item.summary ?? ''}::${item.content ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
 function mapDetail(r: RawNextActionDetail): NextActionDetail {
   return {
     ...mapList(r),
-    basisData: parseSources(r.sources),
+    basisData: dedupBasisData(parseSources(r.sources)),
     aiComment: r.recommendedScript,
+    warning: r.caution,
   };
 }
 

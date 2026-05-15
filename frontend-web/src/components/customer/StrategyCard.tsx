@@ -203,33 +203,81 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {card.basisData.map((d, i) => {
               const s = TAG_STYLES[d.type] ?? TAG_STYLES.CRM;
+              const primary = d.title || d.summary || d.content || '';
+              const secondary = d.title && d.summary && d.title !== d.summary ? d.summary : undefined;
+              const hasUrl = !!d.url;
+              const Tag = hasUrl ? 'a' : 'div';
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span
-                    style={{
-                      background: s.bg,
-                      color: s.color,
-                      fontFamily: 'Inter,sans-serif',
-                      fontWeight: 700,
-                      fontSize: 10,
-                      padding: '2px 7px',
-                      borderRadius: 2,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {d.type}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: 'Pretendard,sans-serif',
-                      fontWeight: 500,
-                      fontSize: 14,
-                      color: '#0d1c2e',
-                    }}
-                  >
-                    {d.content}
-                  </span>
-                </div>
+                <Tag
+                  key={i}
+                  href={hasUrl ? d.url : undefined}
+                  target={hasUrl ? '_blank' : undefined}
+                  rel={hasUrl ? 'noopener noreferrer' : undefined}
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #ECEDE5',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    cursor: hasUrl ? 'pointer' : 'default',
+                    transition: 'background-color 0.12s, border-color 0.12s',
+                  }}
+                  onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                    if (hasUrl) {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
+                      (e.currentTarget as HTMLElement).style.borderColor = '#06B6D4';
+                    }
+                  }}
+                  onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFC';
+                    (e.currentTarget as HTMLElement).style.borderColor = '#ECEDE5';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <span
+                      style={{
+                        background: s.bg,
+                        color: s.color,
+                        fontFamily: 'Inter,sans-serif',
+                        fontWeight: 700,
+                        fontSize: 10,
+                        padding: '2px 7px',
+                        borderRadius: 2,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {d.type}
+                    </span>
+                    <span
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontFamily: 'Pretendard,sans-serif',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        color: '#0d1c2e',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {primary}
+                    </span>
+                    {hasUrl && (
+                      <span style={{ fontSize: 10, color: '#0686d4', fontWeight: 500, flexShrink: 0 }}>원문 →</span>
+                    )}
+                  </div>
+                  {secondary && (
+                    <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: '#475569', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>
+                      {secondary}
+                    </p>
+                  )}
+                </Tag>
               );
             })}
           </div>
