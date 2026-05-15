@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG } from './types';
 import { getWeekDays, isToday } from './utils';
+import { resizeActivity } from '@/hooks/useCalendarEvents';
 
 export interface PipelineItem {
   label: string;
@@ -23,13 +24,25 @@ interface Props {
   onTimeClick?: (dateWithTime: Date) => void;
   /** 드래그로 시간 범위 선택 시 호출 (start < end). 짧은 드래그면 호출 안 되고 onTimeClick 만 호출. */
   onTimeRangeSelect?: (start: Date, end: Date) => void;
+  /** 이벤트 카드 리사이즈로 endAt 이 변경되어 PATCH 성공한 직후 호출 (refetch 트리거용). */
+  onResized?: () => void;
   pipeline?: readonly PipelineItem[] | PipelineItem[];
+}
+
+// PATCH body 직렬화 (KST). useCalendarEvents.resizeActivity 와 한 쌍.
+function fmtKstIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${dd}T${h}:${min}:00+09:00`;
 }
 
 export const WEEK_TIME_COL = 52;
 
 const START = 8; // 08:00부터
-const END = 20; // 20:00까지
+const END = 22; // 22:00까지 (저녁 이벤트도 리사이즈 가능)
 const HOURS = Array.from({ length: END - START + 1 }, (_, i) => i + START);
 const HOUR_H = 110; // 1시간 높이, 30분=55px → 이벤트 제목+태그 다 보임
 const TOTAL = (END - START) * HOUR_H;
@@ -61,10 +74,14 @@ function WeekCard({
   event,
   onClick,
   selected,
+  onResizeStartTop,
+  onResizeStartBottom,
 }: {
   event: CalendarEvent;
   onClick: () => void;
   selected: boolean;
+  onResizeStartTop?: (e: React.MouseEvent) => void;
+  onResizeStartBottom?: (e: React.MouseEvent) => void;
 }) {
   const col = event.category ? CATEGORY_COLOR[event.category] : '#7F77DD';
   const bg = event.category ? CATEGORY_BG[event.category] : '#ECEBFA';
@@ -186,6 +203,27 @@ function WeekCard({
           </span>
         )}
       </div>
+      {/* 리사이즈 핸들 — 카드 상단(startAt) / 하단(endAt). 평소 투명, 호버 시만 옅게. */}
+      {onResizeStartTop && (
+        <div
+          data-resize="true"
+          onMouseDown={onResizeStartTop}
+          onClick={(e) => e.stopPropagation()}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(6,182,212,0.18)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 12, cursor: 'ns-resize', zIndex: 6, transition: 'background-color .12s' }}
+        />
+      )}
+      {onResizeStartBottom && (
+        <div
+          data-resize="true"
+          onMouseDown={onResizeStartBottom}
+          onClick={(e) => e.stopPropagation()}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(6,182,212,0.18)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 12, cursor: 'ns-resize', zIndex: 6, transition: 'background-color .12s' }}
+        />
+      )}
     </button>
   );
 }
@@ -197,6 +235,7 @@ export default function WeekGrid({
   onEventClick,
   onTimeClick,
   onTimeRangeSelect,
+  onResized,
   pipeline,
 }: Props) {
   const [now, setNow] = useState(new Date());
@@ -210,6 +249,36 @@ export default function WeekGrid({
     day: Date;
     startY: number;
     currentY: number;
+    moved: boolean;
+  } | null>(null);
+
+  // ─── 리사이즈 상태 ─────────────────────────────────────────
+  // 카드 상단/하단 핸들 둘 다 지원.
+  //  mode='start' → currentY 가 startAt 픽셀(드래그), endY 고정
+  //  mode='end'   → startY 고정, currentY 가 endAt 픽셀(드래그)
+  // grabOffset: 핸들의 정확한 기준점과 마우스 클릭점 사이의 거리. 점프 방지.
+  const [resize, setResize] = useState<{
+    event: CalendarEvent;
+    mode: 'start' | 'end';
+    colIdx: number;
+    day: Date;
+    startY: number;
+    endY: number;
+    currentY: number;
+    grabOffset: number;
+  } | null>(null);
+
+  // ─── 이동(move) 상태 ──────────────────────────────────────
+  // 카드 본체 mousedown → 4px 임계치 넘으면 이동 모드. mouseup 시 startAt/endAt 둘 다 shift.
+  // 임계치 미만이면 moved=false 로 끝나 button onClick 이 정상 발화(상세 열기).
+  const [move, setMove] = useState<{
+    event: CalendarEvent;
+    origColIdx: number;
+    startMouseY: number;
+    startMouseX: number;
+    curMouseY: number;
+    curMouseX: number;
+    curColIdx: number;
     moved: boolean;
   } | null>(null);
 
@@ -240,10 +309,50 @@ export default function WeekGrid({
   // ─── 마우스 다운: 드래그 시작 ─────────────────────────────
   const handleColMouseDown = (e: React.MouseEvent<HTMLDivElement>, colIdx: number, day: Date) => {
     if ((e.target as HTMLElement).closest('[data-event="true"]')) return;
+    if ((e.target as HTMLElement).closest('[data-resize="true"]')) return;
     if (e.button !== 0) return; // 좌클릭만
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top + scrollTop;
     setDrag({ colIdx, day, startY: y, currentY: y, moved: false });
+  };
+
+  // ─── 리사이즈 핸들 mousedown ─────────────────────────────
+  const handleResizeStart = (ev: CalendarEvent, colIdx: number, day: Date, mode: 'start' | 'end', e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    if (!ev.eventId.startsWith('act-')) return; // FINT 활동만
+    const s = new Date(ev.startAt);
+    const en = new Date(ev.endAt);
+    const startY = (s.getHours() + s.getMinutes() / 60 - START) * HOUR_H;
+    const endY = (en.getHours() + en.getMinutes() / 60 - START) * HOUR_H;
+    // 마우스 클릭 위치와 기준점(start 또는 end 픽셀) 사이의 offset — 점프 방지
+    const colEl = scrollRef.current?.querySelector<HTMLDivElement>(`[data-week-col="${colIdx}"]`);
+    let grabOffset = 0;
+    if (colEl) {
+      const rect = colEl.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top + scrollTop;
+      grabOffset = mouseY - (mode === 'end' ? endY : startY);
+    }
+    setResize({ event: ev, mode, colIdx, day, startY, endY, currentY: mode === 'end' ? endY : startY, grabOffset });
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  // ─── 카드 본체 mousedown → 이동 후보 모드. 4px 넘기면 실제 이동. ───
+  const handleCardMouseDown = (ev: CalendarEvent, colIdx: number, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('[data-resize="true"]')) return; // 리사이즈 핸들이면 skip
+    if (!ev.eventId.startsWith('act-')) return; // 외부 이벤트는 이동 불가
+    setMove({
+      event: ev,
+      origColIdx: colIdx,
+      startMouseY: e.clientY,
+      startMouseX: e.clientX,
+      curMouseY: e.clientY,
+      curMouseX: e.clientX,
+      curColIdx: colIdx,
+      moved: false,
+    });
   };
 
   // ─── 전역 mousemove / mouseup ────────────────────────────
@@ -289,6 +398,108 @@ export default function WeekGrid({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag, scrollTop]);
+
+  // ─── 이동 전역 mousemove / mouseup ───────────────────────
+  useEffect(() => {
+    if (!move) return;
+    const onMv = (e: MouseEvent) => {
+      const dx = e.clientX - move.startMouseX;
+      const dy = e.clientY - move.startMouseY;
+      const moved = move.moved || Math.abs(dx) > 4 || Math.abs(dy) > 4;
+      // 마우스 X 좌표 기준으로 현재 가리키는 컬럼 추적
+      let curColIdx = move.origColIdx;
+      for (let i = 0; i < 7; i++) {
+        const el = scrollRef.current?.querySelector<HTMLDivElement>(`[data-week-col="${i}"]`);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX < rect.right) { curColIdx = i; break; }
+      }
+      setMove({ ...move, curMouseY: e.clientY, curMouseX: e.clientX, curColIdx, moved });
+      if (moved) document.body.style.cursor = 'grabbing';
+    };
+    const onUp = async () => {
+      document.body.style.cursor = '';
+      const m = move;
+      setMove(null);
+      if (!m.moved) return; // 임계치 미만 → button onClick 으로 상세 열림
+      const dy = m.curMouseY - m.startMouseY;
+      const minutesDelta = Math.round((dy / HOUR_H) * 60 / 15) * 15; // 15분 스냅
+      const dayDelta = m.curColIdx - m.origColIdx;
+      const newStart = new Date(m.event.startAt);
+      newStart.setDate(newStart.getDate() + dayDelta);
+      newStart.setMinutes(newStart.getMinutes() + minutesDelta);
+      const duration = new Date(m.event.endAt).getTime() - new Date(m.event.startAt).getTime();
+      const newEnd = new Date(newStart.getTime() + duration);
+      const ok = await resizeActivity(m.event.eventId, fmtKstIso(newStart), fmtKstIso(newEnd));
+      if (ok) onResized?.();
+    };
+    window.addEventListener('mousemove', onMv);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMv);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [move]);
+
+  // ─── 리사이즈 전역 mousemove / mouseup ───────────────────────
+  // resize 상태를 ref 로 추적해 setResize 마다 effect re-mount 되는 race 방지.
+  // effect 는 resize 시작/종료에만 mount/cleanup.
+  const resizeRef = useRef(resize);
+  resizeRef.current = resize;
+  const scrollTopRef = useRef(scrollTop);
+  scrollTopRef.current = scrollTop;
+  useEffect(() => {
+    if (!resize) return;
+    const onMove = (e: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const colEl = scrollRef.current?.querySelector<HTMLDivElement>(`[data-week-col="${r.colIdx}"]`);
+      if (!colEl) return;
+      const rect = colEl.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top + scrollTopRef.current;
+      const targetY = mouseY - r.grabOffset;
+      let clamped: number;
+      if (r.mode === 'end') {
+        const minY = r.startY + HOUR_H / 4;
+        clamped = Math.max(minY, Math.min(TOTAL, targetY));
+      } else {
+        const maxY = r.endY - HOUR_H / 4;
+        clamped = Math.min(maxY, Math.max(0, targetY));
+      }
+      if (Math.abs(clamped - r.currentY) < 1) return;
+      setResize({ ...r, currentY: clamped });
+    };
+    const onUp = async () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const r = resizeRef.current;
+      if (!r) return;
+      setResize(null);
+      let newStart: Date;
+      let newEnd: Date;
+      if (r.mode === 'end') {
+        newStart = new Date(r.event.startAt);
+        newEnd = yToDate(r.currentY, r.day);
+      } else {
+        newStart = yToDate(r.currentY, r.day);
+        newEnd = new Date(r.event.endAt);
+      }
+      const ok = await resizeActivity(
+        r.event.eventId,
+        fmtKstIso(newStart),
+        fmtKstIso(newEnd),
+      );
+      if (ok) onResized?.();
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!resize]);
 
   return (
     <div
@@ -493,21 +704,7 @@ export default function WeekGrid({
                 <div
                   key={h}
                   style={{ height: HOUR_H, borderTop: `1px solid ${BORDER}`, position: 'relative' }}
-                >
-                  {/* 30분 구분선 */}
-                  {h < END && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: HOUR_H / 2,
-                        left: 0,
-                        right: 0,
-                        height: 1,
-                        backgroundColor: '#F0F0EE',
-                      }}
-                    />
-                  )}
-                </div>
+                />
               ))}
 
               {/* 드래그 highlight overlay */}
@@ -578,28 +775,82 @@ export default function WeekGrid({
                 const hEnd = end.getHours() + end.getMinutes() / 60;
                 if (hStart >= END || hEnd <= START) return null; // 08~20 밖 숨김
                 const topPx = (Math.max(hStart, START) - START) * HOUR_H;
-                const hPx = Math.max(
-                  50,
-                  (Math.min(hEnd, END) - Math.max(hStart, START)) * HOUR_H - 2,
-                );
+                const isResizing = resize?.event.eventId === ev.eventId;
+                const isMoving = move?.event.eventId === ev.eventId && move.moved;
+                // 미리보기: end 모드면 top 고정 height 변경, start 모드면 top 이동 height 변경
+                let renderTop = topPx + 1;
+                let hPx: number;
+                if (isResizing) {
+                  if (resize.mode === 'end') {
+                    hPx = Math.max(50, resize.currentY - topPx - 2);
+                  } else {
+                    renderTop = resize.currentY + 1;
+                    hPx = Math.max(50, resize.endY - resize.currentY - 2);
+                  }
+                } else {
+                  hPx = Math.max(50, (Math.min(hEnd, END) - Math.max(hStart, START)) * HOUR_H - 2);
+                }
+                const moveTransform = isMoving
+                  ? `translate(${(move.curColIdx - move.origColIdx) * 100}%, ${move.curMouseY - move.startMouseY}px)`
+                  : undefined;
                 return (
                   <div
                     key={ev.eventId}
                     data-event="true"
+                    onMouseDown={(e) => handleCardMouseDown(ev, colIdx, e)}
                     style={{
                       position: 'absolute',
-                      top: topPx + 1,
+                      top: renderTop,
                       left: 1,
                       right: 1,
                       height: hPx,
-                      zIndex: 2,
+                      zIndex: isMoving ? 10 : isResizing ? 4 : 2,
+                      transform: moveTransform,
+                      transition: isMoving ? 'none' : undefined,
+                      opacity: isMoving ? 0.85 : 1,
+                      cursor: ev.eventId.startsWith('act-') ? (isMoving ? 'grabbing' : 'grab') : undefined,
                     }}
                   >
                     <WeekCard
                       event={ev}
                       onClick={() => onEventClick(ev)}
                       selected={selectedEvent?.eventId === ev.eventId}
+                      onResizeStartTop={
+                        ev.eventId.startsWith('act-')
+                          ? (e) => handleResizeStart(ev, colIdx, day, 'start', e)
+                          : undefined
+                      }
+                      onResizeStartBottom={
+                        ev.eventId.startsWith('act-')
+                          ? (e) => handleResizeStart(ev, colIdx, day, 'end', e)
+                          : undefined
+                      }
                     />
+                    {/* 리사이즈 중 시각 라벨 */}
+                    {isResizing && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          [resize.mode === 'end' ? 'bottom' : 'top']: 2,
+                          right: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#06B6D4',
+                          fontVariantNumeric: 'tabular-nums',
+                          pointerEvents: 'none',
+                          backgroundColor: 'rgba(255,255,255,.85)',
+                          padding: '1px 4px',
+                          borderRadius: 4,
+                          zIndex: 6,
+                        }}
+                      >
+                        {(() => {
+                          const t = yToDate(resize.currentY, resize.day);
+                          const fmt = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+                          return resize.mode === 'end' ? `~ ${fmt}` : `${fmt} ~`;
+                        })()}
+                      </div>
+                    )}
                   </div>
                 );
               })}

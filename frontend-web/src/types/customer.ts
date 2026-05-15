@@ -67,7 +67,12 @@ export interface ContactInfo {
 export interface Signal {
   type: 'DART' | 'NEWS';
   time: string;
+  /** 한 줄 제목 (평소 표시) */
+  title: string;
+  /** 본문/요약 — 호버 시 펼쳐서 미리보기, 클릭 시 전체 표시 */
   content: string;
+  /** 외부 원문 링크 — 있을 때만 "자세히 보기" 노출 */
+  url?: string;
   isNew?: boolean;
 }
 

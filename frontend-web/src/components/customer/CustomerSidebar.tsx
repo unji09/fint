@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Account, ContactInfo, MoodLevel } from '@/types/customer';
 import WeatherIcon from '@/components/customer/WeatherIcon';
+import { useCreateContact } from '@/hooks/useContact';
 
 // ─── 정렬 옵션 ─────────────────────────────────────────────
 type SortKey = 'recent' | 'name' | 'mood' | 'industry';
@@ -45,6 +46,8 @@ interface CustomerSidebarProps {
   onRetry?: () => void;
   contacts?: ContactInfo[];
   onContactSelect?: (contact: ContactInfo | null) => void;
+  /** 담당자 추가 성공 후 refetch 트리거 */
+  onContactAdded?: () => void;
   onAddAccount?: () => void;
   onDeleteAccount?: (accountId: number, name: string) => void;
 }
@@ -57,12 +60,43 @@ export default function CustomerSidebar({
   onRetry,
   contacts = [],
   onContactSelect,
+  onContactAdded,
   onAddAccount,
   onDeleteAccount,
 }: CustomerSidebarProps) {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<number | null>(selectedId);
   const [activeContact, setActiveContact] = useState<string | null>(null);
+
+  // ── 담당자 추가 인라인 폼 ──
+  const { create: createContact, loading: addingContact } = useCreateContact();
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactTitle, setNewContactTitle] = useState('');
+  // 다른 고객사 expand 로 전환 시 폼 닫고 초기화
+  useEffect(() => {
+    setAddContactOpen(false);
+    setNewContactName('');
+    setNewContactTitle('');
+  }, [selectedId]);
+
+  const handleAddContact = async () => {
+    if (!selectedId || !newContactName.trim() || addingContact) return;
+    try {
+      await createContact({
+        accountId: selectedId,
+        name: newContactName.trim(),
+        title: newContactTitle.trim() || undefined,
+      });
+      setAddContactOpen(false);
+      setNewContactName('');
+      setNewContactTitle('');
+      onContactAdded?.();
+    } catch (e) {
+      console.error('[담당자 추가] 실패', e);
+      alert('담당자 등록에 실패했습니다.');
+    }
+  };
 
   // ── 정렬 ──
   const [sortKey, setSortKey] = useState<SortKey>('recent');
@@ -423,6 +457,85 @@ export default function CustomerSidebar({
                           </button>
                         );
                       })}
+                      {/* + 담당자 추가 — 가운데 + 버튼만 */}
+                      {!addContactOpen ? (
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            padding: '7px 0',
+                            borderTop: accountContacts.length > 0 ? '1px solid rgba(226,232,240,0.5)' : 'none',
+                            marginTop: 2,
+                          }}
+                        >
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setAddContactOpen(true); }}
+                            aria-label="담당자 추가"
+                            style={{
+                              width: 26,
+                              height: 26,
+                              padding: 0,
+                              borderRadius: '50%',
+                              border: '1px dashed #06b6d4',
+                              background: 'transparent',
+                              color: '#06b6d4',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background-color 0.12s',
+                            }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#e0f7ff'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ display: 'block' }}>
+                              <path d="M6 1.5v9M1.5 6h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 5,
+                            padding: '8px 0 4px',
+                            borderTop: accountContacts.length > 0 ? '1px solid rgba(226,232,240,0.5)' : 'none',
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            value={newContactName}
+                            onChange={(e) => setNewContactName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddContact(); else if (e.key === 'Escape') setAddContactOpen(false); }}
+                            placeholder="이름 *"
+                            style={{ padding: '6px 9px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12, outline: 'none', fontFamily: 'Pretendard,sans-serif', background: '#fff' }}
+                          />
+                          <input
+                            value={newContactTitle}
+                            onChange={(e) => setNewContactTitle(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddContact(); else if (e.key === 'Escape') setAddContactOpen(false); }}
+                            placeholder="직책 (선택)"
+                            style={{ padding: '6px 9px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12, outline: 'none', fontFamily: 'Pretendard,sans-serif', background: '#fff' }}
+                          />
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                            <button
+                              onClick={() => { setAddContactOpen(false); setNewContactName(''); setNewContactTitle(''); }}
+                              style={{ padding: '4px 10px', borderRadius: 5, border: 'none', background: 'none', color: '#94a3b8', fontSize: 11, fontFamily: 'Pretendard,sans-serif', cursor: 'pointer' }}
+                            >
+                              취소
+                            </button>
+                            <button
+                              onClick={handleAddContact}
+                              disabled={!newContactName.trim() || addingContact}
+                              style={{ padding: '4px 12px', borderRadius: 5, border: 'none', background: newContactName.trim() && !addingContact ? '#06b6d4' : '#cbd5e1', color: '#fff', fontSize: 11, fontWeight: 600, fontFamily: 'Pretendard,sans-serif', cursor: newContactName.trim() && !addingContact ? 'pointer' : 'default' }}
+                            >
+                              {addingContact ? '등록 중...' : '등록'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {/* 고객사 관리 */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(0,0,0,0.05)' }}>
                         {onDeleteAccount && (

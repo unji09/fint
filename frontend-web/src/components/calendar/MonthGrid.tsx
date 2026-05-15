@@ -12,10 +12,11 @@
 // 시간: Inter SemiBold 10px #737880  / 제목: Inter SemiBold 12px #1f2126
 // Cat pill: bg-white rounded-8px px-6px py-2px gap-3px, dot 5px
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG } from './types';
 import { getCalendarDays, isToday, isSameDay } from './utils';
+import { resizeActivity } from '@/hooks/useCalendarEvents';
 
 interface Props {
   currentDate: Date;
@@ -26,6 +27,17 @@ interface Props {
   onMoreClick?: (d: Date) => void;
   /** 여러 날짜 드래그 시 호출 (start <= end, 각각 자정 기준). 단일 셀 클릭은 onDayClick 사용. */
   onDayRangeSelect?: (start: Date, end: Date) => void;
+  /** 카드 가로 리사이즈로 endAt 이 변경되어 PATCH 성공한 직후 호출 (refetch 트리거). */
+  onResized?: () => void;
+}
+
+function fmtKstIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${dd}T${h}:${min}:00+09:00`;
 }
 
 function dayKey(d: Date) {
@@ -53,9 +65,19 @@ function fmtTime(iso: string) {
 }
 
 // Figma 719:7601 "월간 일정" 카드
-function MonthEventCard({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
+// isMulti / isFirst / isLast: 다일 이벤트의 시각적 연결 표시용
+// showContent: 시간/제목 텍스트를 이 셀에 표시할지 (다일 이벤트는 row 내 중앙 셀에만 true)
+function MonthEventCard({ event, onClick, onMouseDownCard, isMoving, isMulti, isFirst, isLast, showContent }: { event: CalendarEvent; onClick: () => void; onMouseDownCard?: (e: React.MouseEvent) => void; isMoving?: boolean; isMulti?: boolean; isFirst?: boolean; isLast?: boolean; showContent?: boolean }) {
   const col = event.category ? CATEGORY_COLOR[event.category] : '#7F77DD';
   const bg = event.category ? CATEGORY_BG[event.category] : '#ECEBFA';
+  // 단일 이벤트는 첫이자 마지막. 다일이면 first 셀만 좌측 모서리, last 셀만 우측 모서리.
+  const showLeftEdge = !isMulti || isFirst;
+  const showRightEdge = !isMulti || isLast;
+  // 다일 카드는 width를 cell padding 만큼 확장해 paint 영역을 cell 가장자리까지 확장.
+  // cell padding-left: 6, padding-right: 7 → 좌측 침범 6px, 우측 침범 7px.
+  const extLeft = showLeftEdge ? 0 : 6;
+  const extRight = showRightEdge ? 0 : 7;
+  const extraWidth = extLeft + extRight;
   return (
     // 1줄 컴팩트: 높이 ~22px → 2개가 flex:1 행 안에 들어감
     <button
@@ -64,52 +86,75 @@ function MonthEventCard({ event, onClick }: { event: CalendarEvent; onClick: () 
         e.stopPropagation();
         onClick();
       }}
+      onMouseDown={onMouseDownCard}
       style={{
-        width: '100%',
-        textAlign: 'left',
+        width: extraWidth > 0 ? `calc(100% + ${extraWidth}px)` : '100%',
+        marginLeft: -extLeft,
         cursor: 'pointer',
-        borderLeft: `3px solid ${col}`,
+        borderLeft: showLeftEdge ? `3px solid ${col}` : 'none',
         borderTop: 'none',
         borderRight: 'none',
         borderBottom: 'none',
-        borderRadius: 4,
+        borderTopLeftRadius: showLeftEdge ? 4 : 0,
+        borderBottomLeftRadius: showLeftEdge ? 4 : 0,
+        borderTopRightRadius: showRightEdge ? 4 : 0,
+        borderBottomRightRadius: showRightEdge ? 4 : 0,
         backgroundColor: bg,
-        padding: '3px 6px 3px 6px',
+        // 다일 mid 셀(showContent && isMulti): 좌우 padding 0 → 제목 정확한 카드 가운데
+        padding: isMulti && showContent
+          ? '3px 0'
+          : showLeftEdge
+          ? '3px 6px 3px 6px'
+          : '3px 6px 3px 3px',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: isMulti && showContent ? 'center' : 'flex-start',
+        textAlign: isMulti && showContent ? 'center' : 'left',
         gap: 5,
         overflow: 'hidden',
-        marginBottom: 2,
         fontFamily: FONT_EVENT,
+        position: 'relative',
+        opacity: isMoving ? 0.5 : 1,
+        minHeight: 22,
       }}
     >
-      <span
-        style={{
-          fontSize: 9,
-          color: col,
-          fontWeight: 700,
-          flexShrink: 0,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {fmtTime(event.startAt)}
-      </span>
-      <span
-        style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: col, flexShrink: 0 }}
-      />
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: '#1F2126',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          flex: 1,
-        }}
-      >
-        {event.title}
-      </span>
+      {showContent && (
+        <>
+          {/* 시간은 단일 이벤트만 표시 (다일은 시간 의미 약하므로 제목만) */}
+          {!isMulti && (
+            <>
+              <span
+                style={{
+                  fontSize: 9,
+                  color: col,
+                  fontWeight: 700,
+                  flexShrink: 0,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {fmtTime(event.startAt)}
+              </span>
+              <span
+                style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: col, flexShrink: 0 }}
+              />
+            </>
+          )}
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#1F2126',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              // 단일: flex 1 (좌측 정렬), 다일 mid: 가운데
+              flex: isMulti ? 'none' : 1,
+            }}
+          >
+            {event.title}
+          </span>
+        </>
+      )}
     </button>
   );
 }
@@ -122,6 +167,7 @@ export default function MonthGrid({
   onEventClick,
   onMoreClick,
   onDayRangeSelect,
+  onResized,
 }: Props) {
   const flat = getCalendarDays(currentDate.getFullYear(), currentDate.getMonth());
   const weeks = Array.from({ length: 6 }, (_, i) => flat.slice(i * 7, i * 7 + 7));
@@ -130,6 +176,23 @@ export default function MonthGrid({
 
   // 드래그 상태 — 다일 선택 (구글 캘린더 월간 뷰 패턴)
   const [drag, setDrag] = useState<{ start: Date; current: Date; moved: boolean } | null>(null);
+  // 카드 좌측/우측 핸들 리사이즈. mode='start' → startAt 날짜 변경, 'end' → endAt 날짜 변경.
+  const [resize, setResize] = useState<{
+    event: CalendarEvent;
+    mode: 'start' | 'end';
+    startDate: Date;
+    endDate: Date;
+    currentDate: Date;
+  } | null>(null);
+  // 카드 본체 이동(move) — 4px 임계치 + 다른 셀 mouseenter 로 대상 날짜 추적.
+  const [move, setMove] = useState<{
+    event: CalendarEvent;
+    origDate: Date;
+    curDate: Date;
+    startMouseX: number;
+    startMouseY: number;
+    moved: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!drag) return;
@@ -148,15 +211,148 @@ export default function MonthGrid({
     return () => window.removeEventListener('mouseup', onUp);
   }, [drag, onDayClick, onDayRangeSelect]);
 
+  // ref 로 최신 resize 추적 — setResize 마다 effect re-mount race 방지.
+  const resizeRef = useRef(resize);
+  resizeRef.current = resize;
+  useEffect(() => {
+    if (!resize) return;
+    // mousemove: 마우스 좌표 → 현재 셀 → currentDate 업데이트
+    const onMv = (e: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null);
+      const cellEl = el?.closest('[data-cell-day]') as HTMLElement | null;
+      if (!cellEl) return;
+      const dayStr = cellEl.getAttribute('data-cell-day');
+      if (!dayStr) return;
+      const [y, m, d] = dayStr.split('-').map(Number);
+      const day = new Date(y, m - 1, d);
+      const dFloor = day.getTime();
+      if (r.mode === 'end') {
+        const sFloor = new Date(r.startDate.getFullYear(), r.startDate.getMonth(), r.startDate.getDate()).getTime();
+        if (dFloor < sFloor) return;
+      } else {
+        const eFloor = new Date(r.endDate.getFullYear(), r.endDate.getMonth(), r.endDate.getDate()).getTime();
+        if (dFloor > eFloor) return;
+      }
+      if (dayKey(r.currentDate) === dayKey(day)) return;
+      setResize({ ...r, currentDate: day });
+    };
+    const onUp = async () => {
+      document.body.style.cursor = '';
+      const r = resizeRef.current;
+      if (!r) return;
+      setResize(null);
+      let newStart: Date;
+      let newEnd: Date;
+      if (r.mode === 'end') {
+        newStart = new Date(r.event.startAt);
+        newEnd = new Date(r.event.endAt);
+        newEnd.setFullYear(r.currentDate.getFullYear(), r.currentDate.getMonth(), r.currentDate.getDate());
+      } else {
+        newStart = new Date(r.event.startAt);
+        newStart.setFullYear(r.currentDate.getFullYear(), r.currentDate.getMonth(), r.currentDate.getDate());
+        newEnd = new Date(r.event.endAt);
+      }
+      const ok = await resizeActivity(r.event.eventId, fmtKstIso(newStart), fmtKstIso(newEnd));
+      if (ok) onResized?.();
+    };
+    window.addEventListener('mousemove', onMv);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMv);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!resize]);
+
+  // ─── 이동 mousemove(임계치) / mouseup ──────────────────────
+  useEffect(() => {
+    if (!move) return;
+    const onMv = (e: MouseEvent) => {
+      if (move.moved) return; // 이미 moved 면 mouseenter 가 처리
+      if (Math.abs(e.clientX - move.startMouseX) > 4 || Math.abs(e.clientY - move.startMouseY) > 4) {
+        setMove({ ...move, moved: true });
+        document.body.style.cursor = 'grabbing';
+      }
+    };
+    const onUp = async () => {
+      document.body.style.cursor = '';
+      const m = move;
+      setMove(null);
+      if (!m.moved) return; // 임계치 미만 → button onClick 으로 상세 열림
+      const origFloor = new Date(m.origDate.getFullYear(), m.origDate.getMonth(), m.origDate.getDate()).getTime();
+      const curFloor = new Date(m.curDate.getFullYear(), m.curDate.getMonth(), m.curDate.getDate()).getTime();
+      const dayDelta = Math.round((curFloor - origFloor) / (24 * 60 * 60 * 1000));
+      if (dayDelta === 0) return;
+      const newStart = new Date(m.event.startAt);
+      newStart.setDate(newStart.getDate() + dayDelta);
+      const duration = new Date(m.event.endAt).getTime() - new Date(m.event.startAt).getTime();
+      const newEnd = new Date(newStart.getTime() + duration);
+      const ok = await resizeActivity(m.event.eventId, fmtKstIso(newStart), fmtKstIso(newEnd));
+      if (ok) onResized?.();
+    };
+    window.addEventListener('mousemove', onMv);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMv);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [move, onResized]);
+
   const handleCellMouseDown = (e: React.MouseEvent<HTMLDivElement>, day: Date) => {
     if ((e.target as HTMLElement).closest('[data-event="true"]')) return;
+    if ((e.target as HTMLElement).closest('[data-resize="true"]')) return;
     if (e.button !== 0) return;
     setDrag({ start: day, current: day, moved: false });
   };
   const handleCellMouseEnter = (day: Date) => {
+    if (move) {
+      if (dayKey(move.curDate) === dayKey(day)) return;
+      setMove({ ...move, curDate: day });
+      return;
+    }
+    if (resize) {
+      const dFloor = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+      if (resize.mode === 'end') {
+        // endDate 변경: startDate 이전 셀은 무시
+        const sFloor = new Date(resize.startDate.getFullYear(), resize.startDate.getMonth(), resize.startDate.getDate()).getTime();
+        if (dFloor < sFloor) return;
+      } else {
+        // startDate 변경: endDate 이후 셀은 무시
+        const eFloor = new Date(resize.endDate.getFullYear(), resize.endDate.getMonth(), resize.endDate.getDate()).getTime();
+        if (dFloor > eFloor) return;
+      }
+      if (dayKey(resize.currentDate) === dayKey(day)) return;
+      setResize({ ...resize, currentDate: day });
+      return;
+    }
     if (!drag) return;
     if (dayKey(drag.current) === dayKey(day)) return;
     setDrag({ ...drag, current: day, moved: true });
+  };
+  const startResize = (ev: CalendarEvent, mode: 'start' | 'end', e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    if (!ev.eventId.startsWith('act-')) return;
+    const startDate = new Date(ev.startAt);
+    const endDate = new Date(ev.endAt);
+    setResize({ event: ev, mode, startDate, endDate, currentDate: mode === 'end' ? endDate : startDate });
+    document.body.style.cursor = 'ew-resize';
+  };
+  const startMove = (ev: CalendarEvent, day: Date, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('[data-resize="true"]')) return;
+    if (!ev.eventId.startsWith('act-')) return;
+    setMove({
+      event: ev,
+      origDate: day,
+      curDate: day,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      moved: false,
+    });
   };
 
   return (
@@ -233,38 +429,53 @@ export default function MonthGrid({
               const otherMonth = day.getMonth() !== cm;
               const today = isToday(day);
               const selected = isSameDay(day, selectedDate);
+              // 다일 이벤트는 startAt~endAt 범위의 모든 셀에 표시 (사용자가 늘린 결과를 시각적으로 인지)
+              const dayFloor = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
               const dayEvs = events.filter((ev) => {
-                const d = new Date(ev.startAt);
-                return (
-                  d.getFullYear() === day.getFullYear() &&
-                  d.getMonth() === day.getMonth() &&
-                  d.getDate() === day.getDate()
-                );
+                const s = new Date(ev.startAt);
+                const en = new Date(ev.endAt);
+                const sFloor = new Date(s.getFullYear(), s.getMonth(), s.getDate()).getTime();
+                const eFloor = new Date(en.getFullYear(), en.getMonth(), en.getDate()).getTime();
+                return dayFloor >= sFloor && dayFloor <= eFloor;
               });
 
               const inDragRange = drag && drag.moved && isInRange(day, drag.start, drag.current);
+              // 리사이즈 중 미리보기 범위: end 모드면 startDate~currentDate, start 모드면 currentDate~endDate
+              const inResizeRange = resize && (resize.mode === 'end'
+                ? isInRange(day, resize.startDate, resize.currentDate)
+                : isInRange(day, resize.currentDate, resize.endDate));
+              // 이동 중 대상 셀 강조
+              const isMoveTarget = move && move.moved && dayKey(day) === dayKey(move.curDate);
+              const inHighlight = inDragRange || inResizeRange;
 
               return (
                 <div
                   key={di}
+                  data-cell-day={`${day.getFullYear()}-${day.getMonth() + 1}-${day.getDate()}`}
                   onMouseDown={(e) => handleCellMouseDown(e, day)}
                   onMouseEnter={() => handleCellMouseEnter(day)}
                   style={{
-                    borderRight: di < 6 ? `1px solid ${BORDER_CELL}` : 'none',
-                    backgroundColor: inDragRange ? 'rgba(6, 182, 212, 0.10)' : otherMonth ? '#F5F7FA' : '#FFFFFF',
+                    // cell 우측 구분선을 borderRight 대신 inset boxShadow 로 cell 안쪽 1px 에 그림 →
+                    // 다일 이벤트 카드가 negative margin 으로 이 1px 을 덮어 시각 연결.
+                    backgroundColor: isMoveTarget
+                      ? 'rgba(6, 182, 212, 0.18)'
+                      : inHighlight
+                      ? 'rgba(6, 182, 212, 0.10)'
+                      : otherMonth
+                      ? '#F5F7FA'
+                      : '#FFFFFF',
                     opacity: otherMonth ? 0.5 : 1,
                     padding: '6px 7px 7px 6px',
                     overflow: 'hidden',
-                    cursor: drag ? 'crosshair' : 'pointer',
+                    cursor: move ? 'grabbing' : resize ? 'ew-resize' : drag ? 'crosshair' : 'pointer',
                     userSelect: 'none',
                     display: 'flex',
                     flexDirection: 'column',
-                    // 선택 셀 또는 드래그 중인 셀 하이라이트
-                    boxShadow: selected
-                      ? 'inset 0 0 0 1.5px #06B6D4'
-                      : inDragRange
-                      ? 'inset 0 0 0 1px #06B6D4'
-                      : 'none',
+                    // 선택 / 드래그 / 리사이즈 / 이동대상 하이라이트 + cell 우측 구분선
+                    boxShadow: [
+                      selected ? 'inset 0 0 0 1.5px #06B6D4' : isMoveTarget ? 'inset 0 0 0 2px #06B6D4' : inHighlight ? 'inset 0 0 0 1px #06B6D4' : '',
+                      di < 6 ? `inset -1px 0 0 ${BORDER_CELL}` : '',
+                    ].filter(Boolean).join(', ') || 'none',
                     transition: 'background-color 0.08s',
                   }}
                 >
@@ -292,13 +503,68 @@ export default function MonthGrid({
 
                   {/* 이벤트 목록: 2개 표시, 더보기 버튼은 overflow 밖 → 항상 보임 */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {dayEvs.slice(0, 2).map((ev) => (
-                      <MonthEventCard
-                        key={ev.eventId}
-                        event={ev}
-                        onClick={() => onEventClick(ev)}
-                      />
-                    ))}
+                    {dayEvs.slice(0, 2).map((ev) => {
+                      const s = new Date(ev.startAt);
+                      const en = new Date(ev.endAt);
+                      const sFloor = new Date(s.getFullYear(), s.getMonth(), s.getDate()).getTime();
+                      const eFloor = new Date(en.getFullYear(), en.getMonth(), en.getDate()).getTime();
+                      const isMulti = sFloor !== eFloor;
+                      const isFirst = dayFloor === sFloor;
+                      const isLast = dayFloor === eFloor;
+                      // 다일 이벤트의 row 내 중앙 cell 계산 — 타임트리 스타일 중앙 제목 표시
+                      const DAY_MS = 24 * 60 * 60 * 1000;
+                      const weekStart = week[0];
+                      const weekEnd = week[6];
+                      let isRowMid = !isMulti; // 단일은 항상 콘텐츠 표시
+                      if (isMulti && weekStart && weekEnd) {
+                        const wsFloor = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate()).getTime();
+                        const weFloor = new Date(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate()).getTime();
+                        const evRowStart = Math.max(sFloor, wsFloor);
+                        const evRowEnd = Math.min(eFloor, weFloor);
+                        const evStartDi = Math.round((evRowStart - wsFloor) / DAY_MS);
+                        const evEndDi = Math.round((evRowEnd - wsFloor) / DAY_MS);
+                        const midDi = Math.floor((evStartDi + evEndDi) / 2);
+                        isRowMid = di === midDi;
+                      }
+                      return (
+                        <div key={ev.eventId} style={{ position: 'relative' }}>
+                          <MonthEventCard
+                            event={ev}
+                            onClick={() => onEventClick(ev)}
+                            onMouseDownCard={
+                              ev.eventId.startsWith('act-')
+                                ? (e) => startMove(ev, day, e)
+                                : undefined
+                            }
+                            isMoving={move?.event.eventId === ev.eventId && move.moved}
+                            isMulti={isMulti}
+                            isFirst={isFirst}
+                            isLast={isLast}
+                            showContent={isRowMid}
+                          />
+                          {/* 좌측 핸들 — first 셀에만 (다일 이벤트면 시작 셀). */}
+                          {ev.eventId.startsWith('act-') && isFirst && (
+                            <span
+                              data-resize="true"
+                              onMouseDown={(e) => startResize(ev, 'start', e)}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLSpanElement).style.backgroundColor = 'rgba(6,182,212,0.18)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLSpanElement).style.backgroundColor = 'transparent'; }}
+                              style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 12, cursor: 'ew-resize', zIndex: 6, transition: 'background-color .12s', borderRadius: '4px 0 0 4px' }}
+                            />
+                          )}
+                          {/* 우측 핸들 — last 셀에만 (다일 이벤트면 끝 셀). */}
+                          {ev.eventId.startsWith('act-') && isLast && (
+                            <span
+                              data-resize="true"
+                              onMouseDown={(e) => startResize(ev, 'end', e)}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLSpanElement).style.backgroundColor = 'rgba(6,182,212,0.18)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLSpanElement).style.backgroundColor = 'transparent'; }}
+                              style={{ position: 'absolute', top: 0, bottom: 0, right: isLast && !isFirst ? -7 : 0, width: 12, cursor: 'ew-resize', zIndex: 6, transition: 'background-color .12s', borderRadius: '0 4px 4px 0' }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   {dayEvs.length > 2 && (
                     <button
