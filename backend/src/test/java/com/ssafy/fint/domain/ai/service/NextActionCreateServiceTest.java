@@ -125,7 +125,7 @@ class NextActionCreateServiceTest {
         assertThat(second.importanceScore()).isEqualTo(72.0);
 
         verify(aiSuggestionRepository, times(2)).save(any(AiSuggestion.class));
-        verify(notificationService, times(2)).pushNotification(any(AiSuggestion.class));
+        verify(notificationService, times(1)).pushNotification(any(AiSuggestion.class));
     }
 
     @Test
@@ -172,6 +172,7 @@ class NextActionCreateServiceTest {
         assertThat(saved.getRelatedType()).isEqualTo(AiSuggestionRelatedType.ACCOUNT);
         assertThat(saved.getReason()).containsKey("sources");
         assertThat(saved.getReason()).containsEntry("recommendedScript", "멘트");
+        verify(notificationService, times(0)).pushNotification(any(AiSuggestion.class));
     }
 
     @Test
@@ -217,7 +218,7 @@ class NextActionCreateServiceTest {
                 .thenReturn(Optional.empty());
 
         NextActionCreateRequest request = new NextActionCreateRequest(
-                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED, null, null, null, null);
 
         assertThatThrownBy(() -> aiSuggestionService.createNextAction(me, request))
                 .isInstanceOf(BusinessException.class)
@@ -236,7 +237,7 @@ class NextActionCreateServiceTest {
         ));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
-                ACCOUNT_ID, TriggerType.MANUAL_REQUEST, null, null, null, null);
+                ACCOUNT_ID, TriggerType.NEWS_UPDATED, null, null, null, null);
 
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));

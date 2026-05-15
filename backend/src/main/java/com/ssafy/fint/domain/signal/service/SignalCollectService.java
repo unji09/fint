@@ -11,7 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -29,8 +32,13 @@ public class SignalCollectService {
     public SignalCollectResult collectAndSave(Long tenantId) {
         SignalCollectResponse response = signalCollectClient.collect(tenantId, "all", true);
 
-        int newsInserted = processNews(response.news());
-        int dartInserted = processDart(response.dart());
+        Map<Long, List<Long>> newNewsPerAccount = new HashMap<>();
+        Map<Long, List<Long>> mappedNewsPerAccount = new HashMap<>();
+        Map<Long, List<Long>> newDartPerAccount = new HashMap<>();
+        Map<Long, List<Long>> mappedDartPerAccount = new HashMap<>();
+
+        int newsInserted = processNews(response.news(), newNewsPerAccount, mappedNewsPerAccount);
+        int dartInserted = processDart(response.dart(), newDartPerAccount, mappedDartPerAccount);
 
         if (!response.errors().isEmpty()) {
             log.warn("[SignalCollect] errors from FastAPI: {}", response.errors());
@@ -41,17 +49,24 @@ public class SignalCollectService {
 
         return new SignalCollectResult(
                 response.totalAccounts(), newsInserted, dartInserted,
-                response.errors()
+                response.errors(),
+                newNewsPerAccount, mappedNewsPerAccount,
+                newDartPerAccount, mappedDartPerAccount
         );
     }
 
-    private int processNews(NewsSection news) {
+    private int processNews(NewsSection news,
+                            Map<Long, List<Long>> newPerAccount,
+                            Map<Long, List<Long>> mappedPerAccount) {
         int count = 0;
 
         for (NewsSection.NewArticle article : news.newArticles()) {
             Long articleId = insertNewsArticle(article);
             if (articleId != null) {
                 linkNewsToAccounts(articleId, article.accountIds());
+                for (Long accountId : article.accountIds()) {
+                    newPerAccount.computeIfAbsent(accountId, k -> new ArrayList<>()).add(articleId);
+                }
                 count++;
             }
         }
@@ -60,19 +75,27 @@ public class SignalCollectService {
             Long articleId = findNewsArticleIdByLink(existing.link());
             if (articleId != null) {
                 linkNewsToAccounts(articleId, existing.accountIds());
+                for (Long accountId : existing.accountIds()) {
+                    mappedPerAccount.computeIfAbsent(accountId, k -> new ArrayList<>()).add(articleId);
+                }
             }
         }
 
         return count;
     }
 
-    private int processDart(DartSection dart) {
+    private int processDart(DartSection dart,
+                            Map<Long, List<Long>> newPerAccount,
+                            Map<Long, List<Long>> mappedPerAccount) {
         int count = 0;
 
         for (DartSection.NewDisclosure disclosure : dart.newDisclosures()) {
             Long disclosureId = insertDartDisclosure(disclosure);
             if (disclosureId != null) {
                 linkDartToAccounts(disclosureId, disclosure.accountIds());
+                for (Long accountId : disclosure.accountIds()) {
+                    newPerAccount.computeIfAbsent(accountId, k -> new ArrayList<>()).add(disclosureId);
+                }
                 count++;
             }
         }
@@ -81,6 +104,9 @@ public class SignalCollectService {
             Long disclosureId = findDartDisclosureIdByRceptNo(existing.rceptNo());
             if (disclosureId != null) {
                 linkDartToAccounts(disclosureId, existing.accountIds());
+                for (Long accountId : existing.accountIds()) {
+                    mappedPerAccount.computeIfAbsent(accountId, k -> new ArrayList<>()).add(disclosureId);
+                }
             }
         }
 
@@ -199,6 +225,10 @@ public class SignalCollectService {
             int totalAccounts,
             int newsInserted,
             int dartInserted,
-            List<String> errors
+            List<String> errors,
+            Map<Long, List<Long>> newNewsPerAccount,
+            Map<Long, List<Long>> mappedNewsPerAccount,
+            Map<Long, List<Long>> newDartPerAccount,
+            Map<Long, List<Long>> mappedDartPerAccount
     ) {}
 }
