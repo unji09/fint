@@ -1188,3 +1188,85 @@ class TestDetailQueryFallback:
 
         assert result["status"] == "COMPLETED"
         assert result["result"]["data"]["rows"][0]["SUM(amount)"] == 100000000
+
+
+class TestHybridSourceBreakdown:
+    """HYBRID 검색 시 source_breakdown + _source_type 메타데이터 검증."""
+
+    def _make_hybrid_intent(self):
+        return IntentResult(
+            search_type="HYBRID",
+            query_spec=QuerySpec(table="deals", columns=["title", "amount"]),
+            semantic_spec=SemanticSearchSpec(search_text="반도체", source_filter="NEWS"),
+            suggested_title="반도체 딜과 뉴스",
+        )
+
+    def _make_hybrid_db(self):
+        class HybridDB:
+            def __init__(self):
+                self._call_count = 0
+
+            async def execute(self, stmt, params=None):
+                self._call_count += 1
+                if self._call_count == 1:
+                    return FakeResult([
+                        {"title": "딜A", "amount": 1000},
+                        {"title": "딜B", "amount": 2000},
+                    ])
+                return FakeResult([{
+                    "news_article_id": 1, "title": "반도체 뉴스",
+                    "content_summary": "요약", "publisher": "한경",
+                    "published_at": "2025-01-01", "link": "https://ex.com/1",
+                    "title_score": 0.8, "summary_score": 0.7,
+                }])
+
+        return HybridDB()
+
+    async def test_hybrid_result_has_source_breakdown(self):
+        result = await _make_engine(
+            llm=FakeLLM(intent=self._make_hybrid_intent()),
+            db=self._make_hybrid_db(),
+            embedder=FakeEmbedder(),
+        ).run(_make_request(input_text="반도체 딜이랑 뉴스"))
+
+        assert result["status"] == "COMPLETED"
+        breakdown = result["result"]["source_breakdown"]
+        assert breakdown["structured"] == 2
+        assert breakdown["semantic"] == 1
+
+    async def test_hybrid_rows_have_source_type(self):
+        intent = self._make_hybrid_intent()
+        llm = FakeLLM(intent=intent)
+        db = self._make_hybrid_db()
+
+        engine = _make_engine(llm=llm, db=db, embedder=FakeEmbedder())
+        result = await engine.run(_make_request(input_text="반도체 딜이랑 뉴스"))
+
+        rows = result["result"]["data"]["rows"]
+        assert len(rows) == 3
+        assert all("_source_type" not in r for r in rows)
+
+    async def test_structured_only_no_source_breakdown(self):
+        result = await _make_engine().run(_make_request())
+
+        assert result["status"] == "COMPLETED"
+        assert result["result"].get("source_breakdown") is None
+
+    async def test_semantic_only_no_source_breakdown(self):
+        intent = IntentResult(
+            search_type="SEMANTIC",
+            semantic_spec=SemanticSearchSpec(search_text="삼성", source_filter="NEWS"),
+            suggested_title="삼성 뉴스",
+        )
+        db = FakeDB(rows=[{
+            "news_article_id": 1, "title": "삼성 뉴스",
+            "content_summary": "요약", "publisher": "한경",
+            "published_at": "2025-01-01", "link": "https://ex.com/1",
+            "title_score": 0.9, "summary_score": 0.8,
+        }])
+        result = await _make_engine(
+            llm=FakeLLM(intent=intent), db=db, embedder=FakeEmbedder(),
+        ).run(_make_request(input_text="삼성 뉴스"))
+
+        assert result["status"] == "COMPLETED"
+        assert result["result"].get("source_breakdown") is None
