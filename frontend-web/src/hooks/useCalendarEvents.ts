@@ -12,13 +12,11 @@ function getMonthRange(date: Date) {
 
 function getWeekRange(date: Date) {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const mon = new Date(d);
-  mon.setDate(d.getDate() + diff);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  return { start: mon, end: sun };
+  const sun = new Date(d);
+  sun.setDate(d.getDate() - d.getDay());
+  const sat = new Date(sun);
+  sat.setDate(sun.getDate() + 6);
+  return { start: sun, end: sat };
 }
 
 function fmt(d: Date): string {
