@@ -508,6 +508,7 @@ export default function CalendarPage() {
         if (!res.ok) return;
         const json = await res.json();
         // 백엔드 응답: { status, message, data: { data: [...], totalElements } }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const deals: any[] = Array.isArray(json?.data?.data) ? json.data.data : [];
         const counts: Record<string, number> = {};
         deals.forEach((d) => {
