@@ -193,6 +193,25 @@ function readMemoCache(eventId: string): string | null {
   }
 }
 
+/** 일정 카드 리사이즈 (드래그 종료 시점) — startAt/endAt 만 PATCH.
+ *  FINT 활동(eventId = "act-{id}") 만 처리. Google 이벤트는 false 반환.
+ *  ISO 문자열은 호출자가 KST(+09:00) 로 직렬화해 전달.
+ */
+export async function resizeActivity(eventId: string, startAt: string, endAt: string): Promise<boolean> {
+  if (!eventId.startsWith('act-')) return false;
+  const activityId = eventId.replace(/^act-/, '');
+  try {
+    const res = await fetchWithAuth(`/activities/${activityId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ startAt, endAt }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('[resizeActivity]', err);
+    return false;
+  }
+}
+
 /** 구글 캘린더 동기화 — 동기화 버튼에 직접 연결해서 사용 */
 export async function syncCalendar(): Promise<boolean> {
   try {

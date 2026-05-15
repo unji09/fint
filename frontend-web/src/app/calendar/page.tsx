@@ -17,7 +17,7 @@ import EventDetailPanel from '@/components/calendar/EventDetailPanel';
 import AddEventModal from '@/components/calendar/AddEventModal';
 import type { CalendarEvent, ViewMode } from '@/components/calendar/types';
 import { CATEGORY_COLOR, CATEGORY_BG } from '@/components/calendar/types';
-import { useCalendarEvents, fetchEventDetail } from '@/hooks/useCalendarEvents';
+import { useCalendarEvents, fetchEventDetail, resizeActivity } from '@/hooks/useCalendarEvents';
 import {
   addMonths,
   addWeeks,
@@ -101,6 +101,7 @@ function AsideCard({ event, onClick }: { event: CalendarEvent; onClick: () => vo
       onClick={onClick}
       style={{
         width: '100%',
+        height: '100%',
         textAlign: 'left',
         cursor: 'pointer',
         borderRadius: 10,
@@ -111,6 +112,8 @@ function AsideCard({ event, onClick }: { event: CalendarEvent; onClick: () => vo
         flexDirection: 'column',
         gap: 8,
         flexShrink: 0,
+        overflow: 'hidden',
+        position: 'relative',
         fontFamily: F_INTER,
       }}
       onMouseEnter={(e) => {
@@ -175,18 +178,30 @@ function AsideCard({ event, onClick }: { event: CalendarEvent; onClick: () => vo
 const A_H = 80;
 const A_S = 8; // 00:00부터 전체 시간
 
+// KST ISO 직렬화 (백엔드 PATCH 용)
+function fmtKstIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${dd}T${h}:${min}:00+09:00`;
+}
+
 function DayTimeView({
   events,
   selectedDate,
   onEventClick,
   onTimeClick,
   onTimeRangeSelect,
+  onResized,
 }: {
   events: CalendarEvent[];
   selectedDate: Date;
   onEventClick: (e: CalendarEvent) => void;
   onTimeClick?: (d: Date) => void;
   onTimeRangeSelect?: (start: Date, end: Date) => void;
+  onResized?: () => void;
 }) {
   // SSR 시점의 시각과 client hydration 시점의 시각이 달라 hydration mismatch 가 발생할 수 있다.
   // 따라서 초기엔 null 로 두고 mount 후에만 현재 시각 라인을 렌더한다.
@@ -196,12 +211,28 @@ function DayTimeView({
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
-  const HOURS = Array.from({ length: 13 }, (_, i) => i + A_S); // 08~20시
+  const HOURS = Array.from({ length: 15 }, (_, i) => i + A_S); // 08~22시
   const total = HOURS.length * A_H;
   const red = now ? (now.getHours() - A_S + now.getMinutes() / 60) * A_H : -1;
 
   // ─── 드래그 (WeekGrid 와 동일 패턴, 단일 컬럼) ────────────
   const [drag, setDrag] = useState<{ startY: number; currentY: number; moved: boolean } | null>(null);
+  // 카드 상단/하단 핸들 리사이즈. mode='start' 면 startAt 변경, 'end' 면 endAt 변경.
+  const [resize, setResize] = useState<{
+    event: CalendarEvent;
+    mode: 'start' | 'end';
+    startY: number;
+    endY: number;
+    currentY: number;
+    grabOffset: number;
+  } | null>(null);
+  // 카드 본체 이동(move) — 4px 이상 움직이면 시간만 shift.
+  const [move, setMove] = useState<{
+    event: CalendarEvent;
+    startMouseY: number;
+    curMouseY: number;
+    moved: boolean;
+  } | null>(null);
   const colRef = useRef<HTMLDivElement>(null);
 
   const yToDate = (y: number): Date => {
@@ -216,11 +247,38 @@ function DayTimeView({
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('[data-event="true"]')) return;
+    if ((e.target as HTMLElement).closest('[data-resize="true"]')) return;
     if (e.button !== 0) return;
     if (!colRef.current) return;
     const rect = colRef.current.getBoundingClientRect();
     const y = e.clientY - rect.top;
     setDrag({ startY: y, currentY: y, moved: false });
+  };
+
+  const startResize = (ev: CalendarEvent, mode: 'start' | 'end', e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    if (!ev.eventId.startsWith('act-')) return;
+    const s = new Date(ev.startAt);
+    const en = new Date(ev.endAt);
+    const startY = (s.getHours() - A_S + s.getMinutes() / 60) * A_H + 4;
+    const endY = (en.getHours() - A_S + en.getMinutes() / 60) * A_H + 4;
+    let grabOffset = 0;
+    if (colRef.current) {
+      const rect = colRef.current.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+      grabOffset = mouseY - (mode === 'end' ? endY : startY);
+    }
+    setResize({ event: ev, mode, startY, endY, currentY: mode === 'end' ? endY : startY, grabOffset });
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const startMove = (ev: CalendarEvent, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('[data-resize="true"]')) return;
+    if (!ev.eventId.startsWith('act-')) return;
+    setMove({ event: ev, startMouseY: e.clientY, curMouseY: e.clientY, moved: false });
   };
 
   useEffect(() => {
@@ -255,6 +313,93 @@ function DayTimeView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag]);
+
+  // ─── 이동 전역 mousemove / mouseup ─────────────────────────
+  useEffect(() => {
+    if (!move) return;
+    const onMv = (e: MouseEvent) => {
+      const dy = e.clientY - move.startMouseY;
+      const moved = move.moved || Math.abs(dy) > 4;
+      setMove({ ...move, curMouseY: e.clientY, moved });
+      if (moved) document.body.style.cursor = 'grabbing';
+    };
+    const onUp = async () => {
+      document.body.style.cursor = '';
+      const m = move;
+      setMove(null);
+      if (!m.moved) return;
+      const dy = m.curMouseY - m.startMouseY;
+      const minutesDelta = Math.round((dy / A_H) * 60 / 15) * 15;
+      const newStart = new Date(m.event.startAt);
+      newStart.setMinutes(newStart.getMinutes() + minutesDelta);
+      const duration = new Date(m.event.endAt).getTime() - new Date(m.event.startAt).getTime();
+      const newEnd = new Date(newStart.getTime() + duration);
+      const ok = await resizeActivity(m.event.eventId, fmtKstIso(newStart), fmtKstIso(newEnd));
+      if (ok) onResized?.();
+    };
+    window.addEventListener('mousemove', onMv);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMv);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [move]);
+
+  // ─── 리사이즈 전역 mousemove / mouseup ────────────────────
+  // setResize 마다 effect re-mount 되는 race 를 방지하기 위해 ref 로 최신 resize 추적.
+  const resizeRef = useRef(resize);
+  resizeRef.current = resize;
+  useEffect(() => {
+    if (!resize) return;
+    const onMove = (e: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      if (!colRef.current) return;
+      const rect = colRef.current.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+      const targetY = mouseY - r.grabOffset;
+      let clamped: number;
+      if (r.mode === 'end') {
+        const minY = r.startY + A_H / 4;
+        clamped = Math.max(minY, Math.min(total, targetY));
+      } else {
+        const maxY = r.endY - A_H / 4;
+        clamped = Math.min(maxY, Math.max(0, targetY));
+      }
+      if (Math.abs(clamped - r.currentY) < 1) return;
+      setResize({ ...r, currentY: clamped });
+    };
+    const onUp = async () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const r = resizeRef.current;
+      if (!r) return;
+      setResize(null);
+      let newStart: Date;
+      let newEnd: Date;
+      if (r.mode === 'end') {
+        newStart = new Date(r.event.startAt);
+        newEnd = yToDate(r.currentY - 4);
+      } else {
+        newStart = yToDate(r.currentY - 4);
+        newEnd = new Date(r.event.endAt);
+      }
+      const ok = await resizeActivity(
+        r.event.eventId,
+        fmtKstIso(newStart),
+        fmtKstIso(newEnd),
+      );
+      if (ok) onResized?.();
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!resize]);
 
   const dragTop = drag ? Math.min(drag.startY, drag.currentY) : 0;
   const dragH = drag ? Math.abs(drag.currentY - drag.startY) : 0;
@@ -352,14 +497,91 @@ function DayTimeView({
         )}
         {events.map((ev) => {
           const s = new Date(ev.startAt);
+          const en = new Date(ev.endAt);
           const top = (s.getHours() - A_S + s.getMinutes() / 60) * A_H + 4;
           if (top < 0 || top > total) return null;
+          const isResizing = resize?.event.eventId === ev.eventId;
+          const isMoving = move?.event.eventId === ev.eventId && move.moved;
+          // 평소 wrapper height = 일정 시간 길이 (사이드도 시간만큼 늘어나 보임)
+          const sH = s.getHours() + s.getMinutes() / 60;
+          const eH = en.getHours() + en.getMinutes() / 60;
+          const naturalHeight = Math.max(50, (eH - sH) * A_H - 2);
+          let wrapperTop: number | undefined = top;
+          let wrapperHeight: number = naturalHeight;
+          if (isResizing) {
+            if (resize.mode === 'end') {
+              wrapperTop = top;
+              wrapperHeight = Math.max(40, resize.currentY - resize.startY);
+            } else {
+              wrapperTop = resize.currentY;
+              wrapperHeight = Math.max(40, resize.endY - resize.currentY);
+            }
+          }
+          const moveTransform = isMoving ? `translateY(${move.curMouseY - move.startMouseY}px)` : undefined;
           return (
             <div
               key={ev.eventId}
-              style={{ position: 'absolute', top, left: 42, right: 6, zIndex: 1 }}
+              data-event="true"
+              onMouseDown={(e) => startMove(ev, e)}
+              style={{
+                position: 'absolute',
+                top: wrapperTop,
+                left: 42,
+                right: 6,
+                height: wrapperHeight,
+                zIndex: isMoving ? 10 : isResizing ? 4 : 1,
+                transform: moveTransform,
+                opacity: isMoving ? 0.85 : 1,
+                cursor: ev.eventId.startsWith('act-') ? (isMoving ? 'grabbing' : 'grab') : undefined,
+              }}
             >
-              <AsideCard event={ev} onClick={() => onEventClick(ev)} />
+              <AsideCard
+                event={ev}
+                onClick={() => onEventClick(ev)}
+              />
+              {/* 리사이즈 핸들 — button 밖 형제 div (이벤트 충돌 방지). FINT 활동만. */}
+              {ev.eventId.startsWith('act-') && (
+                <>
+                  <div
+                    data-resize="true"
+                    onMouseDown={(e) => startResize(ev, 'start', e)}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(6,182,212,0.18)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+                    style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 12, cursor: 'ns-resize', zIndex: 6, transition: 'background-color .12s', borderRadius: '10px 10px 0 0' }}
+                  />
+                  <div
+                    data-resize="true"
+                    onMouseDown={(e) => startResize(ev, 'end', e)}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(6,182,212,0.18)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+                    style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 12, cursor: 'ns-resize', zIndex: 6, transition: 'background-color .12s', borderRadius: '0 0 10px 10px' }}
+                  />
+                </>
+              )}
+              {isResizing && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    [resize.mode === 'end' ? 'bottom' : 'top']: 2,
+                    right: 6,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: '#06B6D4',
+                    fontVariantNumeric: 'tabular-nums',
+                    pointerEvents: 'none',
+                    backgroundColor: 'rgba(255,255,255,.9)',
+                    padding: '1px 4px',
+                    borderRadius: 4,
+                    zIndex: 6,
+                  }}
+                >
+                  {(() => {
+                    const t = yToDate(resize.currentY - 4);
+                    const f = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+                    return resize.mode === 'end' ? `~ ${f}` : `${f} ~`;
+                  })()}
+                </div>
+              )}
             </div>
           );
         })}
@@ -750,6 +972,7 @@ export default function CalendarPage() {
               onEventClick={(ev) => handleEventClick(ev)}
               onTimeClick={onTimeClick}
               onTimeRangeSelect={onTimeRangeSelect}
+              onResized={() => refetch()}
             />
           </aside>
         </div>
@@ -1014,6 +1237,7 @@ export default function CalendarPage() {
                   setViewMode('week');
                 }}
                 onDayRangeSelect={onDayRangeSelect}
+                onResized={() => refetch()}
               />
             ) : (
               <WeekGrid
@@ -1026,6 +1250,7 @@ export default function CalendarPage() {
                 }}
                 onTimeClick={onTimeClick}
                 onTimeRangeSelect={onTimeRangeSelect}
+                onResized={() => refetch()}
                 pipeline={pipeline}
               />
             )}
