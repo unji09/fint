@@ -508,3 +508,38 @@ class TestResultFields:
 
         assert result["source_query"] == "SELECT 1"
         assert result["search_type"] == "SEMANTIC"
+
+
+class TestHumanizeColumn:
+    """TABLE 컬럼명 한글화 검증."""
+
+    def test_known_column_translated(self):
+        from app.dashboard.chart_formatter import _humanize_column
+        assert _humanize_column("account_id") == "고객사ID"
+        assert _humanize_column("created_at") == "생성일"
+        assert _humanize_column("amount") == "금액"
+
+    def test_aggregate_translated(self):
+        from app.dashboard.chart_formatter import _humanize_column
+        assert _humanize_column("SUM(amount)") == "금액 합계"
+        assert _humanize_column("COUNT(*)") == "건수"
+        assert _humanize_column("AVG(probability)") == "성공 확률 평균"
+
+    def test_date_trunc_translated(self):
+        from app.dashboard.chart_formatter import _humanize_column
+        assert _humanize_column("DATE_TRUNC('month', created_at)") == "월"
+        assert _humanize_column("DATE_TRUNC('year', created_at)") == "연도"
+
+    def test_unknown_column_returns_original(self):
+        from app.dashboard.chart_formatter import _humanize_column
+        assert _humanize_column("some_custom_field") == "some_custom_field"
+
+    def test_table_fallback_uses_humanized_labels(self):
+        rows = [{"account_id": 1, "name": "삼성", "created_at": "2026-01-01"}]
+        insight = _make_insight(widget_type=WidgetType.TABLE)
+        result = _fmt(insight, rows)
+
+        labels = {c["label"] for c in result["config"]["columns"]}
+        assert "고객사ID" in labels
+        assert "이름" in labels
+        assert "생성일" in labels

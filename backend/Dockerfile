@@ -22,6 +22,6 @@ EXPOSE 8080
 
 ENV TZ=Asia/Seoul
 # JVM 컨테이너 인지 + 힙 75% 제한 (Lightsail 16GB 단일 인스턴스에서 다른 컨테이너들과 공존)
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Dfile.encoding=UTF-8"
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
