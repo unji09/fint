@@ -10,6 +10,7 @@ import com.ssafy.fint.domain.ai.dto.NextActionDetailResponse;
 import com.ssafy.fint.domain.ai.dto.NextActionListResponse;
 import com.ssafy.fint.domain.ai.entity.AiSuggestion;
 import com.ssafy.fint.domain.ai.entity.AiSuggestionRelatedType;
+import com.ssafy.fint.domain.ai.entity.TriggerType;
 import com.ssafy.fint.domain.ai.repository.AiSuggestionRepository;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
 import com.ssafy.fint.domain.deal.repository.PipelineStageRepository;
@@ -22,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,40 +40,49 @@ public class AiSuggestionService {
     private final NotificationService notificationService;
 
     @Transactional
-    public NextActionCreateResponse createNextAction(CustomUserDetails me, NextActionCreateRequest request) {
+    public List<NextActionCreateResponse> createNextAction(CustomUserDetails me, NextActionCreateRequest request) {
         Long tenantId = me.getTenantId();
         Long accountId = request.accountId();
 
         Account account = accountRepository.findByIdAndTenantId(accountId, tenantId)
                 .orElseThrow(() -> new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND));
 
-        NextActionAiResponse aiResponse = nextActionClient.generate(tenantId, accountId, request.context());
+        List<NextActionAiResponse> aiResponses = nextActionClient.generate(tenantId, request);
 
-        PipelineStage stage = pipelineStageRepository
-                .findByPipelineStageIdAndTenant_TenantId(aiResponse.pipelineStageId(), tenantId)
-                .orElseThrow(() -> new BusinessException(AiErrorCode.INVALID_AI_RESPONSE));
+        List<NextActionCreateResponse> results = new ArrayList<>();
 
-        Map<String, Object> reason = new HashMap<>();
-        reason.put("category", aiResponse.category());
-        reason.put("successProbability", aiResponse.successProbability());
-        reason.put("sources", aiResponse.sources());
-        reason.put("recommendedScript", aiResponse.recommendedScript());
-        reason.put("risk", aiResponse.risk());
+        for (NextActionAiResponse aiResponse : aiResponses) {
+            PipelineStage stage = pipelineStageRepository
+                    .findByPipelineStageIdAndTenant_TenantId(aiResponse.pipelineStageId(), tenantId)
+                    .orElseThrow(() -> new BusinessException(AiErrorCode.INVALID_AI_RESPONSE));
 
-        AiSuggestion suggestion = AiSuggestion.builder()
-                .account(account)
-                .pipelineStage(stage)
-                .title(aiResponse.title())
-                .content(aiResponse.description())
-                .relatedType(AiSuggestionRelatedType.ACCOUNT)
-                .reason(reason)
-                .build();
+            AiSuggestionRelatedType relatedType = resolveRelatedType(aiResponse, request);
+            String category = aiResponse.category() != null ? aiResponse.category() : "GENERAL";
+            int successProbability = aiResponse.successProbability() != null ? aiResponse.successProbability() : 0;
+            double importanceScore = aiResponse.importanceScore() != null ? aiResponse.importanceScore() : 0.0;
 
-        AiSuggestion saved = aiSuggestionRepository.save(suggestion);
+            Map<String, Object> reason = new HashMap<>();
+            reason.put("sources", aiResponse.sources());
+            reason.put("recommendedScript", aiResponse.recommendedScript());
 
-        notificationService.pushNotification(saved);
+            AiSuggestion suggestion = AiSuggestion.builder()
+                    .account(account)
+                    .pipelineStage(stage)
+                    .title(aiResponse.action())
+                    .content(aiResponse.reason())
+                    .relatedType(relatedType)
+                    .category(category)
+                    .successProbability(successProbability)
+                    .importanceScore(importanceScore)
+                    .reason(reason)
+                    .build();
 
-        return NextActionCreateResponse.from(saved);
+            AiSuggestion saved = aiSuggestionRepository.save(suggestion);
+            notificationService.pushNotification(saved);
+            results.add(NextActionCreateResponse.from(saved));
+        }
+
+        return results;
     }
 
     public List<NextActionListResponse> findNextActions(CustomUserDetails me, Long accountId) {
@@ -93,5 +104,18 @@ public class AiSuggestionService {
         return aiSuggestionRepository.findByIdAndAccountIdAndTenantId(suggestionId, accountId, tenantId)
                 .map(NextActionDetailResponse::from)
                 .orElseThrow(() -> new BusinessException(AiErrorCode.AI_SUGGESTION_NOT_FOUND));
+    }
+
+    private AiSuggestionRelatedType resolveRelatedType(NextActionAiResponse aiResponse, NextActionCreateRequest request) {
+        if (aiResponse.relatedType() != null) {
+            try {
+                return AiSuggestionRelatedType.valueOf(aiResponse.relatedType().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        if (request.triggerType() == TriggerType.MEETING_CREATED || request.meetingId() != null) {
+            return AiSuggestionRelatedType.MEETING;
+        }
+        return AiSuggestionRelatedType.ACCOUNT;
     }
 }

@@ -8,10 +8,10 @@ public record NextActionDetailResponse(
         Long suggestionId,
         String title,
         String category,
-        Integer successProbability,
+        int successProbability,
+        double importanceScore,
         Map<String, Object> sources,
-        String recommendedScript,
-        String caution
+        String recommendedScript
 ) {
 
     @SuppressWarnings("unchecked")
@@ -20,18 +20,11 @@ public record NextActionDetailResponse(
         return new NextActionDetailResponse(
                 suggestion.getAiSuggestionId(),
                 suggestion.getTitle(),
-                (String) reason.get("category"),
-                toInt(reason.get("successProbability")),
+                suggestion.getCategory(),
+                suggestion.getSuccessProbability(),
+                suggestion.getImportanceScore(),
                 (Map<String, Object>) reason.get("sources"),
-                (String) reason.get("recommendedScript"),
-                (String) reason.get("caution")
+                (String) reason.get("recommendedScript")
         );
-    }
-
-    private static Integer toInt(Object value) {
-        if (value instanceof Number n) {
-            return n.intValue();
-        }
-        return null;
     }
 }
