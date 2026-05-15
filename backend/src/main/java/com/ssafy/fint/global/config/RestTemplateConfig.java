@@ -72,10 +72,24 @@ public class RestTemplateConfig {
                 .build();
     }
 
+    /**
+     * STT 전용 RestTemplate.
+     * 오디오 길이에 따라 수 분 소요 가능. read timeout 300s.
+     */
+    @Bean
+    public RestTemplate sttRestTemplate(RestTemplateBuilder builder) {
+        return builder
+                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(300)))
+                .build();
+    }
+
+    /**
+     * 시그널 수집 전용 RestTemplate.
+     */
     @Bean
     public RestTemplate signalRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(5), Duration.ofSeconds(120)))
+                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(30)))
                 .build();
     }
 }

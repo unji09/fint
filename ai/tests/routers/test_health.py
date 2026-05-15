@@ -39,7 +39,7 @@ async def test_health_returns_ok(
 
 
 @pytest.mark.asyncio
-async def test_readiness_returns_ready() -> None:
+async def test_readiness_returns_ready_with_components() -> None:
     app = create_app()
 
     mock_db = AsyncMock()
@@ -64,24 +64,21 @@ async def test_readiness_returns_ready() -> None:
 
     assert resp.status_code == 200
 
-    assert resp.json() == {
-        "status": "ready",
-    }
+    body = resp.json()
+    assert body["status"] == "ready"
+    assert body["db"] == "ok"
+    assert body["redis"] == "ok"
 
     mock_db.execute.assert_called_once()
     mock_redis.ping.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_readiness_fails_when_db_down() -> None:
+async def test_readiness_503_when_db_down() -> None:
     app = create_app()
 
     mock_db = AsyncMock()
-
-    mock_db.execute.side_effect = Exception(
-        "connection refused",
-    )
-
+    mock_db.execute.side_effect = Exception("connection refused")
     mock_redis = AsyncMock()
 
     async def _fake_db():
@@ -93,10 +90,7 @@ async def test_readiness_fails_when_db_down() -> None:
     app.dependency_overrides[get_db] = _fake_db
     app.dependency_overrides[get_redis] = _fake_redis
 
-    transport = ASGITransport(
-        app=app,
-        raise_app_exceptions=False,
-    )
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
 
     async with AsyncClient(
         transport=transport,
@@ -104,8 +98,40 @@ async def test_readiness_fails_when_db_down() -> None:
     ) as client:
         resp = await client.get("/health/ready")
 
-    assert resp.status_code == 500
-
+    assert resp.status_code == 503
     body = resp.json()
+    assert body["status"] == "unavailable"
+    assert body["db"] == "error"
+    assert body["redis"] == "ok"
 
-    assert "code" in body
+
+@pytest.mark.asyncio
+async def test_readiness_503_when_redis_down() -> None:
+    app = create_app()
+
+    mock_db = AsyncMock()
+    mock_redis = AsyncMock()
+    mock_redis.ping.side_effect = Exception("redis down")
+
+    async def _fake_db():
+        yield mock_db
+
+    async def _fake_redis():
+        yield mock_redis
+
+    app.dependency_overrides[get_db] = _fake_db
+    app.dependency_overrides[get_redis] = _fake_redis
+
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/health/ready")
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["status"] == "unavailable"
+    assert body["db"] == "ok"
+    assert body["redis"] == "error"

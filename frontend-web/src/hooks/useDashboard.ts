@@ -37,7 +37,7 @@ export function useDashboardList() {
       setLoading(true);
       const data = await fetchWithAuth<Dashboard[]>('/dashboards');
       setDashboards(applyTitleOverrides(data ?? []));
-    } catch (e) {
+    } catch {
       setError('대시보드 목록을 불러오지 못했습니다.');
       // 개발 중 mock 데이터 (사용자가 바꾼 이름이 있으면 그것도 머지)
       setDashboards(applyTitleOverrides([

@@ -18,6 +18,7 @@ class SpringClient:
         mood_score: int,
         reason: str,
         key_signals: list[str],
+        summary: dict,
     ) -> None:
         try:
             resp = await self._client.post(
@@ -27,6 +28,7 @@ class SpringClient:
                     "moodScore": mood_score,
                     "reason": reason,
                     "keySignals": key_signals,
+                    "summary": summary,
                 },
                 headers={"X-Internal-Secret": self._secret},
             )

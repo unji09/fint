@@ -19,7 +19,7 @@ public interface AiSuggestionSwagger {
             description = "고객사 데이터를 기반으로 FastAPI AI 서비스를 호출하여 Next Action을 생성한다. "
                     + "생성 결과는 DB에 저장되고, 해당 고객사 담당 사원에게 WebSocket 알림이 push된다."
     )
-    ApiResponse<NextActionCreateResponse> create(CustomUserDetails me, NextActionCreateRequest request);
+    ApiResponse<List<NextActionCreateResponse>> create(CustomUserDetails me, NextActionCreateRequest request);
 
     @Operation(
             summary = "고객사 Next Action 목록 조회",

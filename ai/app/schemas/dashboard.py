@@ -7,11 +7,10 @@ from pydantic import BaseModel, Field
 
 
 class WidgetType(StrEnum):
-    BAR = "BAR_CHART"
-    LINE = "LINE_CHART"
-    PIE = "PIE"
-    KPI = "KPI"
+    CHART = "CHART"
+    CARD = "CARD"
     TABLE = "TABLE"
+    LIST = "LIST"
 
 
 class FilterOperator(StrEnum):
@@ -64,6 +63,7 @@ class SemanticSearchSpec(BaseModel):
     search_text: str
     source_filter: Literal["NEWS", "DART", "ALL"] = "ALL"
     top_k: int = Field(default=10, ge=1, le=50)
+    min_score: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
 class IntentResult(BaseModel):

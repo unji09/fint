@@ -56,6 +56,15 @@ public class AiSuggestion extends BaseEntity {
     @Column(name = "related_type", nullable = false, length = 50)
     private AiSuggestionRelatedType relatedType;
 
+    @Column(name = "category", nullable = false, length = 50)
+    private String category;
+
+    @Column(name = "success_probability", nullable = false)
+    private int successProbability;
+
+    @Column(name = "importance_score", nullable = false)
+    private double importanceScore;
+
     @Column(name = "is_read", nullable = false)
     private boolean isRead;
 
@@ -70,6 +79,9 @@ public class AiSuggestion extends BaseEntity {
             String title,
             String content,
             AiSuggestionRelatedType relatedType,
+            String category,
+            int successProbability,
+            double importanceScore,
             Map<String, Object> reason
     ) {
         this.account = account;
@@ -77,6 +89,9 @@ public class AiSuggestion extends BaseEntity {
         this.title = title;
         this.content = content;
         this.relatedType = relatedType;
+        this.category = category;
+        this.successProbability = successProbability;
+        this.importanceScore = importanceScore;
         this.isRead = false;
         this.reason = reason;
     }

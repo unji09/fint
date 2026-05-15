@@ -81,6 +81,9 @@ public class Activity extends BaseUpdatableEntity {
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 
+    @Column(name = "recording_key", length = 100)
+    private String recordingKey;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "stt_status", nullable = false, length = 20)
     private SttStatus sttStatus;
@@ -100,7 +103,8 @@ public class Activity extends BaseUpdatableEntity {
             OffsetDateTime startAt,
             OffsetDateTime endAt,
             List<Map<String, Object>> attendees,
-            String memo
+            String memo,
+            String recordingKey
     ) {
         this.user = user;
         this.deal = deal;
@@ -114,6 +118,11 @@ public class Activity extends BaseUpdatableEntity {
         this.memo = memo;
         this.sttStatus = SttStatus.PENDING;
         this.moodStatus = MoodStatus.PENDING;
+        this.recordingKey = recordingKey;
+    }
+
+    public void updateRecordingKey(String recordingKey) {
+        this.recordingKey = recordingKey;
     }
 
     public void changeSttStatus(SttStatus sttStatus) {
@@ -167,6 +176,10 @@ public class Activity extends BaseUpdatableEntity {
 
     public void changeMoodStatus(MoodStatus moodStatus) {
         this.moodStatus = moodStatus;
+    }
+
+    public void saveRecordingKey(String recordingKey) {
+        this.recordingKey = recordingKey;
     }
 }
 

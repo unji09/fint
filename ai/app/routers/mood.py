@@ -6,7 +6,7 @@ from app.clients import get_llm_client
 from app.clients.llm import LLMClient
 from app.clients.spring import SpringClient
 from app.core.config import Settings, get_settings
-from app.core.errors import BusinessException, CommonErrorCode
+from app.core.errors import BusinessException
 from app.core.response import ApiResponse
 from app.schemas.mood import MoodAnalysisRequest, MoodAnalysisResult
 
@@ -24,6 +24,15 @@ MOOD_PROMPT = """당신은 B2B 영업 전문가입니다.
 - 40~59 : 입장 불명확, 유보적 반응, 추가 검토 필요
 - 20~39 : 부정적 반응, 가격 저항, 관심 저하
 - 0~19  : 강한 거절, 갈등, 관계 위기
+
+[출력 항목]
+- mood_score: 0~100 숫자
+- reason: 점수 이유 2~3문장
+- key_signals: 주요 근거 발언 3개 이내
+- key_discussion: 핵심 논의 내용 한 문장
+- customer_needs: 고객 니즈 한 문장
+- agreements: 합의 사항 한 문장
+- action_items: 다음 액션 리스트
 
 [전사본]
 {transcript}"""
@@ -58,6 +67,12 @@ async def _analyze_and_callback(
             mood_score=result.mood_score,
             reason=result.reason,
             key_signals=result.key_signals,
+            summary={
+                "keyDiscussion": result.key_discussion,
+                "customerNeeds": result.customer_needs,
+                "agreements": result.agreements,
+                "actionItems": result.action_items,
+            }
         )
 
         logger.info(

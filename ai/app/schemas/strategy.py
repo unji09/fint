@@ -1,28 +1,34 @@
-from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
 
+class TriggerType(str, Enum):
+    NEWS_UPDATED = "NEWS_UPDATED"
+    DART_UPDATED = "DART_UPDATED"
+    NEWS_MAPPED_TO_NEW_ACCOUNT = "NEWS_MAPPED_TO_NEW_ACCOUNT"
+    DART_MAPPED_TO_NEW_ACCOUNT = "DART_MAPPED_TO_NEW_ACCOUNT"
+    EXTERNAL_SIGNAL_UPDATED = "EXTERNAL_SIGNAL_UPDATED"
+    IMPORTANT_KEYWORD_DETECTED = "IMPORTANT_KEYWORD_DETECTED"
+    MEETING_CREATED = "MEETING_CREATED"
+
+
 class NextActionRequest(BaseModel):
-    account_id: int = Field(alias="accountId")
+    account_id: int
+    trigger_type: TriggerType
+    news_article_ids: list[int] | None = None
+    dart_disclosure_ids: list[int] | None = None
+    meeting_id: int | None = None
     context: str | None = None
 
 
-class SourceInfo(BaseModel):
-    news: list[str] = Field(default_factory=list)
-    dart: list[str] = Field(default_factory=list)
-    crm: list[str] = Field(default_factory=list)
-
-
 class NextActionResponse(BaseModel):
-    next_action_id: int = Field(serialization_alias="nextActionId")
-    account_id: int = Field(serialization_alias="accountId")
     action: str
     reason: str
     category: str
-    priority: int
-    success_probability: int = Field(serialization_alias="successProbability")
-    sources: SourceInfo
-    recommended_script: str = Field(serialization_alias="recommendedScript")
-    risk: str
-    created_at: datetime = Field(serialization_alias="createdAt")
+    related_type: str
+    importance_score: float
+    success_probability: int
+    sources: dict
+    recommended_script: str
+    pipeline_stage_id: int

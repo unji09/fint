@@ -1,0 +1,11 @@
+package com.ssafy.fint.domain.ai.entity;
+
+public enum TriggerType {
+    NEWS_UPDATED,
+    DART_UPDATED,
+    NEWS_MAPPED_TO_NEW_ACCOUNT,
+    DART_MAPPED_TO_NEW_ACCOUNT,
+    EXTERNAL_SIGNAL_UPDATED,
+    IMPORTANT_KEYWORD_DETECTED,
+    MEETING_CREATED
+}

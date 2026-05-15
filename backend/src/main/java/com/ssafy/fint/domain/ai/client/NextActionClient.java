@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.ai.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
 import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.exception.CommonErrorCode;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import java.util.HashMap;
 import java.util.List;
@@ -39,16 +42,26 @@ public class NextActionClient {
         this.aiServerUrl = aiServerUrl;
     }
 
-    public NextActionAiResponse generate(Long tenantId, Long accountId, String context) {
+    public List<NextActionAiResponse> generate(Long tenantId, NextActionCreateRequest request) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
         headers.set(TENANT_HEADER, String.valueOf(tenantId));
 
         Map<String, Object> body = new HashMap<>();
-        body.put("account_id", accountId);
-        if (context != null) {
-            body.put("context", context);
+        body.put("account_id", request.accountId());
+        body.put("trigger_type", request.triggerType().name());
+        if (request.newsArticleIds() != null && !request.newsArticleIds().isEmpty()) {
+            body.put("news_article_ids", request.newsArticleIds());
+        }
+        if (request.dartDisclosureIds() != null && !request.dartDisclosureIds().isEmpty()) {
+            body.put("dart_disclosure_ids", request.dartDisclosureIds());
+        }
+        if (request.meetingId() != null) {
+            body.put("meeting_id", request.meetingId());
+        }
+        if (request.context() != null) {
+            body.put("context", request.context());
         }
 
         String requestBody;
@@ -59,12 +72,13 @@ public class NextActionClient {
             throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
         }
 
-        HttpEntity<String> request = new HttpEntity<>(requestBody, headers);
+        HttpEntity<String> httpRequest = new HttpEntity<>(requestBody, headers);
         String url = aiServerUrl + NEXT_ACTION_PATH;
-        log.info("[NextAction] POST {} tenantId={} accountId={}", url, tenantId, accountId);
+        log.info("[NextAction] POST {} tenantId={} accountId={} triggerType={}",
+                url, tenantId, request.accountId(), request.triggerType());
 
         try {
-            ResponseEntity<String> response = aiRestTemplate.postForEntity(url, request, String.class);
+            ResponseEntity<String> response = aiRestTemplate.postForEntity(url, httpRequest, String.class);
 
             String responseBody = response.getBody();
             if (responseBody == null || responseBody.isBlank()) {
@@ -72,10 +86,17 @@ public class NextActionClient {
                 throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
             }
 
-            NextActionAiResponse parsed = objectMapper.readValue(responseBody, NextActionAiResponse.class);
-            if (parsed.title() == null || parsed.pipelineStageId() == null) {
-                log.error("[NextAction] required fields missing. status={} body={}", response.getStatusCode(), responseBody);
+            List<NextActionAiResponse> parsed = objectMapper.readValue(
+                    responseBody, new TypeReference<>() {});
+            if (parsed.isEmpty()) {
+                log.error("[NextAction] empty list returned. body={}", responseBody);
                 throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
+            }
+            for (NextActionAiResponse item : parsed) {
+                if (item.action() == null || item.pipelineStageId() == null) {
+                    log.error("[NextAction] required fields missing in item. body={}", responseBody);
+                    throw new BusinessException(CommonErrorCode.EXTERNAL_API_FAILED);
+                }
             }
             return parsed;
         } catch (RestClientException e) {

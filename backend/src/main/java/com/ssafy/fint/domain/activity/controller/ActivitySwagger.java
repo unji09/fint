@@ -1,11 +1,6 @@
 package com.ssafy.fint.domain.activity.controller;
 
-import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
-import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
-import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
-import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
+import com.ssafy.fint.domain.activity.dto.*;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.global.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,4 +47,10 @@ public interface ActivitySwagger {
                     + "JSON 키를 생략하면 해당 필드는 변경되지 않고, 명시적 null 로 보내면 해당 필드가 비워진다 "
     )
     ApiResponse<ActivityUpdateResponse> update(Long activityId, ActivityUpdateRequest request);
+
+    @Operation(
+        summary = "미팅 녹음 STT 및 분석 요청",
+        description = "업로드된 음성 파일(fileKey)을 기반으로 STT 전사 및 날씨 분석 작업을 비동기로 요청한다."
+    )
+    ApiResponse<RecordingResponse> recording(Long activityId, RecordingRequest request);
 }
