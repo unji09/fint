@@ -21,6 +21,7 @@ import com.ssafy.fint.domain.activity.entity.ActivityType;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.repository.DealRepository;
+import com.ssafy.fint.domain.signal.repository.DartDisclosureRepository;
 import com.ssafy.fint.domain.user.entity.User;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
@@ -39,6 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,6 +60,7 @@ public class AccountService {
     private final AccountRepository accountRepository;
     private final AccountUserAssignmentRepository accountUserAssignmentRepository;
     private final AccountExternalInfoRepository accountExternalInfoRepository;
+    private final DartDisclosureRepository dartDisclosureRepository;
     private final TemperatureHistoryRepository temperatureHistoryRepository;
     private final UserRepository userRepository;
     private final ActivityRepository activityRepository;
@@ -151,11 +155,36 @@ public class AccountService {
                 .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
 
         int limit = size != null ? size : DEFAULT_SIGNAL_SIZE;
-        return accountExternalInfoRepository
-                .findRecentByAccountAndOptionalSource(accountId, source, PageRequest.of(0, limit))
+        Pageable pageable = PageRequest.of(0, limit);
+
+        if ("DART".equals(source)) {
+            return dartDisclosureRepository.findByAccountId(accountId, pageable)
+                    .stream()
+                    .map(AccountSignalResponse::fromDart)
+                    .toList();
+        }
+
+        if ("NEWS".equals(source)) {
+            return accountExternalInfoRepository
+                    .findRecentByAccountAndOptionalSource(accountId, "NEWS", pageable)
+                    .stream()
+                    .map(AccountSignalResponse::from)
+                    .toList();
+        }
+
+        List<AccountSignalResponse> merged = new ArrayList<>();
+        merged.addAll(accountExternalInfoRepository
+                .findRecentByAccountAndOptionalSource(accountId, "NEWS", pageable)
                 .stream()
                 .map(AccountSignalResponse::from)
-                .toList();
+                .toList());
+        merged.addAll(dartDisclosureRepository.findByAccountId(accountId, pageable)
+                .stream()
+                .map(AccountSignalResponse::fromDart)
+                .toList());
+        merged.sort(Comparator.comparing(AccountSignalResponse::occurredAt).reversed());
+
+        return merged.stream().limit(limit).toList();
     }
 
     public List<AccountMoodResponse> findMoodHistory(Long accountId) {

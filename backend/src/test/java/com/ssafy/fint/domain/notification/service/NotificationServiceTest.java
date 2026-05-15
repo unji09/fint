@@ -63,16 +63,20 @@ class NotificationServiceTest {
     private final CustomUserDetails me = new CustomUserDetails(USER_ID, TENANT_ID, "MEMBER");
 
     @Test
-    @DisplayName("정상 조회 시 reason jsonb 의 category/signalSummary/signalTypeBadge 와 account/stage 가 매핑되어 반환된다.")
+    @DisplayName("정상 조회 시 reason jsonb 의 sources/category 와 account/stage 가 매핑되어 반환된다.")
     void unreadReturnsMappedItems() {
         Account account = newAccount(7L, "(주)삼성전자");
         PipelineStage stage = newStage("제안");
-        Map<String, Object> reason = Map.of(
-                "activityType", "미팅",
-                "signalSummary", "2조 규모 반도체 투자 발표로 구매 활성화 예상",
-                "signalTypeBadge", "NEWS"
+        Map<String, Object> sources = Map.of(
+                "news", List.of(Map.of("title", "삼성전자 2조 투자", "summary", "반도체 투자 발표")),
+                "dart", List.of(),
+                "crm", List.of()
         );
-        AiSuggestion s1 = newSuggestion(account, stage, 1L, "삼성전자 투자 시그널", reason);
+        Map<String, Object> reason = Map.of(
+                "sources", sources,
+                "recommendedScript", "투자 관련 제안서를 발송하세요"
+        );
+        AiSuggestion s1 = newSuggestion(account, stage, 1L, "삼성전자 투자 시그널", "미팅", reason);
         OffsetDateTime createdAt = OffsetDateTime.of(2026, 5, 1, 9, 30, 0, 0, ZoneOffset.UTC);
         ReflectionTestUtils.setField(s1, "createdAt", createdAt);
 
@@ -82,15 +86,15 @@ class NotificationServiceTest {
         NotificationListResponse res = notificationService.findUnreadNotifications(me);
 
         assertThat(res.content()).hasSize(1);
-        assertThat(res.content().get(0).notificationId()).isEqualTo(1L);
-        assertThat(res.content().get(0).title()).isEqualTo("삼성전자 투자 시그널");
-        assertThat(res.content().get(0).category()).isEqualTo("미팅");
-        assertThat(res.content().get(0).signalSummary()).startsWith("2조 규모");
-        assertThat(res.content().get(0).signalTypeBadge()).isEqualTo("NEWS");
-        assertThat(res.content().get(0).pipelineStage()).isEqualTo("제안");
-        assertThat(res.content().get(0).accountName()).isEqualTo("(주)삼성전자");
-        assertThat(res.content().get(0).isRead()).isFalse();
-        assertThat(res.content().get(0).createdAt()).isEqualTo(createdAt);
+        NotificationItemResponse item = res.content().get(0);
+        assertThat(item.notificationId()).isEqualTo(1L);
+        assertThat(item.title()).isEqualTo("삼성전자 투자 시그널");
+        assertThat(item.category()).isEqualTo("미팅");
+        assertThat(item.sources()).isEqualTo(sources);
+        assertThat(item.pipelineStage()).isEqualTo("제안");
+        assertThat(item.accountName()).isEqualTo("(주)삼성전자");
+        assertThat(item.isRead()).isFalse();
+        assertThat(item.createdAt()).isEqualTo(createdAt);
     }
 
     @Test
@@ -123,18 +127,17 @@ class NotificationServiceTest {
     @Test
     @DisplayName("다건 조회 시 Repository 가 돌려준 정렬 순서가 매핑 후에도 그대로 보존된다.")
     void unreadPreservesRepositoryOrderForMultipleItems() {
-        // Repository 쿼리는 createdAt desc 정렬을 보장한다. Service 가 추가 정렬을 끼우지 않음을 명시.
         Account a1 = newAccount(11L, "A사");
         Account a2 = newAccount(12L, "B사");
         Account a3 = newAccount(13L, "C사");
         PipelineStage stage = newStage("리드");
 
         AiSuggestion newest = newSuggestion(a1, stage, 30L, "최신",
-                Map.of("activityType", "미팅"));
+                Map.of("sources", Map.of("news", List.of(), "dart", List.of())));
         AiSuggestion mid = newSuggestion(a2, stage, 31L, "중간",
-                Map.of("activityType", "전화"));
+                Map.of("sources", Map.of("news", List.of(), "dart", List.of())));
         AiSuggestion oldest = newSuggestion(a3, stage, 32L, "이전",
-                Map.of("activityType", "이메일"));
+                Map.of("sources", Map.of("news", List.of(), "dart", List.of())));
 
         when(aiSuggestionRepository.findUnreadByUserId(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(List.of(newest, mid, oldest));
@@ -145,18 +148,15 @@ class NotificationServiceTest {
                 .containsExactly(30L, 31L, 32L);
         assertThat(res.content()).extracting("accountName")
                 .containsExactly("A사", "B사", "C사");
-        assertThat(res.content()).extracting("category")
-                .containsExactly("미팅", "전화", "이메일");
     }
 
     @Test
-    @DisplayName("reason 의 nullable 키(signalSummary/signalTypeBadge)가 없으면 null 로 반환된다.")
-    void unreadAllowsNullableSignalFields() {
+    @DisplayName("reason 에 sources 키가 없으면 null 로 반환된다.")
+    void unreadAllowsNullableSources() {
         Account account = newAccount(8L, "ACME");
         PipelineStage stage = newStage("리드");
         Map<String, Object> reason = new HashMap<>();
-        reason.put("activityType", "이메일");
-        // signalSummary, signalTypeBadge 누락
+        reason.put("recommendedScript", "이메일 회신");
         AiSuggestion s = newSuggestion(account, stage, 2L, "메일 회신 필요", reason);
 
         when(aiSuggestionRepository.findUnreadByUserId(eq(USER_ID), any(Pageable.class)))
@@ -164,9 +164,7 @@ class NotificationServiceTest {
 
         NotificationListResponse res = notificationService.findUnreadNotifications(me);
 
-        assertThat(res.content().get(0).category()).isEqualTo("이메일");
-        assertThat(res.content().get(0).signalSummary()).isNull();
-        assertThat(res.content().get(0).signalTypeBadge()).isNull();
+        assertThat(res.content().get(0).sources()).isNull();
     }
 
     private Account newAccount(long accountId, String name) {
@@ -238,7 +236,7 @@ class NotificationServiceTest {
         void markAsRead_success() {
             AiSuggestion suggestion = newSuggestion(
                     newAccount(7L, "(주)삼성전자"), newStage("제안"), 1L,
-                    "삼성전자 투자 시그널", Map.of("activityType", "미팅"));
+                    "삼성전자 투자 시그널", Map.of("sources", Map.of()));
             assertThat(suggestion.isRead()).isFalse();
 
             when(aiSuggestionRepository.findByIdAndUserId(1L, USER_ID))
@@ -266,7 +264,7 @@ class NotificationServiceTest {
         void markAsRead_alreadyRead() {
             AiSuggestion suggestion = newSuggestion(
                     newAccount(7L, "(주)삼성전자"), newStage("제안"), 1L,
-                    "삼성전자 투자 시그널", Map.of("activityType", "미팅"));
+                    "삼성전자 투자 시그널", Map.of("sources", Map.of()));
             suggestion.markAsRead();
 
             when(aiSuggestionRepository.findByIdAndUserId(1L, USER_ID))
@@ -291,7 +289,7 @@ class NotificationServiceTest {
             PipelineStage stage = newStage("제안");
             AiSuggestion suggestion = newSuggestion(account, stage, 1L,
                     "긴급: 삼성전자 투자 시그널",
-                    Map.of("activityType", "미팅", "signalSummary", "투자 발표"));
+                    Map.of("sources", Map.of("news", List.of(Map.of("title", "투자 발표")))));
 
             User user1 = newUser(100L);
             User user2 = newUser(200L);
@@ -317,7 +315,7 @@ class NotificationServiceTest {
             Account account = newAccount(ACCOUNT_ID, "(주)삼성전자");
             PipelineStage stage = newStage("제안");
             AiSuggestion suggestion = newSuggestion(account, stage, 1L,
-                    "시그널", Map.of("activityType", "미팅"));
+                    "시그널", Map.of("sources", Map.of()));
 
             when(accountUserAssignmentRepository.findByAccountIdWithUser(ACCOUNT_ID))
                     .thenReturn(List.of());
@@ -342,12 +340,20 @@ class NotificationServiceTest {
 
     private AiSuggestion newSuggestion(Account account, PipelineStage stage, long suggestionId,
                                        String title, Map<String, Object> reason) {
+        return newSuggestion(account, stage, suggestionId, title, "GENERAL", reason);
+    }
+
+    private AiSuggestion newSuggestion(Account account, PipelineStage stage, long suggestionId,
+                                       String title, String category, Map<String, Object> reason) {
         AiSuggestion suggestion = AiSuggestion.builder()
                 .account(account)
                 .pipelineStage(stage)
                 .title(title)
                 .content("내용")
                 .relatedType(AiSuggestionRelatedType.ACCOUNT)
+                .category(category)
+                .successProbability(0)
+                .importanceScore(0.0)
                 .reason(reason)
                 .build();
         ReflectionTestUtils.setField(suggestion, "aiSuggestionId", suggestionId);

@@ -28,13 +28,18 @@ const F = "'Pretendard', -apple-system, sans-serif";
  * 명세서 그림의 successRate / recommendation / accountId 등은 백엔드 미구현이라
  * 옵셔널로만 두고 응답에 들어오면 자동 표시.
  */
+export interface SourceItem {
+  title?: string;
+  summary?: string;
+  url?: string;
+}
+
 export interface NotificationItem {
   notificationId: number;
   title: string;
-  category: string | null;          // activityType (MEETING / CALL / EMAIL / MEMO)
-  signalSummary: string | null;     // 신호 요약 본문
-  signalTypeBadge: string | null;   // News / DART / AI 분석
-  pipelineStage: string | null;     // 파이프라인 단계명
+  category: string | null;
+  sources: Record<string, SourceItem[]> | null;
+  pipelineStage: string | null;
   accountName: string | null;
   isRead: boolean;
   createdAt: string;
@@ -79,14 +84,30 @@ const BUCKET_COLOR: Record<Bucket, string> = {
   이전: '#9CA193',
 };
 
-// ── 신호 타입 뱃지 색상 ─────────────────────────────────────
-function signalBadge(type?: string): { label: string; bg: string; color: string } | null {
-  if (!type) return null;
-  const t = type.toLowerCase();
-  if (t.includes('news') || t.includes('뉴스')) return { label: 'News', bg: '#FFE4E1', color: '#D85A30' };
-  if (t.includes('dart') || t.includes('공시')) return { label: 'DART', bg: '#FEF3C7', color: '#B45309' };
-  if (t.includes('ai') || t.includes('분석')) return { label: 'AI 분석', bg: '#E0E7FF', color: '#5B5BD6' };
-  return { label: type, bg: '#F0F0EE', color: '#737880' };
+// ── 소스 타입별 뱃지 스타일 ─────────────────────────────────
+const SOURCE_BADGE_STYLE: Record<string, { label: string; bg: string; color: string }> = {
+  news: { label: 'News', bg: '#FFE4E1', color: '#D85A30' },
+  dart: { label: 'DART', bg: '#FEF3C7', color: '#B45309' },
+  crm: { label: 'CRM', bg: '#E0E7FF', color: '#5B5BD6' },
+};
+
+function getActiveSourceTypes(sources: Record<string, SourceItem[]> | null | undefined) {
+  if (!sources) return [];
+  return Object.entries(sources)
+    .filter(([, items]) => Array.isArray(items) && items.length > 0)
+    .map(([type]) => type);
+}
+
+function getFirstSummary(sources: Record<string, SourceItem[]> | null | undefined): string | null {
+  if (!sources) return null;
+  for (const items of Object.values(sources)) {
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      if (item.summary) return item.summary;
+      if (item.title) return item.title;
+    }
+  }
+  return null;
 }
 
 export default function NotificationPanel({ open, onClose, notifications, onItemRead, onAllRead }: Props) {
@@ -308,9 +329,10 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
 
 // ─── 알림 카드 ───────────────────────────────────────────────
 function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expanded: boolean; onClick: () => void }) {
-  const badge = signalBadge(n.signalTypeBadge ?? undefined);
+  const activeTypes = getActiveSourceTypes(n.sources);
+  const firstSummary = getFirstSummary(n.sources);
   const hasAccount = !!n.accountName;
-  const hasSignal = !!n.signalSummary || !!badge;
+  const hasSignal = activeTypes.length > 0 || !!firstSummary;
   const hasRecommendation = !!n.recommendation?.title;
 
   return (
@@ -368,24 +390,28 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: '#737880' }}>감지된 신호</span>
-            {badge && (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: badge.color,
-                  backgroundColor: badge.bg,
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  letterSpacing: '0.02em',
-                }}
-              >
-                {badge.label}
-              </span>
-            )}
+            {activeTypes.map((type) => {
+              const style = SOURCE_BADGE_STYLE[type] ?? { label: type, bg: '#F0F0EE', color: '#737880' };
+              return (
+                <span
+                  key={type}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: style.color,
+                    backgroundColor: style.bg,
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {style.label}
+                </span>
+              );
+            })}
           </div>
-          {n.signalSummary && (
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: '#475569' }}>{n.signalSummary}</p>
+          {firstSummary && (
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: '#475569' }}>{firstSummary}</p>
           )}
         </div>
       )}
@@ -445,9 +471,18 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
           {n.category && (
             <DetailRow label="활동 유형" value={n.category} />
           )}
-          {n.signalSummary && (
-            <DetailRow label="시그널 본문" value={n.signalSummary} multiline />
-          )}
+          {n.sources && activeTypes.map((type) => {
+            const items = n.sources![type];
+            const style = SOURCE_BADGE_STYLE[type] ?? { label: type };
+            return items.map((item, i) => (
+              <DetailRow
+                key={`${type}-${i}`}
+                label={`${style.label} ${items.length > 1 ? i + 1 : ''}`}
+                value={item.summary || item.title || ''}
+                multiline
+              />
+            ));
+          })}
           <DetailRow label="알림 시각" value={formatFullDateTime(n.createdAt)} />
           <DetailRow label="상태" value={n.isRead ? '읽음' : '미읽음'} />
         </div>

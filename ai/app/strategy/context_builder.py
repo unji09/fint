@@ -38,7 +38,7 @@ _NEWS_SQL = text(
 
 _DART_SQL = text(
     "SELECT d.dart_disclosure_id, d.report_nm, d.content_summary, "
-    "d.corp_name, d.rcept_dt "
+    "d.corp_name, d.rcept_dt, d.rcept_no "
     "FROM dart_disclosures d "
     "WHERE d.dart_disclosure_id IN :ids"
 ).bindparams(bindparam("ids", expanding=True))

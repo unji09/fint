@@ -7,6 +7,8 @@ import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
 import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
+import com.ssafy.fint.domain.signal.entity.DartDisclosure;
+import com.ssafy.fint.domain.signal.repository.DartDisclosureRepository;
 import com.ssafy.fint.domain.user.repository.UserRepository;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
@@ -52,6 +54,9 @@ class AccountServiceFindSignalsTest {
 
     @Mock
     private AccountExternalInfoRepository accountExternalInfoRepository;
+
+    @Mock
+    private DartDisclosureRepository dartDisclosureRepository;
 
     @Mock
     @SuppressWarnings("unused")
@@ -112,21 +117,24 @@ class AccountServiceFindSignalsTest {
     }
 
     @Test
-    @DisplayName("source 가 null 이면 Repository 에 null 이 그대로 전달된다 (동적 필터)")
-    void passesNullSourceWhenNotProvided() {
+    @DisplayName("source 가 null 이면 NEWS 와 DART 를 각각 조회한다")
+    void passesNullSourceQueriesBothRepositories() {
         Account account = mock(Account.class);
         when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
                 ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
                 .thenReturn(Optional.of(account));
         when(accountExternalInfoRepository.findRecentByAccountAndOptionalSource(
-                eq(ACCOUNT_ID), eq(null), any(Pageable.class)))
+                eq(ACCOUNT_ID), eq("NEWS"), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(dartDisclosureRepository.findByAccountId(eq(ACCOUNT_ID), any(Pageable.class)))
                 .thenReturn(List.of());
 
         List<AccountSignalResponse> result = accountService.findSignals(ACCOUNT_ID, null, 10);
 
         assertThat(result).isEmpty();
         verify(accountExternalInfoRepository).findRecentByAccountAndOptionalSource(
-                eq(ACCOUNT_ID), eq(null), any(Pageable.class));
+                eq(ACCOUNT_ID), eq("NEWS"), any(Pageable.class));
+        verify(dartDisclosureRepository).findByAccountId(eq(ACCOUNT_ID), any(Pageable.class));
     }
 
     @Test
@@ -138,7 +146,9 @@ class AccountServiceFindSignalsTest {
                 .thenReturn(Optional.of(account));
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         when(accountExternalInfoRepository.findRecentByAccountAndOptionalSource(
-                eq(ACCOUNT_ID), eq(null), captor.capture()))
+                eq(ACCOUNT_ID), eq("NEWS"), captor.capture()))
+                .thenReturn(List.of());
+        when(dartDisclosureRepository.findByAccountId(eq(ACCOUNT_ID), any(Pageable.class)))
                 .thenReturn(List.of());
 
         accountService.findSignals(ACCOUNT_ID, null, null);
@@ -159,6 +169,70 @@ class AccountServiceFindSignalsTest {
                 .isEqualTo(CommonErrorCode.NOT_FOUND);
 
         verifyNoInteractions(accountExternalInfoRepository);
+    }
+
+    @Test
+    @DisplayName("source=DART 조회 시 dart_disclosures 에서 조회하고 rcept_no 기반 URL 을 동적 생성한다")
+    void dartSourceQueriesDartDisclosures() {
+        Account account = mock(Account.class);
+        DartDisclosure dart = DartDisclosure.builder()
+                .corpCode("00126380")
+                .corpName("삼성전자")
+                .reportNm("사업보고서 (2025.12)")
+                .rceptNo("20260514000123")
+                .rceptDt("20260514")
+                .build();
+
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
+                ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
+                .thenReturn(Optional.of(account));
+        when(dartDisclosureRepository.findByAccountId(eq(ACCOUNT_ID), any(Pageable.class)))
+                .thenReturn(List.of(dart));
+
+        List<AccountSignalResponse> result = accountService.findSignals(ACCOUNT_ID, "DART", 5);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).source()).isEqualTo("DART");
+        assertThat(result.get(0).title()).isEqualTo("사업보고서 (2025.12)");
+        assertThat(result.get(0).url()).isEqualTo("https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260514000123");
+        verifyNoInteractions(accountExternalInfoRepository);
+    }
+
+    @Test
+    @DisplayName("source=null 조회 시 NEWS(account_external_info) + DART(dart_disclosures) 를 합쳐 occurredAt 내림차순 반환한다")
+    void nullSourceMergesBothSources() {
+        Account account = mock(Account.class);
+
+        AccountExternalInfo newsInfo = mock(AccountExternalInfo.class);
+        OffsetDateTime newsTime = OffsetDateTime.parse("2026-05-13T10:00:00+09:00");
+        given(newsInfo.getSource()).willReturn("NEWS");
+        given(newsInfo.getTitle()).willReturn("뉴스 기사");
+        given(newsInfo.getContent()).willReturn("내용");
+        given(newsInfo.getUrl()).willReturn("https://news.example.com");
+        given(newsInfo.getOccurredAt()).willReturn(newsTime);
+
+        DartDisclosure dart = DartDisclosure.builder()
+                .corpCode("00126380")
+                .corpName("삼성전자")
+                .reportNm("분기보고서")
+                .rceptNo("20260514000456")
+                .rceptDt("20260514")
+                .build();
+
+        when(accountRepository.findByIdAndAssignedUserIdAndTenantId(
+                ACCOUNT_ID, CURRENT_USER_ID, CURRENT_TENANT_ID))
+                .thenReturn(Optional.of(account));
+        when(accountExternalInfoRepository.findRecentByAccountAndOptionalSource(
+                eq(ACCOUNT_ID), eq("NEWS"), any(Pageable.class)))
+                .thenReturn(List.of(newsInfo));
+        when(dartDisclosureRepository.findByAccountId(eq(ACCOUNT_ID), any(Pageable.class)))
+                .thenReturn(List.of(dart));
+
+        List<AccountSignalResponse> result = accountService.findSignals(ACCOUNT_ID, null, 20);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).source()).isEqualTo("DART");
+        assertThat(result.get(1).source()).isEqualTo("NEWS");
     }
 
     @Test
