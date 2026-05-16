@@ -6,6 +6,8 @@ import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
 import { formatTime, formatFullDate } from './utils';
+import { useUploadRecording, usePollSttStatus, type SttLine } from '@/hooks/useActivity';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 import {
   useUploadRecording,
   useTranscriptStream,
@@ -53,6 +55,7 @@ export function formatSpeakerLabel(line: SttLine, fallbackIndex?: number): strin
 
 
 export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: Props) {
+  const confirm = useConfirm();
   const [rightView, setRightView] = useState<RightView>('memo');
   const [deleting, setDeleting] = useState(false);
   const [recordSec, setRecordSec] = useState(0);

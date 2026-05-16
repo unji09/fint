@@ -12,13 +12,11 @@ function getMonthRange(date: Date) {
 
 function getWeekRange(date: Date) {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const mon = new Date(d);
-  mon.setDate(d.getDate() + diff);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  return { start: mon, end: sun };
+  const sun = new Date(d);
+  sun.setDate(d.getDate() - d.getDay());
+  const sat = new Date(sun);
+  sat.setDate(sun.getDate() + 6);
+  return { start: sun, end: sat };
 }
 
 function fmt(d: Date): string {
@@ -192,6 +190,25 @@ function readMemoCache(eventId: string): string | null {
     return parsed.memo;
   } catch {
     return null;
+  }
+}
+
+/** 일정 카드 리사이즈 (드래그 종료 시점) — startAt/endAt 만 PATCH.
+ *  FINT 활동(eventId = "act-{id}") 만 처리. Google 이벤트는 false 반환.
+ *  ISO 문자열은 호출자가 KST(+09:00) 로 직렬화해 전달.
+ */
+export async function resizeActivity(eventId: string, startAt: string, endAt: string): Promise<boolean> {
+  if (!eventId.startsWith('act-')) return false;
+  const activityId = eventId.replace(/^act-/, '');
+  try {
+    const res = await fetchWithAuth(`/activities/${activityId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ startAt, endAt }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('[resizeActivity]', err);
+    return false;
   }
 }
 

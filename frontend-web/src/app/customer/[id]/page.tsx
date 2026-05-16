@@ -12,6 +12,7 @@ import { useAccountList, useAccountDetail } from '@/hooks/useCustomer';
 import { useCustomer } from '../CustomerContext';
 import { useDeleteContact, useUpdateContact } from '@/hooks/useContact';
 import { useCreateDeal } from '@/hooks/useDeal';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 import { useNextActions, fetchNextActionDetail } from '@/hooks/useNextActions';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import type { Deal, StrategyCard } from '@/types/customer';
@@ -51,6 +52,7 @@ export default function CustomerDetailPage() {
 
   // 사이드바와 공유하는 선택 상태 (layout 의 CustomerProvider)
   const { selContact, setSelContact } = useCustomer();
+  const confirm = useConfirm();
 
   const strats: StrategyCard[] = nextActions.map(a => ({ id: a.suggestionId, title: a.title, category: a.category, successRate: a.successRate }));
 
@@ -132,8 +134,9 @@ export default function CustomerDetailPage() {
             <WeatherPanel mood={acc.temperature} reason={acc.moodReason} />
           )}
 
-          {/* 메인 카드 — 높이 고정으로 컨텐츠 전환 시 흔들림 차단 */}
-          <div style={{ background: '#fff', border: '1px solid #e2eaf0', borderRadius: 10, display: 'flex', flexDirection: allDeals ? 'column' : 'row', flexShrink: 0, height: allDeals ? 320 : 280, overflow: 'hidden' }}>
+          {/* 메인 카드 — height 자동. 카드 수에 따라 박스 세로가 자라/줄어 빈 공간을 없앤다.
+              일반 모드(row): 양 패널 중 큰 쪽에 맞춰 stretch. 전체 보기(column): 콘텐츠 그대로. */}
+          <div style={{ background: '#fff', border: '1px solid #e2eaf0', borderRadius: 10, display: 'flex', flexDirection: allDeals ? 'column' : 'row', flexShrink: 0, overflow: 'hidden' }}>
             {allDeals ? (
               <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -141,12 +144,16 @@ export default function CustomerDetailPage() {
                   <button onClick={() => setAllDeals(false)} style={{ fontFamily: F, fontSize: 12, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>접기</button>
                 </div>
                 {visDeal.length > 0 ? (
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start', alignContent: 'flex-start' }}>
-                    {visDeal.map(d => <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} />)}
+                  // 박스 height 자동 → flex 컨테이너만 콘텐츠 크기로. wrap 으로 자연스럽게 줄바꿈.
+                  // space-evenly: 양옆 / 카드 사이 빈 공간 균등 분배.
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-evenly', alignItems: 'center', gap: 16 }}>
+                    {visDeal.map(d => (
+                      <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} />
+                    ))}
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0 }}>딜이 없습니다.</p>
+                  <div style={{ minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0, textAlign: 'center' }}>딜이 없습니다.</p>
                   </div>
                 )}
               </div>
@@ -161,7 +168,7 @@ export default function CustomerDetailPage() {
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={() => setEditContact(v => !v)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>{editContact ? '취소' : '편집'}</button>
                           <button onClick={async () => {
-                            if (!selContact.contactId || !window.confirm(`${selContact.name} 삭제?`)) return;
+                            if (!selContact.contactId || !await confirm(`${selContact.name} 삭제?`)) return;
                             if (await delContact(selContact.contactId)) { setSelContact(null); refDetail(); }
                           }} style={{ fontFamily: F, fontSize: 11, color: '#94a3b8', cursor: 'pointer', background: 'none', border: 'none' }}>삭제</button>
                         </div>
@@ -205,7 +212,13 @@ export default function CustomerDetailPage() {
                         <span style={{ fontFamily: F, fontWeight: 600, fontSize: 14, color: '#1e293b' }}>회사 정보</span>
                         <button style={{ fontFamily: F, fontSize: 11, color: '#94a3b8', cursor: 'pointer', background: 'none', border: 'none' }}>더보기</button>
                       </div>
-                      {signals.length > 0 ? signals.slice(0, 3).map((s, i) => <SignalItem key={i} signal={s} accent={SA[i] ?? '#cbd5e1'} />) : <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8' }}>시그널 없음</p>}
+                      {signals.length > 0 ? (
+                        signals.slice(0, 3).map((s, i) => <SignalItem key={i} signal={s} accent={SA[i] ?? '#cbd5e1'} />)
+                      ) : (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0, textAlign: 'center' }}>시그널 없음</p>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -236,14 +249,15 @@ export default function CustomerDetailPage() {
                       </button>
                     </div>
                   ) : visDeal.length > 0 ? (
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    // 전체 보기와 동일 패턴: flex + space-evenly + 세로 가운데
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-evenly', alignItems: 'center', alignContent: 'center', gap: 16 }}>
                       {visDeal.slice(0, 2).map(d => (
                         <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} />
                       ))}
                     </div>
                   ) : (
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0 }}>
+                      <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0, textAlign: 'center' }}>
                         {selContact ? '연결된 딜 없음' : '진행 중인 딜 없음'}
                       </p>
                     </div>

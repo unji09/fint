@@ -9,22 +9,21 @@ public record NotificationItemResponse(
         Long notificationId,
         String title,
         String category,
-        String signalSummary,
-        String signalTypeBadge,
+        Map<String, Object> sources,
         String pipelineStage,
         String accountName,
         boolean isRead,
         OffsetDateTime createdAt
 ) {
 
+    @SuppressWarnings("unchecked")
     public static NotificationItemResponse from(AiSuggestion suggestion) {
         Map<String, Object> reason = suggestion.getReason();
         return new NotificationItemResponse(
                 suggestion.getAiSuggestionId(),
                 suggestion.getTitle(),
-                (String) reason.get("activityType"),
-                (String) reason.get("signalSummary"),
-                (String) reason.get("signalTypeBadge"),
+                suggestion.getCategory(),
+                (Map<String, Object>) reason.get("sources"),
                 suggestion.getPipelineStage().getName(),
                 suggestion.getAccount().getName(),
                 suggestion.isRead(),

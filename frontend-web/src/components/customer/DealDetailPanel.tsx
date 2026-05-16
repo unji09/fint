@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import PipelineProgress from './PipelineProgress';
 import { fetchWithAuth } from '@/hooks/useAuth';
+import { useConfirm, usePrompt } from '@/components/common/ConfirmDialog';
 import type { Deal } from '@/types/customer';
 
 // 백엔드 DealDetailResponse 와 1:1 매칭
@@ -63,6 +64,8 @@ interface Props {
 }
 
 export default function DealDetailPanel({ deal, onDealChanged }: Props) {
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const [detail, setDetail] = useState<DealDetail | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +152,7 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
             <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={async () => {
-                if (!window.confirm('이 딜을 완료 처리할까요?')) return;
+                if (!await confirm('이 딜을 완료 처리할까요?')) return;
                 // DealUpdateRequest: pipelineStageId(7=수주) + wonAt 동시 갱신
                 try {
                   await fetchWithAuth(`/deals/${deal.dealId}`, {
@@ -162,7 +165,7 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
                 딜 완료
               </button>
               <button onClick={async () => {
-                const reason = window.prompt('실주 사유를 입력하세요 (선택)');
+                const reason = await prompt({ message: '실주 사유를 입력하세요', placeholder: '사유 입력 (선택)', variant: 'danger', confirmText: '실패 처리' });
                 if (reason === null) return;
                 // lostAt 도 함께 갱신 (백엔드가 자동 갱신하지 않을 수 있어 명시)
                 try {
@@ -177,7 +180,7 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
               </button>
             </div>
             <button onClick={async () => {
-              if (!window.confirm('이 딜을 삭제할까요? 복구할 수 없습니다.')) return;
+              if (!await confirm({ message: '이 딜을 삭제할까요? 복구할 수 없습니다.', variant: 'danger' })) return;
               try { await fetchWithAuth(`/deals/${deal.dealId}`, { method: 'DELETE' }); onDealChanged?.(); } catch { /* */ }
             }} style={{ padding: '6px 0', borderRadius: 6, border: '1px solid #e2eaf0', backgroundColor: '#fff', color: '#94a3b8', fontFamily: 'Pretendard,sans-serif', fontSize: 11, cursor: 'pointer' }}>
               딜 삭제
@@ -198,7 +201,7 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
         </div>
 
         <PipelineProgress current={stageIdx} onStageClick={async (idx, stageName) => {
-          if (!window.confirm(`파이프라인을 "${stageName}" 단계로 변경할까요?`)) return;
+          if (!await confirm(`파이프라인을 "${stageName}" 단계로 변경할까요?`)) return;
           const stageId = idx + 1; // pipeline_stages PK: 1=발굴, 2=가치제안, ...7=수주
           try { await fetchWithAuth(`/deals/${deal.dealId}`, { method: 'PATCH', body: JSON.stringify({ pipelineStageId: stageId }) }); onDealChanged?.(); } catch { /* */ }
         }} />

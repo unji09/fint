@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
 import GNB from '@/components/common/GNB';
+import ConfirmDialogProvider from '@/components/common/ConfirmDialog';
 
 export const metadata: Metadata = {
   title: 'F!NT — AI 기반 B2B 영업 CRM',
   description: '기록하는 CRM이 아니라, 행동을 만들어내는 CRM',
+  icons: {
+    icon: '/logo.png',
+  },
 };
 
 const GNB_H = 80;
@@ -22,17 +26,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           flexDirection: 'column',
         }}
       >
-        <GNB />
-        <main
-          style={{
-            height: `calc(100vh - ${GNB_H}px)`,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
-          {children}
-        </main>
+        <ConfirmDialogProvider>
+          <GNB />
+          <main
+            style={{
+              height: `calc(100vh - ${GNB_H}px)`,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {children}
+          </main>
+        </ConfirmDialogProvider>
       </body>
     </html>
   );

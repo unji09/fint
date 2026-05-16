@@ -12,6 +12,7 @@
 // 시간 그룹: "방금 전" (5분 이내) / "오늘" / "이번 주" / "이전".
 
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { fetchWithAuth } from '@/hooks/useAuth';
 
 const F = "'Pretendard', -apple-system, sans-serif";
@@ -28,13 +29,19 @@ const F = "'Pretendard', -apple-system, sans-serif";
  * 명세서 그림의 successRate / recommendation / accountId 등은 백엔드 미구현이라
  * 옵셔널로만 두고 응답에 들어오면 자동 표시.
  */
+export interface SourceItem {
+  title?: string;
+  summary?: string;
+  url?: string;
+}
+
 export interface NotificationItem {
   notificationId: number;
   title: string;
-  category: string | null;          // activityType (MEETING / CALL / EMAIL / MEMO)
-  signalSummary: string | null;     // 신호 요약 본문
-  signalTypeBadge: string | null;   // News / DART / AI 분석
-  pipelineStage: string | null;     // 파이프라인 단계명
+  /** 전략 카테고리 — NextAction.data.category (예: "ROI 기반 전략") */
+  category: string | null;
+  sources: Record<string, SourceItem[]> | null;
+  pipelineStage: string | null;
   accountName: string | null;
   isRead: boolean;
   createdAt: string;
@@ -43,6 +50,25 @@ export interface NotificationItem {
   accountId?: number;
   successRate?: number;
   recommendation?: { title?: string; sub?: string; predictedDelta?: number };
+}
+
+// 7일 이내 상대(방금 전/N분 전/오늘/어제/N일 전), 그 이상은 MM/DD
+function formatRelativeOrDate(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const now = Date.now();
+  const diffMs = now - t;
+  if (diffMs < 5 * 60_000) return '방금 전';
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 60) return `${diffMin}분 전`;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const target = new Date(t); target.setHours(0, 0, 0, 0);
+  const dayDelta = Math.round((today.getTime() - target.getTime()) / (24 * 60 * 60_000));
+  if (dayDelta <= 0) return '오늘';
+  if (dayDelta === 1) return '어제';
+  if (dayDelta <= 6) return `${dayDelta}일 전`;
+  const d = new Date(t);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 interface Props {
@@ -56,43 +82,64 @@ interface Props {
   onAllRead?: () => void;
 }
 
-// ── 시간 그룹 분류 ──────────────────────────────────────────
-type Bucket = '방금 전' | '오늘' | '이번 주' | '이전';
-
-function classifyBucket(iso: string): Bucket {
-  const now = Date.now();
-  const t = new Date(iso).getTime();
-  const diff = now - t;
-  if (diff < 5 * 60_000) return '방금 전';
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (t >= today.getTime()) return '오늘';
-  if (diff < 7 * 24 * 60 * 60_000) return '이번 주';
-  return '이전';
-}
-
-const BUCKET_ORDER: Bucket[] = ['방금 전', '오늘', '이번 주', '이전'];
-const BUCKET_COLOR: Record<Bucket, string> = {
-  '방금 전': '#EF4444',
-  오늘: '#737880',
-  '이번 주': '#737880',
-  이전: '#9CA193',
+// ── 소스 타입별 뱃지 스타일 ─────────────────────────────────
+const SOURCE_BADGE_STYLE: Record<string, { label: string; bg: string; color: string }> = {
+  news: { label: 'News', bg: '#FFE4E1', color: '#D85A30' },
+  dart: { label: 'DART', bg: '#FEF3C7', color: '#B45309' },
+  crm: { label: 'CRM', bg: '#E0E7FF', color: '#5B5BD6' },
 };
 
-// ── 신호 타입 뱃지 색상 ─────────────────────────────────────
-function signalBadge(type?: string): { label: string; bg: string; color: string } | null {
-  if (!type) return null;
-  const t = type.toLowerCase();
-  if (t.includes('news') || t.includes('뉴스')) return { label: 'News', bg: '#FFE4E1', color: '#D85A30' };
-  if (t.includes('dart') || t.includes('공시')) return { label: 'DART', bg: '#FEF3C7', color: '#B45309' };
-  if (t.includes('ai') || t.includes('분석')) return { label: 'AI 분석', bg: '#E0E7FF', color: '#5B5BD6' };
-  return { label: type, bg: '#F0F0EE', color: '#737880' };
+function getActiveSourceTypes(sources: Record<string, SourceItem[]> | null | undefined) {
+  if (!sources) return [];
+  return Object.entries(sources)
+    .filter(([, items]) => Array.isArray(items) && items.length > 0)
+    .map(([type]) => type);
+}
+
+function getFirstSummary(sources: Record<string, SourceItem[]> | null | undefined): string | null {
+  if (!sources) return null;
+  for (const items of Object.values(sources)) {
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      if (item.summary) return item.summary;
+      if (item.title) return item.title;
+    }
+  }
+  return null;
 }
 
 export default function NotificationPanel({ open, onClose, notifications, onItemRead, onAllRead }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+  const isCalendar = pathname === '/calendar';
   // 클릭한 알림의 인라인 확장 — 한 번에 하나만 펼침
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  // 드래그 중 패널/backdrop 숨김 (캘린더 드롭 가능하도록)
+  const [isDragging, setIsDragging] = useState(false);
+  const handleCardDragEnd = (dropEffect: string) => {
+    if (dropEffect !== 'none') {
+      onClose();
+    }
+    setIsDragging(false);
+  };
+  // open 시점에 unread 였던 알림 ID 스냅샷.
+  // panel 이 열려 있는 동안에는 클릭으로 읽음 처리되어도 카드가 "새 알림" 섹션에 그대로 남도록
+  // (정렬 변경으로 expand 영역이 시야 밖으로 사라지는 문제 방지). panel 닫고 다시 열면 재정렬.
+  const [stickyUnreadIds, setStickyUnreadIds] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (!open) {
+      // 닫힐 때 expand 도 함께 초기화
+      setExpandedId(null);
+      setStickyUnreadIds(new Set());
+      return;
+    }
+    setStickyUnreadIds((prev) => {
+      const next = new Set(prev);
+      notifications.forEach((n) => { if (!n.isRead) next.add(n.notificationId); });
+      return next;
+    });
+    // 새 알림이 추가될 때도 sticky 에 포함되도록 notifications 의존성
+  }, [open, notifications]);
 
   // ESC 닫기
   useEffect(() => {
@@ -116,17 +163,16 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
 
   if (!open) return null;
 
-  // 시간 그룹화
-  const grouped: Record<Bucket, NotificationItem[]> = {
-    '방금 전': [],
-    오늘: [],
-    '이번 주': [],
-    이전: [],
-  };
-  notifications.forEach((n) => {
-    grouped[classifyBucket(n.createdAt)].push(n);
+  // sticky 기반 분리 — open 동안에는 isRead 변경되어도 sticky 안에 있으면 unread 섹션에 머무름.
+  const isUnreadDisplay = (n: NotificationItem) => !n.isRead || stickyUnreadIds.has(n.notificationId);
+  const sortedNotis = [...notifications].sort((a, b) => {
+    const au = isUnreadDisplay(a), bu = isUnreadDisplay(b);
+    if (au !== bu) return au ? -1 : 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
-
+  const unreadList = sortedNotis.filter(isUnreadDisplay);
+  const readList = sortedNotis.filter((n) => !isUnreadDisplay(n));
+  // 배지 카운트는 실제 isRead 기준 (sticky 무관)
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleMarkAllRead = async () => {
@@ -164,12 +210,17 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
           backgroundColor: 'rgba(0, 0, 0, 0.32)',
           zIndex: 999,
           animation: 'noti-backdrop-in 0.18s ease-out',
+          ...(isDragging ? { opacity: 0, pointerEvents: 'none' as const, transition: 'opacity 0.15s' } : {}),
         }}
       />
 
       {/* Panel */}
       <aside
         ref={panelRef}
+        onDragStart={(e) => {
+          const el = e.target as HTMLElement;
+          if (!el.closest('[draggable="true"]')) e.preventDefault();
+        }}
         style={{
           position: 'fixed',
           top: 0,
@@ -184,6 +235,7 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
           flexDirection: 'column',
           fontFamily: F,
           animation: 'noti-panel-in 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+          ...(isDragging ? { transform: 'translateX(100%)', pointerEvents: 'none' as const, transition: 'transform 0.15s' } : {}),
         }}
       >
         <style>{`
@@ -263,42 +315,47 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
           </div>
         </div>
 
-        {/* 본문 */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 32px' }}>
+        {/* 본문 — 안 읽음 위, 읽음 아래 */}
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 0 32px', minWidth: 0 }}>
           {notifications.length === 0 ? (
             <div style={{ padding: '48px 24px', textAlign: 'center', color: '#9CA193', fontSize: 13 }}>
               새로운 알림이 없어요.
             </div>
           ) : (
-            BUCKET_ORDER.map((bucket) => {
-              const items = grouped[bucket];
-              if (items.length === 0) return null;
-              return (
-                <section key={bucket} style={{ marginTop: 16 }}>
-                  <div
-                    style={{
-                      padding: '0 24px 8px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: BUCKET_COLOR[bucket],
-                      letterSpacing: '0.02em',
-                    }}
-                  >
-                    {bucket}
+            <>
+              {unreadList.length > 0 && (
+                <section>
+                  <div style={{ padding: '0 24px 8px', fontSize: 11, fontWeight: 600, color: '#EF4444', letterSpacing: '0.02em' }}>
+                    새 알림 {unreadList.length}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
-                    {items.map((n) => (
+                    {unreadList.map((n) => (
+                      <NotificationCard key={n.notificationId} n={n} expanded={expandedId === n.notificationId} onClick={() => handleClick(n)} />
+                    ))}
+                  </div>
+                </section>
+              )}
+              {readList.length > 0 && (
+                <section style={{ marginTop: unreadList.length > 0 ? 20 : 0 }}>
+                  <div style={{ padding: '0 24px 8px', fontSize: 11, fontWeight: 600, color: '#9CA193', letterSpacing: '0.02em' }}>
+                    읽은 알림
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
+                    {readList.map((n) => (
                       <NotificationCard
                         key={n.notificationId}
                         n={n}
                         expanded={expandedId === n.notificationId}
                         onClick={() => handleClick(n)}
+                        draggable={isCalendar}
+                        onDragStart={() => setIsDragging(true)}
+                        onCardDragEnd={handleCardDragEnd}
                       />
                     ))}
                   </div>
                 </section>
-              );
-            })
+              )}
+            </>
           )}
         </div>
       </aside>
@@ -306,39 +363,220 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
   );
 }
 
+// ─── 드래그 커스텀 고스트 (모듈 레벨) ────────────────────────
+let _ghostEl: HTMLDivElement | null = null;
+let _ghostMove: ((e: DragEvent) => void) | null = null;
+let _ghostOffsetX = 0;
+let _ghostOffsetY = 0;
+const GHOST_OPACITY = 0.85;
+
+function cleanupGhost() {
+  if (_ghostEl) { _ghostEl.remove(); _ghostEl = null; }
+  if (_ghostMove) { document.removeEventListener('dragover', _ghostMove); _ghostMove = null; }
+}
+
 // ─── 알림 카드 ───────────────────────────────────────────────
-function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expanded: boolean; onClick: () => void }) {
-  const badge = signalBadge(n.signalTypeBadge ?? undefined);
+function NotificationCard({ n, expanded, onClick, draggable, onDragStart: onDragStartCb, onCardDragEnd }: {
+  n: NotificationItem; expanded: boolean; onClick: () => void; draggable?: boolean;
+  onDragStart?: () => void; onCardDragEnd?: (dropEffect: string) => void;
+}) {
+  const activeTypes = getActiveSourceTypes(n.sources);
+  const firstSummary = getFirstSummary(n.sources);
   const hasAccount = !!n.accountName;
-  const hasSignal = !!n.signalSummary || !!badge;
+  const hasSignal = activeTypes.length > 0 || !!firstSummary;
   const hasRecommendation = !!n.recommendation?.title;
+  // 좌상단 — NextAction 전략 카테고리 (data.category)
+  const categoryLabel = n.category ?? null;
+
+  const handleDragStart = (e: React.DragEvent) => {
+    // 텍스트 선택 상태에서 드래그 시작 시 브라우저 기본 텍스트 드래그 방지
+    const sel = window.getSelection();
+    if (sel && sel.toString().length > 0) {
+      sel.removeAllRanges();
+    }
+
+    const payload = {
+      title: n.title,
+      accountName: n.accountName ?? undefined,
+      accountId: n.accountId ?? undefined,
+      category: n.category ?? undefined,
+    };
+    e.dataTransfer.setData('application/x-fint-notification', JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = 'copy';
+
+    // 브라우저 기본 고스트 숨기기 (1x1 투명 이미지)
+    const blank = document.createElement('canvas');
+    blank.width = 1;
+    blank.height = 1;
+    e.dataTransfer.setDragImage(blank, 0, 0);
+
+    // 커스텀 고스트 생성
+    cleanupGhost();
+    const ghost = document.createElement('div');
+    ghost.style.cssText = `width:130px;padding:10px 8px;background:#fff;border:1px solid #ECEDE5;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.10);opacity:${GHOST_OPACITY};font-family:Pretendard,-apple-system,sans-serif;position:fixed;top:-9999px;left:-9999px;z-index:99999;display:flex;flex-direction:column;gap:3px;pointer-events:none;`;
+    const titleEl = document.createElement('div');
+    titleEl.textContent = n.title;
+    titleEl.style.cssText = 'font-size:7.5px;font-weight:600;color:#1F2126;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    ghost.appendChild(titleEl);
+    if (n.accountName || n.pipelineStage) {
+      const meta = document.createElement('div');
+      meta.style.cssText = 'font-size:7.5px;color:#737880;display:flex;align-items:center;gap:2px;';
+      if (n.accountName) {
+        const s = document.createElement('span');
+        s.textContent = n.accountName;
+        meta.appendChild(s);
+      }
+      if (n.pipelineStage) {
+        if (n.accountName) {
+          const dot = document.createElement('span');
+          dot.textContent = '·';
+          dot.style.color = '#CBD5E1';
+          meta.appendChild(dot);
+        }
+        const s = document.createElement('span');
+        s.textContent = n.pipelineStage;
+        s.style.cssText = 'font-size:7.5px;color:#534AB7;background:#F0EDF7;padding:1px 3px;border-radius:2px;font-weight:500;';
+        meta.appendChild(s);
+      }
+      ghost.appendChild(meta);
+    }
+    document.body.appendChild(ghost);
+    _ghostEl = ghost;
+
+    // 카드 내 클릭 비율을 고스트 크기에 비례 매핑
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratioX = (e.clientX - rect.left) / rect.width;
+    const ratioY = (e.clientY - rect.top) / rect.height;
+    _ghostOffsetX = ratioX * ghost.offsetWidth;
+    _ghostOffsetY = ratioY * ghost.offsetHeight;
+
+    // 마우스 추적
+    _ghostMove = (ev: DragEvent) => {
+      if (_ghostEl && ev.clientX > 0 && ev.clientY > 0) {
+        _ghostEl.style.left = `${ev.clientX - _ghostOffsetX}px`;
+        _ghostEl.style.top = `${ev.clientY - _ghostOffsetY}px`;
+      }
+    };
+    document.addEventListener('dragover', _ghostMove);
+
+    setTimeout(() => onDragStartCb?.(), 0);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    cleanupGhost();
+    onCardDragEnd?.(e.dataTransfer.dropEffect);
+  };
 
   return (
     <button
       onClick={onClick}
+      draggable={draggable}
+      onDragStart={draggable ? handleDragStart : undefined}
+      onDragEnd={draggable ? handleDragEnd : undefined}
       style={{
+        position: 'relative',
         width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
         textAlign: 'left',
         backgroundColor: expanded ? '#fff' : n.isRead ? '#FAFAF7' : '#fff',
-        border: `1px solid ${expanded ? '#06B6D4' : '#ECEDE5'}`,
+        border: `1px solid ${expanded ? '#06B6D4' : n.isRead ? '#ECEDE5' : '#cffafe'}`,
         borderRadius: 10,
-        padding: '14px 16px',
-        cursor: 'pointer',
+        padding: '14px 18px 26px 16px',
+        cursor: draggable ? 'grab' : 'pointer',
+        userSelect: draggable ? 'none' : undefined,
+        WebkitUserSelect: draggable ? 'none' : undefined,
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
         transition: 'background-color 0.12s, border-color 0.12s',
         fontFamily: F,
+        opacity: n.isRead && !expanded ? 0.75 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!expanded) e.currentTarget.style.borderColor = '#D6D9CB';
+        if (!expanded) e.currentTarget.style.borderColor = '#06B6D4';
       }}
       onMouseLeave={(e) => {
-        if (!expanded) e.currentTarget.style.borderColor = '#ECEDE5';
+        if (!expanded) e.currentTarget.style.borderColor = n.isRead ? '#ECEDE5' : '#cffafe';
       }}
     >
-      {/* 제목 */}
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#1F2126', lineHeight: 1.45, letterSpacing: '-0.005em' }}>
+      {/* 좌상단 — 전략 카테고리 (NextAction.category) */}
+      {categoryLabel && (
+        <div>
+          <span
+            style={{
+              display: 'inline-block',
+              fontSize: 10,
+              fontWeight: 600,
+              color: '#0686D4',
+              backgroundColor: '#EEF6FF',
+              padding: '3px 9px',
+              borderRadius: 4,
+              letterSpacing: '0.02em',
+            }}
+          >
+            {categoryLabel}
+          </span>
+        </div>
+      )}
+      {/* 우상단 — 읽음/안 읽음 표시 (텍스트 + dot) */}
+      <div
+        aria-label={n.isRead ? '읽은 알림' : '안 읽은 알림'}
+        style={{
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          pointerEvents: 'none',
+        }}
+      >
+        {!n.isRead ? (
+          <>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#EF4444',
+                letterSpacing: '0.04em',
+              }}
+            >
+              NEW
+            </span>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#EF4444' }} />
+          </>
+        ) : (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 500,
+              color: '#94A3B8',
+              letterSpacing: '0.04em',
+            }}
+          >
+            읽음
+          </span>
+        )}
+      </div>
+      {/* 우하단 — 시간 */}
+      <span
+        style={{
+          position: 'absolute',
+          bottom: 10,
+          right: 12,
+          fontSize: 11,
+          color: '#94A3B8',
+          fontWeight: 400,
+          fontVariantNumeric: 'tabular-nums',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {formatRelativeOrDate(n.createdAt)}
+      </span>
+      {/* 제목 — 우상단 NEW/읽음 라벨 공간 확보 */}
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#1F2126', lineHeight: 1.45, letterSpacing: '-0.005em', paddingRight: !n.isRead ? 44 : 30, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
         {n.title}
       </div>
 
@@ -368,24 +606,28 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: '#737880' }}>감지된 신호</span>
-            {badge && (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: badge.color,
-                  backgroundColor: badge.bg,
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  letterSpacing: '0.02em',
-                }}
-              >
-                {badge.label}
-              </span>
-            )}
+            {activeTypes.map((type) => {
+              const style = SOURCE_BADGE_STYLE[type] ?? { label: type, bg: '#F0F0EE', color: '#737880' };
+              return (
+                <span
+                  key={type}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: style.color,
+                    backgroundColor: style.bg,
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {style.label}
+                </span>
+              );
+            })}
           </div>
-          {n.signalSummary && (
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: '#475569' }}>{n.signalSummary}</p>
+          {firstSummary && (
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: '#475569' }}>{firstSummary}</p>
           )}
         </div>
       )}
@@ -430,8 +672,8 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
         </div>
       )}
 
-      {/* ── 확장 영역 (인라인 상세) ── */}
-      {expanded && (
+      {/* ── 확장 영역 — sources 의 각 source 카드 클릭 시 원문 새 탭 ── */}
+      {expanded && n.sources && activeTypes.length > 0 && (
         <div
           style={{
             marginTop: 4,
@@ -439,49 +681,80 @@ function NotificationCard({ n, expanded, onClick }: { n: NotificationItem; expan
             borderTop: '1px solid #ECEDE5',
             display: 'flex',
             flexDirection: 'column',
-            gap: 10,
+            gap: 8,
           }}
         >
-          {n.category && (
-            <DetailRow label="활동 유형" value={n.category} />
-          )}
-          {n.signalSummary && (
-            <DetailRow label="시그널 본문" value={n.signalSummary} multiline />
-          )}
-          <DetailRow label="알림 시각" value={formatFullDateTime(n.createdAt)} />
-          <DetailRow label="상태" value={n.isRead ? '읽음' : '미읽음'} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#737880' }}>근거 데이터</span>
+          {activeTypes.flatMap((type) => {
+            const items = n.sources![type];
+            const style = SOURCE_BADGE_STYLE[type] ?? { label: type, bg: '#F0F0EE', color: '#737880' };
+            return items.map((item, i) => (
+              <a
+                key={`${type}-${i}`}
+                href={item.url || undefined}
+                target={item.url ? '_blank' : undefined}
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  textDecoration: 'none',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #ECEDE5',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  cursor: item.url ? 'pointer' : 'default',
+                  transition: 'background-color 0.12s, border-color 0.12s',
+                  maxWidth: '100%',
+                  minWidth: 0,
+                }}
+                onMouseEnter={(e) => {
+                  if (item.url) {
+                    (e.currentTarget as HTMLAnchorElement).style.backgroundColor = '#fff';
+                    (e.currentTarget as HTMLAnchorElement).style.borderColor = '#06B6D4';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLAnchorElement).style.backgroundColor = '#F8FAFC';
+                  (e.currentTarget as HTMLAnchorElement).style.borderColor = '#ECEDE5';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: style.color,
+                      backgroundColor: style.bg,
+                      padding: '2px 7px',
+                      borderRadius: 3,
+                      letterSpacing: '0.02em',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {style.label}
+                  </span>
+                  {item.title && (
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: '#1F2126', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.title}
+                    </span>
+                  )}
+                  {item.url && (
+                    <span style={{ fontSize: 10, color: '#0686d4', fontWeight: 500, flexShrink: 0 }}>원문 →</span>
+                  )}
+                </div>
+                {item.summary && (
+                  <p style={{ margin: 0, fontSize: 11, lineHeight: 1.5, color: '#475569', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>
+                    {item.summary}
+                  </p>
+                )}
+              </a>
+            ));
+          })}
         </div>
       )}
     </button>
   );
 }
 
-function DetailRow({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
-  return (
-    <div style={{ display: 'flex', gap: 10, alignItems: multiline ? 'flex-start' : 'center' }}>
-      <span style={{ fontSize: 11, color: '#9CA193', fontWeight: 600, minWidth: 64, flexShrink: 0, paddingTop: multiline ? 2 : 0 }}>
-        {label}
-      </span>
-      <span
-        style={{
-          flex: 1,
-          fontSize: 12,
-          color: '#475569',
-          lineHeight: multiline ? 1.6 : 1.4,
-          whiteSpace: multiline ? 'pre-wrap' : 'normal',
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function formatFullDateTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return iso;
-  }
-}

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.embedder import EmbedderClient
 from app.clients.naver import NaverNewsClient, NaverNewsItem
+from app.news.dedup import deduplicate_articles
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,8 @@ class NaverNewsCollector:
                         account_ids=account_ids,
                     )
                 )
+
+        new_articles = deduplicate_articles(new_articles)
 
         return NaverCollectResult(
             new_articles=new_articles,

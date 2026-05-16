@@ -67,7 +67,12 @@ export interface ContactInfo {
 export interface Signal {
   type: 'DART' | 'NEWS';
   time: string;
+  /** 한 줄 제목 (평소 표시) */
+  title: string;
+  /** 본문/요약 — 호버 시 펼쳐서 미리보기, 클릭 시 전체 표시 */
   content: string;
+  /** 외부 원문 링크 — 있을 때만 "자세히 보기" 노출 */
+  url?: string;
   isNew?: boolean;
 }
 
@@ -79,13 +84,23 @@ export interface Deal {
   expectedCloseDate?: string;
 }
 
+// API 명세 data.sources.{news|dart|crm}[].{ title, summary, url } 평탄화. content 는 호환 폴백.
+export interface StrategyBasis {
+  type: 'NEWS' | 'DART' | 'CRM';
+  title?: string;
+  summary?: string;
+  url?: string;
+  /** 호환: 구버전 표시 텍스트 — title/summary 가 없을 때만 사용 */
+  content?: string;
+}
+
 export interface StrategyCard {
   id: number;
   title: string;
   category: string;
   successRate: number;
   isExpanded?: boolean;
-  basisData?: { type: 'NEWS' | 'DART' | 'CRM'; content: string }[];
+  basisData?: StrategyBasis[];
   aiComment?: string;
   warning?: string;
 }
