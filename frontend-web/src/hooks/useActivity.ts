@@ -497,10 +497,10 @@ interface SegmentBuffer {
 const SENTENCE_END_RE = /[.!?。？！]\s*$/;
 /** 녹음 타임라인 상 이 ms 이상 gap → 새 발화로 간주 (침묵 감지) */
 const MAX_GAP_MS = 3000;
-/** 버퍼 누적 최대 청크 수 — 초과 시 강제 flush */
-const MAX_BUFFER_SEGMENTS = 5;
-/** 버퍼 시작 후 최대 대기 시간 (리셋 안 함) — 긴 문장 강제 출력 */
-const MAX_BUFFER_WALL_MS = 7000;
+/** 버퍼 누적 최대 청크 수 — 1로 설정해 각 Whisper 결과를 즉시 한 문장씩 출력 */
+const MAX_BUFFER_SEGMENTS = 1;
+/** 버퍼 시작 후 최대 대기 시간 — 마지막 문장이 다음 발화 없이도 2초 내 표시 */
+const MAX_BUFFER_WALL_MS = 2000;
 
 export function useTranscriptStream() {
   const wsRef = useRef<WebSocket | null>(null);
