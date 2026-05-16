@@ -24,11 +24,23 @@ public class SttStreamWebSocketConfig implements WebSocketConfigurer {
 
     // Tomcat 기본 바이너리 버퍼 8KB → 512KB 확장
     // 1초 webm/opus 청크가 ~10-15KB 이므로 기본값에서 1009(message too large) 발생
+    // MockServletContext 등 테스트 환경에는 Tomcat WebSocket 컨테이너가 없으므로 graceful하게 무시
     @Bean
     public ServletServerContainerFactoryBean createWebSocketContainer() {
-        ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
-        container.setMaxBinaryMessageBufferSize(512 * 1024);
-        container.setMaxTextMessageBufferSize(64 * 1024);
-        return container;
+        return new ServletServerContainerFactoryBean() {
+            @Override
+            public void afterPropertiesSet() throws Exception {
+                try {
+                    super.afterPropertiesSet();
+                } catch (IllegalStateException ignored) {
+                    // no-op: 실 서버 환경이 아니면 설정 스킵
+                }
+            }
+
+            {
+                setMaxBinaryMessageBufferSize(512 * 1024);
+                setMaxTextMessageBufferSize(64 * 1024);
+            }
+        };
     }
 }
