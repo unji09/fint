@@ -130,7 +130,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     if (!numericActivityId) return;
     fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
       .then((r) => r.json())
-      .then((j) => { const d = j?.data ?? j; setActivitySummary(d?.aiSummary ?? null); })
+      .then((j) => { const d = j?.data ?? j; setActivitySummary((d?.summary ?? d?.aiSummary) ?? null); })
       .catch(() => {});
   }, [numericActivityId]);
 
@@ -151,7 +151,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       if (rec.sttStatus === 'COMPLETED') {
         fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
           .then((r) => r.json())
-          .then((j) => { const d = j?.data ?? j; setActivitySummary(d?.aiSummary ?? null); })
+          .then((j) => { const d = j?.data ?? j; setActivitySummary((d?.summary ?? d?.aiSummary) ?? null); })
           .catch(() => {});
       }
     }
