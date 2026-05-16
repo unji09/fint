@@ -1,8 +1,12 @@
 package com.ssafy.fint.domain.activity.service;
 
-import com.ssafy.fint.domain.activity.dto.*;
+import com.ssafy.fint.domain.activity.dto.ActivityCreateRequest;
+import com.ssafy.fint.domain.activity.dto.ActivityCreateResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityListResponse;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateRequest;
+import com.ssafy.fint.domain.activity.dto.ActivityUpdateResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
-import com.ssafy.fint.domain.activity.entity.SttStatus;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.dto.DealCreateResponse;
 import com.ssafy.fint.domain.deal.dto.DealUpdateRequest;
@@ -37,7 +41,6 @@ public class ActivityService {
     private final PipelineStageRepository pipelineStageRepository;
     private final UserRepository userRepository;
     private final DealService dealService;
-    private final SttProcessorService sttProcessorService;
 
     public Page<Activity> findAll(ActivityListFilter filter, Pageable pageable) {
         return activityRepository.search(SecurityUtils.currentTenantId(), filter, pageable);
@@ -182,30 +185,4 @@ public class ActivityService {
         return ActivityUpdateResponse.from(saved);
     }
 
-    @Transactional
-    public RecordingResponse requestRecording(Long activityId, RecordingRequest request) {
-        Long tenantId = SecurityUtils.currentTenantId();
-        Long userId = SecurityUtils.currentUserId();
-
-        Activity activity = activityRepository
-            .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(activityId, userId, tenantId)
-            .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
-
-        if (activity.getSttStatus() == SttStatus.PROCESSING) {
-            throw new BusinessException(ActivityErrorCode.STT_ALREADY_PROCESSING);
-        }
-
-        activity.saveRecordingKey(request.fileKey());
-        activity.changeSttStatus(SttStatus.PROCESSING);
-
-        Deal deal = activity.getDeal();
-        Long accountId = (deal != null && deal.getAccount() != null)
-                ? deal.getAccount().getAccountId()
-                : null;
-        sttProcessorService.process(activityId, tenantId, accountId, request.fileKey(), "ko");
-
-        log.info("[Recording] activityId={} fileKey={}", activityId, request.fileKey());
-
-        return RecordingResponse.from(activity);
-    }
 }

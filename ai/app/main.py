@@ -10,7 +10,6 @@ from app.core.db import close_db, init_db
 from app.core.errors import register_exception_handlers
 from app.core.model_downloader import ensure_embedding_model
 from app.core.redis import close_redis, init_redis
-from app.core.speaker_session import SpeakerSessionManager
 from app.routers import dashboard, health, mood, news, ocr, strategy, stt, stt_stream
 
 
@@ -41,7 +40,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         threading.Thread(target=_download_and_load, daemon=True).start()
         log.info("Embedding model download started in background")
 
-    _app.state.speaker_session_manager = SpeakerSessionManager()
     if settings.GPU_SERVER_URL:
         _app.state.gpu_stt_client = GpuSttClient(base_url=settings.GPU_SERVER_URL)
         log.info("GPU STT client initialized: %s", settings.GPU_SERVER_URL)

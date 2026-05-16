@@ -74,12 +74,13 @@ public class RestTemplateConfig {
 
     /**
      * STT 전용 RestTemplate.
-     * 오디오 길이에 따라 수 분 소요 가능. read timeout 300s.
+     * POST(job 제출)와 GET(폴링)이 모두 빠르게 반환되므로 30s로 충분하다.
+     * 실제 처리 대기는 AiSttClient 폴링 루프(최대 3시간)가 담당한다.
      */
     @Bean
     public RestTemplate sttRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(300)))
+                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(30)))
                 .build();
     }
 

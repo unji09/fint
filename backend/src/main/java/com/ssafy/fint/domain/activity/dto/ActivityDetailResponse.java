@@ -15,10 +15,7 @@ public record ActivityDetailResponse(
         OffsetDateTime endAt,
         Attendees attendees,
         String memo,
-        String recordingKey,
-        String sttStatus,
         String moodStatus,
-        Map<String, Object> transcript,
         Map<String, Object> summary,
         PipelineStageResponse pipelineStage,
         Long dealId
@@ -33,10 +30,7 @@ public record ActivityDetailResponse(
                 activity.getEndAt(),
                 Attendees.from(activity.getAttendees()),
                 activity.getMemo(),
-                activity.getRecordingKey(),
-                activity.getSttStatus() == null ? null : activity.getSttStatus().name(),
                 activity.getMoodStatus() == null ? null : activity.getMoodStatus().name(),
-                activity.getTranscript(),
                 activity.getSummary(),
                 PipelineStageResponse.from(activity.getPipelineStage()),
                 activity.getDeal() == null ? null : activity.getDeal().getDealId()

@@ -32,5 +32,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(webSocketAuthInterceptor);
+        // 기본 단일 스레드 executor 교체 — 동시 연결/재연결 시 메시지 거부 방지
+        registration.taskExecutor()
+                .corePoolSize(4)
+                .maxPoolSize(8)
+                .queueCapacity(100);
     }
 }
