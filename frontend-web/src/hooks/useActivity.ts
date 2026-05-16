@@ -60,6 +60,8 @@ export interface ActivityDetail {
   // ── STT/AI 분석 결과 (명세: GET /activities/{id} 가 함께 포함)
   sttStatus?: SttStatus | null;
   sttTranscript?: SttLine[] | null;
+  /** 백엔드 ActivityDetailResponse.summary (Map). 구버전 호환을 위해 aiSummary 도 받음. */
+  summary?: Record<string, string> | null;
   aiSummary?: Record<string, string> | null;
   recordingFileKey?: string | null;
 }
@@ -383,8 +385,10 @@ export function usePollSttStatus() {
               const d = j?.data ?? j;
               const status: SttStatus = d?.sttStatus ?? 'NONE';
               const transcript: SttLine[] = normalize(d?.sttTranscript ?? d?.transcript);
+              // 백엔드 ActivityDetailResponse.summary (Map<String,Object>). 구버전 호환 위해 aiSummary 도 fallback.
+              const rawSummary = d?.summary ?? d?.aiSummary;
               const summary =
-                d?.aiSummary && typeof d.aiSummary === 'object' ? (d.aiSummary as Record<string, string>) : null;
+                rawSummary && typeof rawSummary === 'object' ? (rawSummary as Record<string, string>) : null;
               onUpdate({ status, transcript, summary });
               if (status === 'COMPLETED' || status === 'FAILED') return { status, transcript, summary };
             }

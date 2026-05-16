@@ -32,6 +32,37 @@ export default function GNB() {
   const [notiOpen, setNotiOpen] = useState(false);
   const [notis, setNotis] = useState<NotificationItem[]>([]);
   const [notiCount, setNotiCount] = useState(0);
+  // 토스트 state — 아래 WebSocket 효과보다 먼저 선언 (로그아웃 cleanup 에서 참조)
+  const [toast, setToast] = useState<NotificationItem | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── 로그인 상태 — accessToken 유무. 로그아웃되면 알림 모두 차단 ──
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const check = () => setIsLoggedIn(!!localStorage.getItem('accessToken'));
+    check();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'accessToken' || e.key === null) check();
+    };
+    window.addEventListener('storage', onStorage);
+    // 같은 탭의 토큰 변경(로그인/로그아웃) 감지 위한 폴링 (1초)
+    const t = setInterval(check, 1_000);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      clearInterval(t);
+    };
+  }, []);
+
+  // 로그아웃 시 알림 상태 전부 초기화
+  useEffect(() => {
+    if (isLoggedIn) return;
+    setNotis([]);
+    setNotiCount(0);
+    setNotiOpen(false);
+    setToast(null);
+    if (toastTimerRef.current) { clearTimeout(toastTimerRef.current); toastTimerRef.current = null; }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
@@ -68,6 +99,7 @@ export default function GNB() {
   //  - 응답에 없고 기존 state 에만 있는 알림 → isRead=true 로 토글 후 유지
   //  - createdAt desc 정렬
   const loadNotis = async () => {
+    if (!isLoggedIn) return; // 로그인 안 됐으면 호출 안 함
     try {
       const res = await fetchWithAuth('/notifications');
       if (!res.ok) return;
@@ -88,18 +120,17 @@ export default function GNB() {
     }
   };
 
-  // 페이지 진입 시 한 번 미리 로드 (배지 개수용)
-  useEffect(() => { loadNotis(); }, []);
+  // 로그인 상태일 때만 페이지 진입 시 미리 로드
+  useEffect(() => { if (isLoggedIn) loadNotis(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [isLoggedIn]);
 
   const handleNotiClick = () => {
+    if (!isLoggedIn) return;
     if (!notiOpen) loadNotis();
     setNotiOpen((v) => !v);
   };
 
   // ── 실시간 긴급 알림 (WebSocket STOMP) ──
   // /user/queue/notifications 구독. 새 알림 수신 시 목록 push + 토스트 표시.
-  const [toast, setToast] = useState<NotificationItem | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 토스트 swipe-dismiss — 우측/위로 드래그하면 사라짐
   const [toastDrag, setToastDrag] = useState<{ startX: number; startY: number; dx: number; dy: number; dragging: boolean }>(
     { startX: 0, startY: 0, dx: 0, dy: 0, dragging: false },
@@ -132,6 +163,8 @@ export default function GNB() {
     };
   }, [toastDrag.dragging, dismissToast]);
   const onWsNotification = useCallback((noti: NotificationItem) => {
+    // 로그아웃 상태 보호 — 토큰 만료 직후 늦게 도착한 메시지 등 차단
+    if (typeof window !== 'undefined' && !localStorage.getItem('accessToken')) return;
     setNotis((prev) => {
       // 중복(같은 notificationId) 방지
       if (prev.some((n) => n.notificationId === noti.notificationId)) return prev;
@@ -145,102 +178,6 @@ export default function GNB() {
   }, []);
   useNotificationSocket(onWsNotification);
 
-  // ── 시연용: 백엔드 WebSocket push 가 연결되기 전까지 매 새로고침 시 더미 알림 ──
-  // 패널 시각 검증용. 백엔드 정상 push 후 제거 예정.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const now = Date.now();
-    const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
-    const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR;
-    // 데모용 URL — 백엔드 실데이터 연결 전까지 네이버 뉴스 검색 결과로 대체
-    const newsSearch = (q: string) => `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(q)}`;
-    const demoBase: NotificationItem[] = [
-      {
-        notificationId: -1,
-        title: '긴급: 삼성SDS CFO 교체 — 즉시 제안서 발송 권장',
-        category: '긴급 대응',
-        pipelineStage: '발굴', accountName: '삼성SDS',
-        isRead: false, createdAt: iso(2 * MIN),
-        sources: {
-          news: [
-            { title: '삼성SDS, 박성준 CFO 내정 발표', summary: '디지털 전환 가속 명시. 클라우드/AI 투자 확대 시사.', url: newsSearch('삼성SDS CFO 박성준') },
-            { title: '재무총괄 교체 — 의사결정 가속 시그널', summary: '내부 의사결정 라인 정비.', url: newsSearch('삼성SDS 재무총괄 교체') },
-          ],
-          dart: [
-            { title: '주요 경영사항 — 임원 변경', summary: '재무 총괄 임원(CFO) 신규 선임 공시.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' },
-          ],
-        },
-      },
-      {
-        notificationId: -2,
-        title: 'LG CNS — 1분기 사업보고서 공시',
-        category: '실적 기반 제안',
-        pipelineStage: '제안 제출', accountName: 'LG CNS',
-        isRead: false, createdAt: iso(45 * MIN),
-        sources: {
-          dart: [{ title: '2026년 1분기 사업보고서', summary: '매출 12% 증가. 클라우드 부문 성장 견인.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' }],
-        },
-      },
-      {
-        notificationId: -3,
-        title: '카카오 — 신규 임원 선임 공시 다수',
-        category: '관계 강화',
-        pipelineStage: '협상', accountName: '카카오',
-        isRead: false, createdAt: iso(3 * HOUR),
-        sources: {
-          dart: [
-            { title: '사외이사 신규 선임', summary: '플랫폼 사업 자문역 영입.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' },
-            { title: '부사장 선임', summary: '플랫폼 사업 총괄 부사장 신규 선임.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' },
-          ],
-        },
-      },
-      {
-        notificationId: -4,
-        title: '네이버 — AI 데이터 분석 플랫폼 출시 예고',
-        category: '경쟁 대응',
-        pipelineStage: '가치 제안', accountName: '네이버',
-        isRead: false, createdAt: iso(DAY),
-        sources: {
-          news: [{ title: '네이버, 엔터프라이즈 AI 분석 플랫폼 출시 임박', summary: 'B2B 시장 본격 진입. 파트너사 모집 시작.', url: newsSearch('네이버 AI 데이터 분석') }],
-        },
-      },
-      {
-        notificationId: -5,
-        title: '현대오토에버 — 분기 실적 발표',
-        category: 'ROI 기반 전략',
-        pipelineStage: '계약 대기', accountName: '현대오토에버',
-        isRead: true, createdAt: iso(3 * DAY),
-        sources: {
-          dart: [{ title: '2026년 1분기 사업보고서', summary: '영업이익 8% 개선. SaaS 구독 매출 분기 최초 500억원 돌파.', url: 'https://dart.fss.or.kr/dsac001/mainAll.do' }],
-        },
-      },
-      {
-        notificationId: -6,
-        title: 'SK텔레콤 — 5G IoT 플랫폼 파트너십 보도',
-        category: '신규 기회 발굴',
-        pipelineStage: '솔루션 설계', accountName: 'SK텔레콤',
-        isRead: true, createdAt: iso(8 * DAY),
-        sources: {
-          news: [{ title: 'SK텔레콤, 5G IoT 파트너 모집', summary: '제조업 IoT 파트너 모집 — F!NT 솔루션 적합도 검토 필요.', url: newsSearch('SK텔레콤 5G IoT 플랫폼') }],
-        },
-      },
-    ];
-    setNotis((prev) => {
-      const ids = new Set(prev.map((n) => n.notificationId));
-      const merged = [...prev, ...demoBase.filter((d) => !ids.has(d.notificationId))];
-      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      return merged;
-    });
-    setNotiCount((c) => c + demoBase.filter((d) => !d.isRead).length);
-    // 토스트 — 가장 최신 안 읽음 알림으로 즉시 띄움 (8초 표시)
-    const t = setTimeout(() => {
-      setToast(demoBase[0]);
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      toastTimerRef.current = setTimeout(() => setToast(null), 8_000);
-    }, 500);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <>
@@ -298,22 +235,24 @@ export default function GNB() {
             )}
           </div>
 
-          {/* 알림 — 우측 슬라이드 오버 패널 (NotificationPanel) */}
-          <button onClick={handleNotiClick}
-            aria-label="알림"
-            style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', transition: 'background-color 0.12s, border-color 0.12s' }}
-            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
-            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-              <path d="M10 2a5 5 0 00-5 5v3l-1.3 2.6a.5.5 0 00.45.7h11.7a.5.5 0 00.45-.7L15 10V7a5 5 0 00-5-5z" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M8 15a2 2 0 004 0" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-            {notiCount > 0 && (
-              <span style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {notiCount > 9 ? '9+' : notiCount}
-              </span>
-            )}
-          </button>
+          {/* 알림 — 우측 슬라이드 오버 패널 (NotificationPanel). 로그인 상태에서만 노출. */}
+          {isLoggedIn && (
+            <button onClick={handleNotiClick}
+              aria-label="알림"
+              style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', transition: 'background-color 0.12s, border-color 0.12s' }}
+              onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+              onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2a5 5 0 00-5 5v3l-1.3 2.6a.5.5 0 00.45.7h11.7a.5.5 0 00.45-.7L15 10V7a5 5 0 00-5-5z" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M8 15a2 2 0 004 0" stroke="#64748b" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              {notiCount > 0 && (
+                <span style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {notiCount > 9 ? '9+' : notiCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* 프로필 */}
           <div onClick={() => setShowLogin((prev) => !prev)}
@@ -342,8 +281,8 @@ export default function GNB() {
         }}
       />
 
-      {/* 긴급 알림 토스트 — WebSocket 실시간. 우측/위로 swipe 시 dismiss. */}
-      {toast && (() => {
+      {/* 긴급 알림 토스트 — 로그인 상태에서만, WebSocket 실시간. 우측/위로 swipe 시 dismiss. */}
+      {isLoggedIn && toast && (() => {
         const dx = toastDrag.dx;
         const dy = toastDrag.dy;
         // 우측(>0) 또는 위(<0) 방향만 따라감

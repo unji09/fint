@@ -29,7 +29,8 @@ function authHeader(): HeadersInit {
   return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : {};
 }
 
-type RightView = 'memo' | 'recording' | 'stt' | 'briefing';
+// briefing 은 백엔드 미구현 (V19 엔티티 필드만 존재, 조회 endpoint 없음) → 탭 제거
+type RightView = 'memo' | 'recording' | 'stt';
 
 type AiSummary = Record<string, string | string[]>;
 
@@ -129,7 +130,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     if (!numericActivityId) return;
     fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
       .then((r) => r.json())
-      .then((j) => { const d = j?.data ?? j; setActivitySummary(d?.aiSummary ?? null); })
+      .then((j) => { const d = j?.data ?? j; setActivitySummary((d?.summary ?? d?.aiSummary) ?? null); })
       .catch(() => {});
   }, [numericActivityId]);
 
@@ -150,7 +151,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       if (rec.sttStatus === 'COMPLETED') {
         fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
           .then((r) => r.json())
-          .then((j) => { const d = j?.data ?? j; setActivitySummary(d?.aiSummary ?? null); })
+          .then((j) => { const d = j?.data ?? j; setActivitySummary((d?.summary ?? d?.aiSummary) ?? null); })
           .catch(() => {});
       }
     }
@@ -352,16 +353,12 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           <div style={{ flex: 1, padding: isMobile ? '16px 20px' : '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
             {rightView !== 'recording' && (
               <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #E5E6DE', paddingBottom: 10 }}>
-                {(['memo', 'briefing'] as const).map((v) => {
-                  const LABELS: Record<string, string> = { memo: '메모', briefing: 'AI 브리핑' };
-                  const active = v === 'memo' ? (rightView === 'memo' || rightView === 'stt') : rightView === v;
-                  return (
-                    <button key={v} onClick={() => setRightView(v)}
-                      style={{ padding: '6px 14px', borderRadius: 6, border: 'none', backgroundColor: active ? '#06B6D4' : 'transparent', color: active ? '#fff' : '#737880', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer', transition: 'border-color 0.15s' }}>
-                      {LABELS[v]}
-                    </button>
-                  );
-                })}
+                <button
+                  onClick={() => setRightView('memo')}
+                  style={{ padding: '6px 14px', borderRadius: 6, border: 'none', backgroundColor: '#06B6D4', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'default' }}
+                >
+                  메모
+                </button>
                 {isFint && (
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                     <label
@@ -511,23 +508,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               </>
             )}
 
-            {/* AI 브리핑 탭 */}
-            {rightView === 'briefing' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <SectionLabel>AI 브리핑</SectionLabel>
-                {activitySummary && Object.keys(activitySummary).length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, backgroundColor: '#F8F8F5', borderRadius: 8, padding: '14px 16px' }}>
-                    {Object.entries(activitySummary).map(([k, v]) => (
-                      <SummarySection key={k} label={SUMMARY_LABELS[k] ?? k} value={v} />
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 13, color: '#9CA193', backgroundColor: '#F8F8F5', borderRadius: 8, padding: '16px', textAlign: 'center' }}>
-                    미팅 30분 전에 자동으로 생성됩니다.
-                  </div>
-                )}
-              </div>
-            )}
+            {/* 'AI 브리핑' 탭은 백엔드 미구현으로 제거. STT 요약(aiSummary) 은 녹음 카드에서 표시. */}
 
             {/* 녹음 뷰 — 단순 시간 표시 + 중지 (사인파/빨간 강조 톤다운) */}
             {rightView === 'recording' && (

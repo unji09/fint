@@ -274,10 +274,21 @@ export function useDeleteAccount() {
   return { remove, loading };
 }
 
-// ─── 선택된 고객사 상세 (signals / contacts / deals) ─────────────────────────
+// ─── 선택된 고객사 상세 (signals / contacts / deals / mood) ──────────────────
+
+export interface MoodEntry {
+  recordedAt: string;
+  mood: MoodLevel;
+  reason: string | null;
+}
 
 // accountId 별 모듈 레벨 캐시 (페이지 재마운트 시 즉시 표시용)
-const detailCache: Map<string, { signals: Signal[]; contacts: ContactInfo[]; deals: Deal[] }> = new Map();
+const detailCache: Map<string, {
+  signals: Signal[];
+  contacts: ContactInfo[];
+  deals: Deal[];
+  mood: MoodEntry[];
+}> = new Map();
 
 export function useAccountDetail(accountId: string | number | null) {
   const key = accountId !== null ? String(accountId) : '';
@@ -285,6 +296,7 @@ export function useAccountDetail(accountId: string | number | null) {
   const [signals, setSignals] = useState<Signal[]>(cached?.signals ?? []);
   const [contacts, setContacts] = useState<ContactInfo[]>(cached?.contacts ?? []);
   const [deals, setDeals] = useState<Deal[]>(cached?.deals ?? []);
+  const [mood, setMood] = useState<MoodEntry[]>(cached?.mood ?? []);
   const [loading, setLoading] = useState(!cached);
 
   const load = useCallback(async () => {
@@ -297,6 +309,7 @@ export function useAccountDetail(accountId: string | number | null) {
       setSignals(c.signals);
       setContacts(c.contacts);
       setDeals(c.deals);
+      setMood(c.mood);
     }
     setLoading(true);
 
@@ -304,6 +317,7 @@ export function useAccountDetail(accountId: string | number | null) {
     let snapSignals: Signal[] = c?.signals ?? [];
     let snapContacts: ContactInfo[] = c?.contacts ?? [];
     let snapDeals: Deal[] = c?.deals ?? [];
+    let snapMood: MoodEntry[] = c?.mood ?? [];
 
     // 백엔드 응답 wrapper 종류가 다양 — 가능한 배열 위치를 모두 시도해서 추출.
     const extractList = <T,>(j: unknown): T[] => {
@@ -324,16 +338,28 @@ export function useAccountDetail(accountId: string | number | null) {
     };
 
     try {
-      // 1) signals + contacts 병렬
-      const [sigRes, conRes] = await Promise.allSettled([
+      // 1) signals + contacts + mood history 병렬
+      const [sigRes, conRes, moodRes] = await Promise.allSettled([
         fetchWithAuth(`/accounts/${accountId}/signals`).then((r) => r.json()),
         fetchWithAuth(`/accounts/${accountId}/contacts`).then((r) => r.json()),
+        fetchWithAuth(`/accounts/${accountId}/mood`).then((r) => r.json()),
       ]);
 
       if (sigRes.status === 'fulfilled') {
         const sigs = extractList<ApiSignal>(sigRes.value);
         snapSignals = sigs.map(mapApiSignal);
         setSignals(snapSignals);
+      }
+
+      if (moodRes.status === 'fulfilled') {
+        // 응답: List<AccountMoodResponse> = [{ recordedAt, mood, reason }, ...] (createdAt desc)
+        const rawList = extractList<{ recordedAt: string; mood: MoodLevel; reason: string | null }>(moodRes.value);
+        snapMood = rawList.map((m) => ({
+          recordedAt: m.recordedAt,
+          mood: m.mood,
+          reason: m.reason,
+        }));
+        setMood(snapMood);
       }
 
       let accountContacts: ContactInfo[] = [];
@@ -400,11 +426,15 @@ export function useAccountDetail(accountId: string | number | null) {
     } finally {
       setLoading(false);
       // 새로 받은 데이터로 캐시 갱신
-      detailCache.set(k, { signals: snapSignals, contacts: snapContacts, deals: snapDeals });
+      detailCache.set(k, { signals: snapSignals, contacts: snapContacts, deals: snapDeals, mood: snapMood });
     }
   }, [accountId]);
 
   useEffect(() => { load(); }, [load]);
 
-  return { signals, contacts, deals, loading, refetch: load };
+  // 최신 mood 와 사유 — WeatherPanel 에 사용
+  const latestMood: MoodLevel | null = mood[0]?.mood ?? null;
+  const latestMoodReason: string | null = mood[0]?.reason ?? null;
+
+  return { signals, contacts, deals, mood, latestMood, latestMoodReason, loading, refetch: load };
 }

@@ -39,21 +39,7 @@ export function useDashboardList() {
       setDashboards(applyTitleOverrides(data ?? []));
     } catch {
       setError('대시보드 목록을 불러오지 못했습니다.');
-      // 개발 중 mock 데이터 (사용자가 바꾼 이름이 있으면 그것도 머지)
-      setDashboards(applyTitleOverrides([
-        {
-          dashboardId: 1,
-          title: '기본',
-          thumbnailKey: null,
-          lastAccessedAt: new Date(Date.now() - 86400000).toISOString(),
-        },
-        {
-          dashboardId: 2,
-          title: '제목없음',
-          thumbnailKey: null,
-          lastAccessedAt: new Date(Date.now() - 3600000).toISOString(),
-        },
-      ]));
+      setDashboards([]);
     } finally {
       setLoading(false);
     }
