@@ -45,7 +45,7 @@ public class SttCallbackService {
                 .map(s -> s.speakerId() + ": " + s.text())
                 .collect(Collectors.joining("\n"));
 
-        moodClient.requestMoodAnalysis(activityId, request.accountId(), transcript);
+        moodClient.requestMoodAnalysis(activityId, request.accountId(), request.tenantId(), transcript);
 
         log.info("[SttCallback] 처리 완료 recordingId={} activityId={} tenantId={} segments={}",
                 recordingId, activityId, request.tenantId(), segments.size());

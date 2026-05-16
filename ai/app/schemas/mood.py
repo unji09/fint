@@ -14,4 +14,5 @@ class MoodAnalysisResult(BaseModel):
 class MoodAnalysisRequest(BaseModel):
     activity_id: int
     account_id: int
+    tenant_id: int
     transcript: str

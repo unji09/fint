@@ -35,4 +35,16 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("accountEventExecutor")
+    public TaskExecutor accountEventExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("account-event-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
 }

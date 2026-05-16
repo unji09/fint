@@ -64,6 +64,7 @@ async def _analyze_and_callback(
         await spring.send_mood_callback(
             activity_id=request.activity_id,
             account_id=request.account_id,
+            tenant_id=request.tenant_id,
             mood_score=result.mood_score,
             reason=result.reason,
             key_signals=result.key_signals,
