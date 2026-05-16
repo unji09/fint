@@ -3,7 +3,6 @@ package com.ssafy.fint.domain.activity.service;
 import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
-import com.ssafy.fint.domain.activity.entity.SttStatus;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
@@ -91,26 +90,12 @@ class ActivityServiceDetailTest {
         assertThat(res.startAt()).isEqualTo(start);
         assertThat(res.endAt()).isEqualTo(end);
         assertThat(res.memo()).isEqualTo("고객이 예산 확인 필요");
-        assertThat(res.sttStatus()).isEqualTo("PENDING");
-        assertThat(res.transcript()).isNull();
         assertThat(res.summary()).isNull();
         assertThat(res.dealId()).isEqualTo(DEAL_ID);
         assertThat(res.pipelineStage().stageId()).isEqualTo(STAGE_ID);
         assertThat(res.pipelineStage().stageName()).isEqualTo("제안");
         assertThat(res.attendees().internal()).containsExactly("홍길동");
         assertThat(res.attendees().external()).containsExactly("김철수");
-    }
-
-    @Test
-    @DisplayName("STT 가 완료된 활동은 sttStatus 가 'COMPLETED' 로 매핑된다.")
-    void detailMapsCompletedSttStatus() {
-        Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
-        activity.changeSttStatus(SttStatus.COMPLETED);
-        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
-
-        ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
-
-        assertThat(res.sttStatus()).isEqualTo("COMPLETED");
     }
 
     @Test

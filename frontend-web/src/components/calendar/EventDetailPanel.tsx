@@ -6,7 +6,6 @@ import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
 import { formatTime, formatFullDate } from './utils';
-import { useUploadRecording, usePollSttStatus, type SttLine } from '@/hooks/useActivity';
 import { useConfirm } from '@/components/common/ConfirmDialog';
 import {
   useUploadRecording,
