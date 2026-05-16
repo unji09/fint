@@ -1,6 +1,13 @@
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, field_validator
+
+
+class SttJobStatus(StrEnum):
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class SttRequest(BaseModel):
@@ -36,6 +43,13 @@ class SttSegment(BaseModel):
 
 class SttDiarizedResponse(BaseModel):
     segments: list[SttSegment]
+
+
+class SttJobResponse(BaseModel):
+    job_id: str
+    status: SttJobStatus
+    segments: list[SttSegment] | None = None
+    error: str | None = None
 
 
 class SttStreamChunk(BaseModel):
