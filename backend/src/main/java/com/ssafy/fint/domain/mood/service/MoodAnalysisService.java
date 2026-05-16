@@ -7,6 +7,9 @@ import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.repository.TemperatureHistoryRepository;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
+import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
+import com.ssafy.fint.domain.ai.entity.TriggerType;
+import com.ssafy.fint.domain.ai.service.AiSuggestionService;
 import com.ssafy.fint.domain.mood.MoodStatus;
 import com.ssafy.fint.domain.mood.dto.MoodAnalysisResponse;
 import com.ssafy.fint.domain.mood.dto.MoodCallbackRequest;
@@ -19,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -28,6 +33,7 @@ public class MoodAnalysisService {
     private final ActivityRepository activityRepository;
     private final TemperatureHistoryRepository temperatureHistoryRepository;
     private final AccountRepository accountRepository;
+    private final AiSuggestionService aiSuggestionService;
 
     public MoodAnalysisResponse getMoodAnalysis(Long activityId) {
         Long tenantId = SecurityUtils.currentTenantId();
@@ -48,7 +54,7 @@ public class MoodAnalysisService {
     }
 
     @Transactional
-    public void processCallback(Long activityId, MoodCallbackRequest request) {
+    public void processCallback(Long activityId, MoodCallbackRequest request, Long tenantId) {
 
         Activity activity = activityRepository.findById(activityId)
             .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
@@ -72,5 +78,25 @@ public class MoodAnalysisService {
         activity.changeMoodStatus(MoodStatus.COMPLETED);
 
         log.info("[MoodCallback] activityId={} mood={} score={}", activityId, mood, request.moodScore());
+
+        triggerNextAction(tenantId, request.accountId(), activityId);
+    }
+
+    private void triggerNextAction(Long tenantId, Long accountId, Long activityId) {
+        if (tenantId == null) {
+            log.warn("[MoodCallback] tenantId is null, skipping next action trigger. activityId={}", activityId);
+            return;
+        }
+        try {
+            NextActionCreateRequest request = new NextActionCreateRequest(
+                    accountId, TriggerType.MEETING_CREATED,
+                    List.of(), List.of(), activityId, null);
+            aiSuggestionService.createNextActionBySystem(tenantId, request);
+            log.info("[MoodCallback] next action triggered. tenantId={} accountId={} activityId={}",
+                    tenantId, accountId, activityId);
+        } catch (Exception e) {
+            log.error("[MoodCallback] next action trigger failed. accountId={} activityId={}",
+                    accountId, activityId, e);
+        }
     }
 }

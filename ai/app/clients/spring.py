@@ -15,6 +15,7 @@ class SpringClient:
         self,
         activity_id: int,
         account_id: int,
+        tenant_id: int,
         mood_score: int,
         reason: str,
         key_signals: list[str],
@@ -30,7 +31,10 @@ class SpringClient:
                     "keySignals": key_signals,
                     "summary": summary,
                 },
-                headers={"X-Internal-Secret": self._secret},
+                headers={
+                    "X-Internal-Secret": self._secret,
+                    "X-Tenant-Id": str(tenant_id),
+                },
             )
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:

@@ -12,6 +12,7 @@ import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.entity.AccountUserAssignment;
 import com.ssafy.fint.domain.account.entity.Mood;
+import com.ssafy.fint.domain.account.event.AccountCreatedEvent;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
 import com.ssafy.fint.domain.account.repository.AccountUserAssignmentRepository;
@@ -30,6 +31,7 @@ import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -66,6 +68,7 @@ public class AccountService {
     private final ActivityRepository activityRepository;
     private final ContactRepository contactRepository;
     private final DealRepository dealRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public AccountRegisterResponse register(AccountRegisterRequest request) {
@@ -74,15 +77,22 @@ public class AccountService {
         User owner = userRepository.getReferenceById(userId);
 
         Account account;
+        boolean isNewAccount;
         if (request.existingAccountId() != null) {
             account = registerToExistingAccount(request.existingAccountId(), userId, tenantId, owner);
+            isNewAccount = false;
         } else {
             account = registerNewAccount(request, owner);
+            isNewAccount = true;
         }
 
         log.info("[AccountRegister] accountId={} userId={} mode={}",
                 account.getAccountId(), userId,
-                request.existingAccountId() != null ? "case1" : "case2");
+                isNewAccount ? "case2" : "case1");
+
+        if (isNewAccount) {
+            eventPublisher.publishEvent(new AccountCreatedEvent(tenantId, account.getAccountId()));
+        }
         return AccountRegisterResponse.of(account.getAccountId());
     }
 
@@ -261,7 +271,8 @@ public class AccountService {
     /**
      * 고객사 상세 조회.
      * 권한 검증 → assignedUsers · latestMood · 미팅 집계 · contacts · deals(preview 3개) 를 합성한다.
-     * meetingCount / lastContactAt 는 "고객사 매핑 Deal 에 속한 Activity 중 type=MEETING" 기준.
+     * meetingCount / lastContactA
+     * t 는 "고객사 매핑 Deal 에 속한 Activity 중 type=MEETING" 기준.
      * deals 는 데이터 스코프 정책(팀 있음→팀 deal, 팀 없음→tenant 전체) 적용된 최신 3개 preview.
      * 전체 목록은 {@link #findDealsByAccount(Long, boolean)} 으로.
      */
