@@ -290,7 +290,7 @@ class SttFlowTest {
                 )));
 
                 ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-                verify(moodClient).requestMoodAnalysis(eq(ACTIVITY_ID), eq(ACCOUNT_ID), captor.capture());
+                verify(moodClient).requestMoodAnalysis(eq(ACTIVITY_ID), eq(ACCOUNT_ID), eq(TENANT_ID), captor.capture());
                 assertThat(captor.getValue())
                         .contains("SPEAKER_00: 안녕하세요")
                         .contains("SPEAKER_01: 반갑습니다");
@@ -307,7 +307,7 @@ class SttFlowTest {
                         new SttCallbackRequest.Segment("텍스트", "SPEAKER_00", 0, 500)
                 )));
 
-                verify(moodClient).requestMoodAnalysis(ACTIVITY_ID, null, "SPEAKER_00: 텍스트");
+                verify(moodClient).requestMoodAnalysis(ACTIVITY_ID, null, TENANT_ID, "SPEAKER_00: 텍스트");
             }
 
             @Test
@@ -323,7 +323,7 @@ class SttFlowTest {
                 @SuppressWarnings("unchecked")
                 List<?> segments = (List<?>) recording.getTranscript().get("segments");
                 assertThat(segments).isEmpty();
-                verify(moodClient).requestMoodAnalysis(ACTIVITY_ID, ACCOUNT_ID, "");
+                verify(moodClient).requestMoodAnalysis(ACTIVITY_ID, ACCOUNT_ID, TENANT_ID, "");
             }
         }
 
@@ -343,7 +343,7 @@ class SttFlowTest {
                         .extracting("errorCode")
                         .isEqualTo(ActivityErrorCode.RECORDING_NOT_FOUND);
 
-                verify(moodClient, never()).requestMoodAnalysis(any(), any(), any());
+                verify(moodClient, never()).requestMoodAnalysis(any(), any(), any(), any());
             }
 
             @Test
