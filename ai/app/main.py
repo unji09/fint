@@ -10,7 +10,7 @@ from app.core.db import close_db, init_db
 from app.core.errors import register_exception_handlers
 from app.core.model_downloader import ensure_embedding_model
 from app.core.redis import close_redis, init_redis
-from app.routers import dashboard, health, mood, news, ocr, strategy, stt, stt_stream
+from app.routers import briefing, dashboard, health, mood, news, ocr, strategy, stt, stt_stream
 
 
 @asynccontextmanager
@@ -72,5 +72,6 @@ def create_app() -> FastAPI:
     app.include_router(strategy.router)
     app.include_router(news.router)
     app.include_router(mood.router)
+    app.include_router(briefing.router)
 
     return app
