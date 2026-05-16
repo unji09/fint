@@ -6,7 +6,6 @@ from app.clients.gpu_stt import GpuSttClient
 from app.core.errors import BusinessException
 from app.core.security import decode_tenant_id
 from app.schemas.stt import SttSegment, SttStreamChunk
-from app.core.speaker_session import SpeakerSessionManager
 
 log = logging.getLogger(__name__)
 
@@ -15,8 +14,8 @@ router = APIRouter(prefix="/api/v1/stt", tags=["STT Stream"])
 _MAX_CHUNK_BYTES = 1 * 1024 * 1024
 # Whisper no_speech_prob 임계값 — 이 이상이면 hallucination으로 간주하고 버린다
 _NO_SPEECH_THRESHOLD = 0.6
-# 6초(3×2s) 문맥으로 보내야 webm 파서 오류가 줄고 Whisper 환각이 감소한다
-_CLUSTER_BUFFER_COUNT = 3
+# 4초(2×2s) 문맥 — 6초(3개)보다 응답이 빠르고 webm 구조상 최소 2 Cluster면 파서 안정성 유지됨
+_CLUSTER_BUFFER_COUNT = 2
 
 # webm Cluster element ID — 이 바이트 앞까지가 컨테이너 헤더(EBML+Segment+Tracks)
 _WEBM_CLUSTER_ID = b"\x1f\x43\xb6\x75"
@@ -62,12 +61,6 @@ async def stt_stream(
         return
 
     await websocket.accept()
-
-    manager: SpeakerSessionManager = websocket.app.state.speaker_session_manager
-    session_key = f"{tenant_id}:{activity_id}"
-    # 새 녹음 연결마다 이전 프로파일을 초기화해 화자 ID가 누적 증가하지 않도록 한다
-    manager.remove(session_key)
-    session = manager.get_or_create(session_key)
 
     # MediaRecorder timeslice 모드의 fragmented webm 처리:
     # 첫 번째 청크에만 EBML+Segment+Tracks 헤더가 포함되어 있으므로 저장해두고
@@ -138,12 +131,10 @@ async def stt_stream(
                     elapsed_ms += buffered_count * 2000
                     continue
 
-                embedding = chunk.get("embedding", [])
-                log.info("[STT chunk] embedding len=%d all_zero=%s start_ms=%s elapsed_ms=%d",
-                         len(embedding),
-                         all(v == 0.0 for v in embedding) if embedding else True,
-                         chunk.get("start_ms"), elapsed_ms)
-                speaker_id = session.assign(embedding)
+                # 화자 ID는 GPU STT 서버가 결정해서 내려준다
+                speaker_id: str = chunk.get("speaker_id", "SPEAKER_00")
+                log.info("[STT chunk] speaker_id=%s start_ms=%s elapsed_ms=%d",
+                         speaker_id, chunk.get("start_ms"), elapsed_ms)
 
                 chunk_end_ms: int = int(chunk.get("end_ms", 0))
                 transcript_msg = SttStreamChunk(
@@ -172,6 +163,3 @@ async def stt_stream(
 
     except WebSocketDisconnect:
         pass
-
-    finally:
-        manager.remove(session_key)
