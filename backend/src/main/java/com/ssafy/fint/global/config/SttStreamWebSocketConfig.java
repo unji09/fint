@@ -29,7 +29,7 @@ public class SttStreamWebSocketConfig implements WebSocketConfigurer {
     public ServletServerContainerFactoryBean createWebSocketContainer() {
         return new ServletServerContainerFactoryBean() {
             @Override
-            public void afterPropertiesSet() throws Exception {
+            public void afterPropertiesSet() {
                 try {
                     super.afterPropertiesSet();
                 } catch (IllegalStateException ignored) {
