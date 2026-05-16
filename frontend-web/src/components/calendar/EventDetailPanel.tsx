@@ -8,7 +8,6 @@ import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
 import { formatTime, formatFullDate } from './utils';
 import {
   useUploadRecording,
-  usePollSttStatus,
   useTranscriptStream,
   useRecordingList,
   useDeleteRecording,
@@ -32,6 +31,14 @@ function authHeader(): HeadersInit {
 
 type RightView = 'memo' | 'recording' | 'stt' | 'briefing';
 
+type AiSummary = Record<string, string | string[]>;
+
+const SUMMARY_LABELS: Record<string, string> = {
+  keyPoints: '핵심 포인트',
+  talkingPoints: '대화 포인트',
+  riskFactors: '리스크 요인',
+};
+
 // 화자 라벨: speakerName > speakerId의 끝 숫자 추출해 "화자 N" > fallbackIndex 기반 "화자 N" > "화자"
 export function formatSpeakerLabel(line: SttLine, fallbackIndex?: number): string {
   if (line.speakerName) return line.speakerName;
@@ -54,22 +61,16 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const chunksRef = useRef<Blob[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
-  const [sttStatus, setSttStatus] = useState<string | null>(null);
-  const [sttLines, setSttLines] = useState<SttLine[]>([]);
-  const [aiSummary, setAiSummary] = useState<{ label: string; text: string; color: string }[]>([]);
+  const [activitySummary, setActivitySummary] = useState<AiSummary | null>(null);
+  const [expandedRecordingId, setExpandedRecordingId] = useState<number | null>(null);
   const { upload: uploadRecording, uploading: uploadingRec } = useUploadRecording();
-  usePollSttStatus(); // kept for mock compatibility in tests
   const { connect: connectWs, sendChunk: sendWsChunk, disconnect: disconnectWs } = useTranscriptStream();
   const numericActivityId = event?.source === 'FINT' ? (Number(event.eventId.replace(/^act-/, '')) || null) : null;
-  const { recordings, loading: recLoading, refetch: refetchRecordings } = useRecordingList(numericActivityId);
+  const { recordings, refetch: refetchRecordings } = useRecordingList(numericActivityId);
   const { remove: deleteRecording } = useDeleteRecording();
   const { update: updateRecordingTitle } = useUpdateRecordingTitle();
   const [pendingRecordingId, setPendingRecordingId] = useState<number | null>(null);
   const [deletingRecordingId, setDeletingRecordingId] = useState<number | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [briefingData, setBriefingData] = useState<any | null>(null);
-  const [briefingLoading, setBriefingLoading] = useState(false);
-  const [briefingError, setBriefingError] = useState<string | null>(null);
 
   // ── 메모 편집 ──
   const [memoText, setMemoText] = useState('');
@@ -112,8 +113,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   useEffect(() => {
     if (!event) {
       setRightView('memo'); setRecordSec(0);
-      setSttStatus(null); setSttLines([]); setAiSummary([]);
-      setBriefingData(null); setBriefingError(null); setRecError(null);
+      setRecError(null); setActivitySummary(null); setExpandedRecordingId(null);
       setMemoText(''); setMemoEditing(false); setMemoSaving(false);
       setLiveSegments([]);
       setPendingRecordingId(null);
@@ -124,6 +124,15 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     }
   }, [event]);
 
+  // Activity 열릴 때 + STT 완료 시 aiSummary 조회
+  useEffect(() => {
+    if (!numericActivityId) return;
+    fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
+      .then((r) => r.json())
+      .then((j) => { const d = j?.data ?? j; setActivitySummary(d?.aiSummary ?? null); })
+      .catch(() => {});
+  }, [numericActivityId]);
+
   // 업로드 직후 recording이 PROCESSING인 동안 5초마다 목록 재조회
   useEffect(() => {
     if (!pendingRecordingId || !numericActivityId) return;
@@ -131,15 +140,21 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     return () => clearInterval(timer);
   }, [pendingRecordingId, numericActivityId, refetchRecordings]);
 
-  // 해당 recording의 STT가 완료/실패되면 폴링 종료
+  // 해당 recording의 STT가 완료/실패되면 폴링 종료 + summary 갱신
   useEffect(() => {
-    if (!pendingRecordingId) return;
+    if (!pendingRecordingId || !numericActivityId) return;
     const rec = recordings.find((r) => r.recordingId === pendingRecordingId);
     if (rec && (rec.sttStatus === 'COMPLETED' || rec.sttStatus === 'FAILED')) {
-      setSttStatus(rec.sttStatus);
       setPendingRecordingId(null);
+      setExpandedRecordingId(rec.recordingId);
+      if (rec.sttStatus === 'COMPLETED') {
+        fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
+          .then((r) => r.json())
+          .then((j) => { const d = j?.data ?? j; setActivitySummary(d?.aiSummary ?? null); })
+          .catch(() => {});
+      }
     }
-  }, [recordings, pendingRecordingId]);
+  }, [recordings, pendingRecordingId, numericActivityId]);
 
   if (!event) return null;
 
@@ -182,9 +197,6 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const handleUpload = async (blob: Blob, durationSec = 0) => {
     if (!activityId) return;
     setRecError(null);
-    setSttLines([]);
-    setAiSummary([]);
-    setSttStatus('PENDING');
     const ext = blob.type.includes('mp4') || blob.type.includes('m4a')
       ? 'm4a'
       : blob.type.includes('mpeg')
@@ -195,11 +207,9 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     const result = await uploadRecording(Number(activityId), blob, ext, { duration: durationSec, title: event.title });
     if (!result.ok) {
       console.error('[FINT] STT 업로드/호출 실패:', result.error);
-      setSttStatus('FAILED');
       setRecError(`녹음 업로드 실패: ${result.error ?? '알 수 없는 오류'}`);
       return;
     }
-    setSttStatus('PROCESSING');
     setRightView('memo');
     refetchRecordings();
     if (result.recordingId) setPendingRecordingId(result.recordingId);
@@ -207,8 +217,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
 
   const startRec = async () => {
     if (!isFint) return;
-    setRecError(null); setSttStatus(null); setSttLines([]); setAiSummary([]);
-    setLiveSegments([]);
+    setRecError(null); setLiveSegments([]);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mt = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
@@ -235,17 +244,6 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     disconnectWs();
     if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') { mediaRecRef.current.stop(); mediaRecRef.current = null; }
     setRecordSec(0); setRightView('memo');
-  };
-
-  const fetchBriefing = async () => {
-    if (!activityId) return;
-    setBriefingLoading(true); setBriefingError(null);
-    try {
-      const r = await fetch(`${API_BASE}/activities/${activityId}/ai/briefing`, { headers: authHeader() });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setBriefingData((await r.json()).data ?? {});
-    } catch (e: unknown) { setBriefingError(e instanceof Error ? e.message : '브리핑 조회 실패'); }
-    finally { setBriefingLoading(false); }
   };
 
   const p = (n: number) => String(n).padStart(2, '0');
@@ -356,9 +354,9 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #E5E6DE', paddingBottom: 10 }}>
                 {(['memo', 'briefing'] as const).map((v) => {
                   const LABELS: Record<string, string> = { memo: '메모', briefing: 'AI 브리핑' };
-                  const active = rightView === v || (v === 'memo' && rightView === 'stt');
+                  const active = v === 'memo' ? (rightView === 'memo' || rightView === 'stt') : rightView === v;
                   return (
-                    <button key={v} onClick={() => { setRightView(v); if (v === 'briefing' && !briefingData && !briefingLoading) fetchBriefing(); }}
+                    <button key={v} onClick={() => setRightView(v)}
                       style={{ padding: '6px 14px', borderRadius: 6, border: 'none', backgroundColor: active ? '#06B6D4' : 'transparent', color: active ? '#fff' : '#737880', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer', transition: 'border-color 0.15s' }}>
                       {LABELS[v]}
                     </button>
@@ -429,10 +427,10 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
             {(rightView === 'memo' || rightView === 'stt') && (
               <>
                 {/* 녹음 목록 — 메모 위에 표시. 항상 스크롤. */}
-                {(recordings.length > 0 || uploadingRec || sttStatus === 'PENDING' || sttStatus === 'PROCESSING') && (
+                {(recordings.length > 0 || uploadingRec || !!pendingRecordingId) && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {(uploadingRec || sttStatus === 'PENDING' || sttStatus === 'PROCESSING') && (
-                      <SttProgress status={sttStatus} uploading={uploadingRec} />
+                    {(uploadingRec || !!pendingRecordingId) && (
+                      <SttProgress status={pendingRecordingId ? 'PROCESSING' : null} uploading={uploadingRec} />
                     )}
                     <div
                       style={{
@@ -450,6 +448,11 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                           rec={rec}
                           index={recordings.length - idx}
                           isMobile={isMobile}
+                          summary={activitySummary}
+                          expanded={expandedRecordingId === rec.recordingId}
+                          onToggle={() => setExpandedRecordingId((prev) =>
+                            prev === rec.recordingId ? null : rec.recordingId
+                          )}
                           deleting={deletingRecordingId === rec.recordingId}
                           onDelete={async () => {
                             if (!numericActivityId) return;
@@ -468,100 +471,6 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                       ))}
                     </div>
                   </div>
-                )}
-
-                {sttStatus === 'COMPLETED' && (aiSummary.length > 0 || sttLines.length > 0) && (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                      <SectionLabel>녹음 기록</SectionLabel>
-                      <span style={{ fontSize: 11, color: '#9CA193' }}>
-                        {(() => {
-                          const t = sttLines.reduce((s, l) => s + (l.text?.length ?? 0), 0);
-                          if (t === 0) return '';
-                          return `약 ${Math.max(1, Math.round(t / 240))}분`;
-                        })()}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        backgroundColor: '#F8F8F5',
-                        borderRadius: 10,
-                        padding: '22px 24px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 18,
-                      }}
-                    >
-                      {/* 요약 — 4분할 라벨 / 글머리 점 제거.
-                          여러 항목을 자연어 단락으로 결합. 사람이 쓴 회의록처럼. */}
-                      {aiSummary.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                          {aiSummary
-                            .map((r) => r.text)
-                            .filter((t) => t && t.trim())
-                            .map((text, i) => (
-                              <p
-                                key={i}
-                                style={{
-                                  margin: 0,
-                                  fontSize: 15,
-                                  lineHeight: 1.9,
-                                  color: '#1F2126',
-                                  letterSpacing: '-0.005em',
-                                  whiteSpace: 'pre-wrap',
-                                }}
-                              >
-                                {text}
-                              </p>
-                            ))}
-                        </div>
-                      )}
-
-                      {sttLines.length > 0 && (
-                        <details
-                          style={{
-                            marginTop: aiSummary.length > 0 ? 4 : 0,
-                            borderTop: aiSummary.length > 0 ? '1px solid #ECEDE5' : 'none',
-                            paddingTop: aiSummary.length > 0 ? 16 : 0,
-                          }}
-                        >
-                          <summary
-                            style={{
-                              fontSize: 12,
-                              color: '#737880',
-                              cursor: 'pointer',
-                              listStyle: 'none',
-                              userSelect: 'none',
-                              fontWeight: 500,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                            }}
-                          >
-                            <span aria-hidden style={{ fontSize: 10, color: '#9CA193' }}>▸</span>
-                            원본 대화 보기
-                          </summary>
-                          <div
-                            data-testid="transcript-scroll"
-                            style={{
-                              marginTop: 14,
-                              maxHeight: isMobile ? '40vh' : 360,
-                              overflowY: 'auto',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 12,
-                            }}
-                          >
-                            {sttLines
-                              .filter((l) => l.text && l.text.trim())
-                              .map((line, i) => (
-                                <SpeakerLine key={i} line={line} fallbackIndex={i % 2} />
-                              ))}
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  </>
                 )}
 
                 {/* 메모 — 편집 가능 */}
@@ -600,6 +509,24 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                   </div>
                 )}
               </>
+            )}
+
+            {/* AI 브리핑 탭 */}
+            {rightView === 'briefing' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <SectionLabel>AI 브리핑</SectionLabel>
+                {activitySummary && Object.keys(activitySummary).length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, backgroundColor: '#F8F8F5', borderRadius: 8, padding: '14px 16px' }}>
+                    {Object.entries(activitySummary).map(([k, v]) => (
+                      <SummarySection key={k} label={SUMMARY_LABELS[k] ?? k} value={v} />
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: '#9CA193', backgroundColor: '#F8F8F5', borderRadius: 8, padding: '16px', textAlign: 'center' }}>
+                    미팅 30분 전에 자동으로 생성됩니다.
+                  </div>
+                )}
+              </div>
             )}
 
             {/* 녹음 뷰 — 단순 시간 표시 + 중지 (사인파/빨간 강조 톤다운) */}
@@ -681,60 +608,22 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                       전사 대기 중…
                     </div>
                   ) : (
-                    liveSegments.map((line, i) => (
-                      <SpeakerLine key={i} line={line} fallbackIndex={i % 2} />
-                    ))
+                    liveSegments
+                      .reduce<typeof liveSegments>((acc, line) => {
+                        const last = acc[acc.length - 1];
+                        if (last && last.speakerId !== undefined && last.speakerId === line.speakerId) {
+                          return [...acc.slice(0, -1), { ...last, text: `${last.text} ${line.text}` }];
+                        }
+                        return [...acc, line];
+                      }, [])
+                      .map((line, i) => (
+                        <SpeakerLine key={i} line={line} fallbackIndex={i % 2} />
+                      ))
                   )}
                 </div>
               </>
             )}
 
-            {/* AI 브리핑 탭 */}
-            {rightView === 'briefing' && (
-              <>
-                <SectionLabel>AI 브리핑</SectionLabel>
-                {briefingLoading && (<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[80,60,90,50].map((w,i) => (<div key={i} style={{ height: 14, borderRadius: 6, backgroundColor: '#F0F0EE', width: `${w}%` }} />))}
-                  <div style={{ fontSize: 11, color: '#9CA193', marginTop: 4 }}>브리핑 생성 중...</div>
-                </div>)}
-                {briefingError && (<div style={{ fontSize: 12, color: '#EF4444', backgroundColor: '#FEF2F2', padding: '10px 12px', borderRadius: 6 }}>
-                  {briefingError}<button onClick={fetchBriefing} style={{ marginLeft: 8, fontSize: 11, color: '#0686D4', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline' }}>재시도</button>
-                </div>)}
-                {briefingData && !briefingLoading && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {briefingData.summary && (<div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA193', marginBottom: 6 }}>고객 요약</div>
-                      <div style={{ fontSize: 13, lineHeight: 1.7, color: '#475569', backgroundColor: '#F8F8F5', borderRadius: 8, padding: '10px 12px' }}>
-                        {typeof briefingData.summary === 'string' ? briefingData.summary : JSON.stringify(briefingData.summary)}
-                      </div>
-                    </div>)}
-                    {briefingData.signals?.length > 0 && (<div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA193', marginBottom: 6 }}>시그널</div>
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {briefingData.signals.map((s: any, i: number) => (<div key={i} style={{ padding: '8px 10px', backgroundColor: '#F8F8F5', borderRadius: 6, borderLeft: '3px solid #06B6D4', marginBottom: 4 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#1F2126', marginBottom: 2 }}>{s.title ?? s.name ?? ''}</div>
-                        <div style={{ fontSize: 11, color: '#737880', lineHeight: 1.5 }}>{s.content ?? s.description ?? ''}</div>
-                      </div>))}
-                    </div>)}
-                    {briefingData.nextActions?.length > 0 && (<div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA193', marginBottom: 6 }}>Next Actions</div>
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {briefingData.nextActions.map((a: any, i: number) => (<div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontSize: 11, color: '#06B6D4', fontWeight: 700, marginTop: 1 }}>{i + 1}.</span>
-                        <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>{typeof a === 'string' ? a : (a.action ?? a.content ?? '')}</span>
-                      </div>))}
-                    </div>)}
-                    {!briefingData.summary && !briefingData.signals && !briefingData.nextActions && (<div style={{ fontSize: 13, color: '#9CA193' }}>브리핑 데이터가 없습니다.</div>)}
-                  </div>
-                )}
-                {!briefingData && !briefingLoading && !briefingError && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '20px 0' }}>
-                    <div style={{ fontSize: 13, color: '#9CA193', textAlign: 'center' }}>고객사 시그널(뉴스/DART)을 기반으로<br/>미팅 준비 자료를 AI가 생성합니다.</div>
-                    <button onClick={fetchBriefing} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #06B6D4', backgroundColor: 'transparent', color: '#06B6D4', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>AI 브리핑 생성하기</button>
-                  </div>
-                )}
-              </>
-            )}
           </div>
         </div>
         {rightView === 'recording' && (
@@ -763,26 +652,19 @@ function Chip({ label, color, bg }: { label: string; color: string; bg: string }
   return <span style={{ fontSize: 11, color, backgroundColor: bg, padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>{label}</span>;
 }
 
-// 화자별 채팅 버블 — isSelf면 우측 정렬 + 청록 옅은 배경, 아니면 좌측 + 회색
+// 화자별 채팅 버블 — 화자 N 라벨만 표시, isSelf 구분 없음
 export function SpeakerLine({ line, fallbackIndex }: { line: SttLine; fallbackIndex?: number }) {
   const label = formatSpeakerLabel(line, fallbackIndex);
-  const self = line.isSelf === true;
   return (
     <div
       data-testid="speaker-line"
-      data-self={self ? 'true' : 'false'}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: self ? 'flex-end' : 'flex-start',
-        gap: 4,
-      }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}
     >
       <span style={{ fontSize: 11, color: '#737880', fontWeight: 500 }}>{label}</span>
       <div
         style={{
           maxWidth: '85%',
-          backgroundColor: self ? '#ECF9FC' : '#F8F8F5',
+          backgroundColor: '#F8F8F5',
           borderRadius: 8,
           padding: '8px 12px',
           display: 'flex',
@@ -804,6 +686,9 @@ function RecordingCard({
   rec,
   index,
   isMobile,
+  summary,
+  expanded,
+  onToggle,
   deleting,
   onDelete,
   onTitleSave,
@@ -811,11 +696,13 @@ function RecordingCard({
   rec: RecordingItem;
   index: number;
   isMobile: boolean;
+  summary?: AiSummary | null;
+  expanded: boolean;
+  onToggle: () => void;
   deleting: boolean;
   onDelete: () => void;
   onTitleSave: (title: string) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(rec.title);
   const [savingTitle, setSavingTitle] = useState(false);
@@ -877,7 +764,7 @@ function RecordingCard({
           padding: '10px 14px',
           cursor: rec.sttStatus === 'COMPLETED' ? 'pointer' : 'default',
         }}
-        onClick={() => rec.sttStatus === 'COMPLETED' && setExpanded((e) => !e)}
+        onClick={() => rec.sttStatus === 'COMPLETED' && onToggle()}
       >
         {/* 제목 */}
         {editingTitle ? (
@@ -978,30 +865,81 @@ function RecordingCard({
         )}
       </div>
 
-      {/* 확장: transcript */}
+      {/* 확장: 요약 + transcript */}
       {expanded && (
         <div
           style={{
             borderTop: '1px solid #F0F0EE',
             padding: '12px 14px',
-            maxHeight: isMobile ? '40vh' : 300,
-            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
-            gap: 10,
+            gap: 12,
             backgroundColor: '#F8F8F5',
           }}
         >
+          {summary && Object.keys(summary).length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {Object.entries(summary).map(([k, v]) => (
+                <SummarySection key={k} label={SUMMARY_LABELS[k] ?? k} value={v} compact />
+              ))}
+            </div>
+          )}
           {lines.length > 0 ? (
-            lines.map((line, i) => (
-              <SpeakerLine key={i} line={line} fallbackIndex={i % 2} />
-            ))
+            <details
+              style={{
+                borderTop: summary && Object.keys(summary).length > 0 ? '1px solid #ECEDE5' : 'none',
+                paddingTop: summary && Object.keys(summary).length > 0 ? 8 : 0,
+              }}
+            >
+              <summary
+                style={{ fontSize: 12, color: '#737880', cursor: 'pointer', listStyle: 'none', userSelect: 'none', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <span aria-hidden style={{ fontSize: 10, color: '#9CA193' }}>▸</span>
+                원본 대화 보기
+              </summary>
+              <div style={{ marginTop: 12, maxHeight: isMobile ? '40vh' : 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {lines.map((line, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: '#475569', whiteSpace: 'nowrap', minWidth: 52 }}>
+                      {formatSpeakerLabel(line)}
+                    </span>
+                    {line.timestamp && (
+                      <span style={{ fontSize: 11, color: '#9CA193', whiteSpace: 'nowrap', paddingTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                        {line.timestamp}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 13, lineHeight: 1.75, color: '#737880', whiteSpace: 'pre-wrap' }}>
+                      {line.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
           ) : (
             <span style={{ fontSize: 12, color: '#9CA193', textAlign: 'center', padding: '8px 0' }}>
               전사 내용이 없습니다.
             </span>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── AI 요약 섹션 — label + string 또는 string[] 렌더링
+function SummarySection({ label, value, compact }: { label: string; value: string | string[]; compact?: boolean }) {
+  const fontSize = compact ? 13 : 14;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 11, fontWeight: 600, color: '#737880', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</span>
+      {Array.isArray(value) ? (
+        <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {value.map((item, i) => (
+            <li key={i} style={{ fontSize, lineHeight: 1.75, color: '#1F2126' }}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p style={{ margin: 0, fontSize, lineHeight: 1.75, color: '#1F2126', whiteSpace: 'pre-wrap' }}>{value}</p>
       )}
     </div>
   );

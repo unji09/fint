@@ -156,20 +156,18 @@ describe('EventDetailPanel — 녹음 중 뷰', () => {
 });
 
 describe('SpeakerLine', () => {
-  it('isSelf=true이면 data-self="true"이고 우측 정렬', () => {
+  it('speakerName이 있으면 해당 이름과 텍스트, 타임스탬프가 보인다', () => {
     render(<SpeakerLine line={{ text: '내 발화', speakerName: '박영업', isSelf: true, timestamp: '00:09' }} />);
     const node = screen.getByTestId('speaker-line');
-    expect(node.getAttribute('data-self')).toBe('true');
-    expect(node.style.alignItems).toBe('flex-end');
+    expect(node.style.alignItems).toBe('flex-start');
     expect(screen.getByText('박영업')).toBeInTheDocument();
     expect(screen.getByText('00:09')).toBeInTheDocument();
     expect(screen.getByText('내 발화')).toBeInTheDocument();
   });
 
-  it('isSelf=false이면 좌측 정렬 + 회색 배경 버블', () => {
+  it('isSelf 여부와 관계없이 항상 좌측 정렬', () => {
     render(<SpeakerLine line={{ text: '상대 발화', speakerName: '김민수 부장', isSelf: false }} />);
     const node = screen.getByTestId('speaker-line');
-    expect(node.getAttribute('data-self')).toBe('false');
     expect(node.style.alignItems).toBe('flex-start');
   });
 
