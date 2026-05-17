@@ -18,7 +18,8 @@ public record ActivityDetailResponse(
         String moodStatus,
         Map<String, Object> summary,
         PipelineStageResponse pipelineStage,
-        Long dealId
+        Long dealId,
+        Map<String, Object> aiSummary
 ) {
 
     public static ActivityDetailResponse from(Activity activity) {
@@ -33,7 +34,8 @@ public record ActivityDetailResponse(
                 activity.getMoodStatus() == null ? null : activity.getMoodStatus().name(),
                 activity.getSummary(),
                 PipelineStageResponse.from(activity.getPipelineStage()),
-                activity.getDeal() == null ? null : activity.getDeal().getDealId()
+                activity.getDeal() == null ? null : activity.getDeal().getDealId(),
+                activity.getBriefing()
         );
     }
 }
