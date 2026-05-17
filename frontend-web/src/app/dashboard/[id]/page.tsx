@@ -873,6 +873,7 @@ export default function DashboardDetailPage() {
                 widgetType={pendingType}
                 result={pendingWidget?.result}
                 config={pendingWidget?.config ?? {}}
+                data={pendingWidget?.data ?? null}
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}

@@ -14,6 +14,7 @@ interface Props {
   widgetType: string;
   result?: WidgetResult | null;
   config?: Record<string, unknown>;
+  data?: Record<string, unknown>[] | null;
   onTitleChange: (v: string) => void;
   onCollapse: () => void;
   onDragStart: (e: React.MouseEvent) => void;
@@ -32,6 +33,7 @@ export default function FintChatPanel({
   widgetType,
   result,
   config: widgetConfig = {},
+  data: widgetData = null,
   onTitleChange,
   onCollapse,
   onDragStart,
@@ -47,10 +49,22 @@ export default function FintChatPanel({
   }, [widgetTitle]);
 
   /* 자동 스크롤 */
-  const scrollEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollToBottom = (instant?: boolean) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    if (instant) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  };
   useEffect(() => {
-    scrollEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory.length, isLoading, isDone]);
+    scrollToBottom();
+  }, [chatHistory.length, isLoading]);
+  useEffect(() => {
+    if (isDone) scrollToBottom(true);
+  }, [isDone]);
 
   return (
     <div
@@ -115,6 +129,7 @@ export default function FintChatPanel({
       </div>
 
       <div
+        ref={scrollContainerRef}
         style={{
           padding: '12px 16px',
           display: 'flex',
@@ -124,12 +139,10 @@ export default function FintChatPanel({
           overflowY: 'auto',
         }}
       >
-        {/* 이전 대화 내역 — 현재 드래그 가능한 위젯은 아래 별도 블록에서 렌더링하므로 마지막 assistant 메시지 제외 */}
+        {/* 이전 대화 내역 — isDone 상태에서 마지막 assistant 메시지는 아래 별도 블록에서 렌더링 */}
         {chatHistory.filter((msg, idx) => {
-          // isDone 상태에서 마지막 assistant 메시지는 아래 드래그 가능 위젯 블록에서 표시
-          if (!isDone || errorMessage) return true;
+          if (!isDone) return true;
           if (msg.role !== 'assistant') return true;
-          // 마지막 assistant 메시지인지 확인
           const lastAssistantIdx = chatHistory.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1);
           return idx !== lastAssistantIdx;
         }).map((msg) => {
@@ -375,111 +388,112 @@ export default function FintChatPanel({
           </div>
         )}
 
-        {/* 완료: 미니 위젯 + 드래그 (현재 진행 중인 쿼리의 결과만 — 항상 드래그 가능) */}
+        {/* 완료: 인사이트 텍스트 (스크롤 영역 내) */}
         {isDone && !errorMessage && (
-          <>
-            <p
-              style={{
-                fontFamily: 'Pretendard,sans-serif',
-                fontSize: 13,
-                color: '#475569',
-                margin: 0,
-                lineHeight: 1.6,
-              }}
-            >
-              {insightText}
-            </p>
-            <div
-              onMouseDown={(e) => { e.stopPropagation(); onDragStart(e); }}
-              style={{
-                background: 'rgba(255,255,255,0.85)',
-                border: '1.5px solid rgba(6,182,212,0.4)',
-                borderRadius: 10,
-                overflow: 'hidden',
-                cursor: 'grab',
-                userSelect: 'none',
-              }}
-              title="캔버스로 드래그하세요"
-            >
-              <div
+          <p
+            style={{
+              fontFamily: 'Pretendard,sans-serif',
+              fontSize: 13,
+              color: '#475569',
+              margin: 0,
+              lineHeight: 1.6,
+            }}
+          >
+            {insightText}
+          </p>
+        )}
+      </div>
+
+      {/* 완료: 드래그 위젯 (스크롤 영역 밖 — 항상 하단 고정) */}
+      {isDone && !errorMessage && (
+        <div
+          onMouseDown={(e) => { e.stopPropagation(); onDragStart(e); }}
+          style={{
+            margin: '0 12px 10px',
+            background: 'rgba(255,255,255,0.85)',
+            border: '1.5px solid rgba(6,182,212,0.4)',
+            borderRadius: 10,
+            overflow: 'hidden',
+            cursor: 'grab',
+            userSelect: 'none',
+          }}
+          title="캔버스로 드래그하세요"
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '9px 14px 8px',
+              borderBottom: '1px solid rgba(241,245,249,0.8)',
+            }}
+          >
+            {editTitle ? (
+              <input
+                autoFocus
+                value={titleVal}
+                onChange={(e) => setTitleVal(e.target.value)}
+                onBlur={() => {
+                  setEditTitle(false);
+                  onTitleChange(titleVal);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setEditTitle(false);
+                    onTitleChange(titleVal);
+                  }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '9px 14px 8px',
-                  borderBottom: '1px solid rgba(241,245,249,0.8)',
+                  fontFamily: 'Pretendard,sans-serif',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  border: 'none',
+                  outline: '1px solid #06b6d4',
+                  borderRadius: 3,
+                  padding: '0 4px',
+                  width: '80%',
+                }}
+              />
+            ) : (
+              <span
+                style={{
+                  fontFamily: 'Pretendard,sans-serif',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  color: '#171d1e',
+                  cursor: 'text',
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditTitle(true);
                 }}
               >
-                {editTitle ? (
-                  <input
-                    autoFocus
-                    value={titleVal}
-                    onChange={(e) => setTitleVal(e.target.value)}
-                    onBlur={() => {
-                      setEditTitle(false);
-                      onTitleChange(titleVal);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setEditTitle(false);
-                        onTitleChange(titleVal);
-                      }
-                    }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    style={{
-                      fontFamily: 'Pretendard,sans-serif',
-                      fontWeight: 500,
-                      fontSize: 13,
-                      border: 'none',
-                      outline: '1px solid #06b6d4',
-                      borderRadius: 3,
-                      padding: '0 4px',
-                      width: '80%',
-                    }}
-                  />
-                ) : (
-                  <span
-                    style={{
-                      fontFamily: 'Pretendard,sans-serif',
-                      fontWeight: 500,
-                      fontSize: 13,
-                      color: '#171d1e',
-                      cursor: 'text',
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      setEditTitle(true);
-                    }}
-                  >
-                    {titleVal}
-                  </span>
-                )}
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: '#06b6d4',
-                    fontFamily: 'Pretendard,sans-serif',
-                    fontWeight: 500,
-                  }}
-                >
-                  드래그 ↗
-                </span>
-              </div>
-              <div style={{ padding: '6px 12px 8px', height: 140 }}>
-                <WidgetRenderer
-                  widgetType={widgetType}
-                  config={widgetConfig}
-                  data={null}
-                  result={result ?? null}
-                />
-              </div>
-            </div>
-          </>
-        )}
+                {titleVal}
+              </span>
+            )}
+            <span
+              style={{
+                fontSize: 11,
+                color: '#06b6d4',
+                fontFamily: 'Pretendard,sans-serif',
+                fontWeight: 500,
+              }}
+            >
+              드래그 ↗
+            </span>
+          </div>
+          <div style={{ padding: '6px 12px 8px', height: 140 }}>
+            <WidgetRenderer
+              widgetType={widgetType}
+              config={widgetConfig}
+              data={widgetData}
+              result={result ?? null}
+            />
+          </div>
+        </div>
+      )}
 
-        {/* 자동 스크롤 앵커 */}
-        <div ref={scrollEndRef} />
-      </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
