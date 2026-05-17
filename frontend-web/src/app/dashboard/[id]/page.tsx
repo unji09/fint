@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { Dashboard, DashboardWidget, ChatMessage } from '@/types/dashboard';
-import GridBg from '@/components/dashboard/GridBg';
 import CanvasWidgetCard from '@/components/dashboard/CanvasWidgetCard';
 import FintChatPanel from '@/components/dashboard/FintChatPanel';
 import type { CanvasWidget, Step } from '@/types/dashboard';
@@ -388,9 +387,35 @@ export default function DashboardDetailPage() {
       setGhostPos({ x: e.clientX, y: e.clientY });
       setDragging(true);
 
-      const onMove = (ev: MouseEvent) => setGhostPos({ x: ev.clientX, y: ev.clientY });
+      const EDGE_ZONE = 40;
+      const SCROLL_SPEED = 12;
+      let autoScrollId: number | null = null;
+      let lastMouse = { x: e.clientX, y: e.clientY };
+
+      const doAutoScroll = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = lastMouse.x;
+        const my = lastMouse.y;
+        let dx = 0;
+        let dy = 0;
+        if (mx < rect.left + EDGE_ZONE && mx >= rect.left) dx = -SCROLL_SPEED;
+        else if (mx > rect.right - EDGE_ZONE && mx <= rect.right) dx = SCROLL_SPEED;
+        if (my < rect.top + EDGE_ZONE && my >= rect.top) dy = -SCROLL_SPEED;
+        else if (my > rect.bottom - EDGE_ZONE && my <= rect.bottom) dy = SCROLL_SPEED;
+        if (dx || dy) canvas.scrollBy(dx, dy);
+        autoScrollId = requestAnimationFrame(doAutoScroll);
+      };
+      autoScrollId = requestAnimationFrame(doAutoScroll);
+
+      const onMove = (ev: MouseEvent) => {
+        lastMouse = { x: ev.clientX, y: ev.clientY };
+        setGhostPos({ x: ev.clientX, y: ev.clientY });
+      };
       const onUp = (ev: MouseEvent) => {
         setDragging(false);
+        if (autoScrollId !== null) cancelAnimationFrame(autoScrollId);
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         const canvas = canvasRef.current;
@@ -836,9 +861,19 @@ export default function DashboardDetailPage() {
         </div>
 
         {/* 캔버스 */}
-        <div ref={canvasRef} style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-          <GridBg />
-          <div style={{ position: 'relative', minWidth: '100%', minHeight: '100%' }}>
+        <div
+          ref={canvasRef}
+          style={{
+            flex: 1,
+            position: 'relative',
+            overflow: 'auto',
+            backgroundImage:
+              'linear-gradient(rgba(99,118,183,0.10) 1px, transparent 1px),' +
+              'linear-gradient(90deg, rgba(99,118,183,0.10) 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+          }}
+        >
+          <div style={{ position: 'relative', minWidth: 3000, minHeight: 3000 }}>
             {canvasWidgets.map((w) => (
               <CanvasWidgetCard
                 key={w.widgetId}
@@ -846,6 +881,7 @@ export default function DashboardDetailPage() {
                 onUpdate={updateWidget}
                 onTitleChange={updateTitle}
                 onRemove={removeWidget}
+                canvasRef={canvasRef}
               />
             ))}
           </div>
@@ -862,7 +898,16 @@ export default function DashboardDetailPage() {
               left: 20,
             }}
           >
-            {chatOpen && (
+            <div
+              style={{
+                transition: 'opacity 0.25s ease, transform 0.25s ease',
+                opacity: chatOpen ? 1 : 0,
+                transform: chatOpen ? 'translateY(0)' : 'translateY(12px)',
+                pointerEvents: chatOpen ? 'auto' : 'none',
+                maxHeight: chatOpen ? 'none' : 0,
+                overflow: chatOpen ? 'visible' : 'hidden',
+              }}
+            >
               <FintChatPanel
                 steps={steps}
                 query={userQuery}
@@ -879,6 +924,35 @@ export default function DashboardDetailPage() {
                 onDragStart={handleDragStart}
                 chatHistory={chatHistory}
               />
+            </div>
+            {!chatOpen && chatHistory.length > 0 && (
+              <button
+                onClick={() => setChatOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  marginBottom: 8,
+                  background: 'rgba(255,255,255,0.9)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(6,182,212,0.3)',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'Pretendard,sans-serif',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: '#1d1a24',
+                  boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
+                  transition: 'opacity 0.2s ease',
+                }}
+              >
+                <span style={{ color: '#06b6d4', fontSize: 14 }}>✦</span>
+                FINT 대화 열기
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 2 }}>
+                  <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
             )}
             <QueryBar
               value={queryInput}

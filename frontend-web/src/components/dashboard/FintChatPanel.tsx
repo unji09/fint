@@ -44,6 +44,33 @@ export default function FintChatPanel({
     : FALLBACK_INSIGHT;
   const [editTitle, setEditTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(widgetTitle);
+
+  /* 리사이즈 */
+  const [panelSize, setPanelSize] = useState({ w: 390, h: 420 });
+  const resizing = useRef(false);
+  const resizeStart = useRef({ x: 0, y: 0, w: 390, h: 420 });
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizing.current = true;
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: panelSize.w, h: panelSize.h };
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return;
+      const dw = ev.clientX - resizeStart.current.x;
+      const dh = resizeStart.current.y - ev.clientY;
+      setPanelSize({
+        w: Math.max(320, Math.min(700, resizeStart.current.w + dw)),
+        h: Math.max(250, Math.min(700, resizeStart.current.h + dh)),
+      });
+    };
+    const onUp = () => {
+      resizing.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
   useEffect(() => {
     setTitleVal(widgetTitle);
   }, [widgetTitle]);
@@ -67,6 +94,47 @@ export default function FintChatPanel({
   }, [isDone]);
 
   return (
+    <div style={{ position: 'relative', width: panelSize.w, marginBottom: 10 }}>
+      {/* 리사이즈 핸들 — 패널 바깥 레이어, 투명 영역은 클릭 통과 */}
+      <div
+        style={{
+          position: 'absolute',
+          top: -3,
+          right: -3,
+          width: 40,
+          height: 40,
+          zIndex: 10,
+          pointerEvents: 'none',
+          filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.15))',
+        }}
+      >
+        <svg width="40" height="40" viewBox="0 0 40 40" style={{ display: 'block' }}>
+          <path
+            d="M38 40 L38 20 Q38 2 20 2 L0 2"
+            stroke="transparent"
+            strokeWidth="12"
+            fill="none"
+            style={{ pointerEvents: 'stroke', cursor: 'ne-resize' }}
+            onMouseDown={handleResizeStart}
+          />
+          <path
+            d="M38 40 L38 20 Q38 2 20 2 L0 2"
+            stroke="white"
+            strokeWidth="5"
+            fill="none"
+            pointerEvents="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M38 40 L38 20 Q38 2 20 2 L0 2"
+            stroke="#06b6d4"
+            strokeWidth="2.5"
+            fill="none"
+            pointerEvents="none"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
     <div
       style={{
         background:
@@ -81,11 +149,12 @@ export default function FintChatPanel({
           '0 12px 32px rgba(15,23,42,0.10), ' +
           '0 24px 48px -12px rgba(6,182,212,0.12)',
         borderRadius: 20,
-        width: 390,
-        marginBottom: 10,
+        width: '100%',
         overflow: 'hidden',
+        position: 'relative' as const,
       }}
     >
+
       {/* 헤더 */}
       <div
         style={{
@@ -135,7 +204,7 @@ export default function FintChatPanel({
           display: 'flex',
           flexDirection: 'column',
           gap: 10,
-          maxHeight: 420,
+          maxHeight: panelSize.h,
           overflowY: 'auto',
         }}
       >
@@ -495,6 +564,7 @@ export default function FintChatPanel({
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
     </div>
   );
 }
