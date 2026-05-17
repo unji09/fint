@@ -173,6 +173,34 @@ class ActivityServiceDetailTest {
         assertThat(res.attendees().external()).isEmpty();
     }
 
+    @Test
+    @DisplayName("briefing 이 null 이면 aiSummary 는 null 로 반환된다.")
+    void aiSummaryIsNullWhenBriefingAbsent() {
+        Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
+
+        ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
+
+        assertThat(res.aiSummary()).isNull();
+    }
+
+    @Test
+    @DisplayName("briefing 이 있으면 aiSummary 에 그대로 반영된다.")
+    void aiSummaryReflectsBriefingData() {
+        Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
+        activity.updateBriefing(Map.of(
+                "key_points", List.of("ISO 27001 자료 준비 확인"),
+                "alerts", List.of("분위기 점수 72→55 하락")
+        ));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
+
+        ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
+
+        assertThat(res.aiSummary()).isNotNull();
+        assertThat(res.aiSummary().get("key_points")).isEqualTo(List.of("ISO 27001 자료 준비 확인"));
+        assertThat(res.aiSummary().get("alerts")).isEqualTo(List.of("분위기 점수 72→55 하락"));
+    }
+
     private Activity newActivity(
             OffsetDateTime start,
             OffsetDateTime end,
