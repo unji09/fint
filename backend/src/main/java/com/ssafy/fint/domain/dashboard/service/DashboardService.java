@@ -25,6 +25,7 @@ import com.ssafy.fint.global.exception.CommonErrorCode;
 import com.ssafy.fint.global.exception.DashboardErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -45,6 +46,7 @@ import java.util.stream.Collectors;
  *       ({@link DashboardQueryService#start}) 위임. 응답에 traceId 가 포함된다.</li>
  * </ul>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
@@ -94,8 +96,15 @@ public class DashboardService {
 
         List<DashboardWidget> widgets = dashboardWidgetRepository.findByDashboard(dashboard);
         List<DashboardDetailResponse.WidgetDetail> details = widgets.stream()
-                .map(w -> DashboardDetailResponse.WidgetDetail.from(
-                        w, executeSourceQuery(w.getSourceQuery(), me.getTenantId())))
+                .map(w -> {
+                    List<Map<String, Object>> data = null;
+                    try {
+                        data = executeSourceQuery(w.getSourceQuery(), me.getTenantId());
+                    } catch (Exception e) {
+                        log.warn("위젯 sourceQuery 실행 실패: widgetId={}, error={}", w.getDashboardWidgetId(), e.getMessage());
+                    }
+                    return DashboardDetailResponse.WidgetDetail.from(w, data);
+                })
                 .toList();
 
         return DashboardDetailResponse.of(dashboard, details);
