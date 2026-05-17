@@ -243,15 +243,16 @@ export default function DashboardDetailPage() {
           });
           // assistant message
           const isError = q.status === 'ERROR' || q.status === 'FAILED';
+          const resultObj = (q.result ?? {}) as Record<string, unknown>;
           msgs.push({
             id: `assistant-${q.queryId ?? Date.now()}-${msgs.length}`,
             role: 'assistant',
             content: q.result?.insightText ?? (isError ? '' : ''),
             widget: isError ? null : {
-              widgetType: q.widgetType ?? 'BAR_CHART',
-              title: q.title ?? '',
+              widgetType: q.widgetType ?? (resultObj.widget_type as string) ?? 'BAR_CHART',
+              title: q.title ?? (resultObj.title as string) ?? '',
               data: q.result?.data ?? {},
-              config: q.config ?? {},
+              config: q.config ?? (resultObj.config as Record<string, unknown>) ?? {},
             },
             timestamp: ts,
             status: isError ? 'error' : 'done',
@@ -513,7 +514,11 @@ export default function DashboardDetailPage() {
                   queryId: data.queryId ?? null,
                   inputText: text,
                   result: data.result ?? { data: {}, insightText: '' },
-                  data: Array.isArray(data.result?.data) ? data.result.data : null,
+                  data: Array.isArray(data.result?.data)
+                    ? data.result.data
+                    : Array.isArray(data.result?.data?.rows)
+                      ? data.result.data.rows
+                      : null,
                   px: 0,
                   py: 0,
                   pw: 400,
@@ -867,6 +872,7 @@ export default function DashboardDetailPage() {
                 widgetTitle={widgetTitle}
                 widgetType={pendingType}
                 result={pendingWidget?.result}
+                config={pendingWidget?.config ?? {}}
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}

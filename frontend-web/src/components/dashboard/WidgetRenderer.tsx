@@ -30,9 +30,13 @@ interface WidgetRendererProps {
 }
 
 export default function WidgetRenderer({ widgetType, config, data, result }: WidgetRendererProps) {
-  const resolvedData = (data && data.length > 0)
-    ? data
-    : (Array.isArray(result?.data) ? (result.data as Record<string, unknown>[]) : null);
+  const resultData = result?.data as Record<string, unknown> | unknown[] | null | undefined;
+  const extractedRows = Array.isArray(resultData)
+    ? (resultData as Record<string, unknown>[])
+    : (resultData && typeof resultData === 'object' && Array.isArray((resultData as Record<string, unknown>).rows))
+      ? ((resultData as Record<string, unknown>).rows as Record<string, unknown>[])
+      : null;
+  const resolvedData = (data && data.length > 0) ? data : extractedRows;
 
   // config.chart 존재 → Chart.js (프리셋 + AI 공통)
   if (config.chart && resolvedData && resolvedData.length > 0) {

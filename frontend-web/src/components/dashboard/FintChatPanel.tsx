@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import type { Step, WidgetResult, ChatMessage } from '@/types/dashboard';
-import { BarChartSvg, LineChartSvg, SegmentChart, KpiCard, TableWidget } from './ChartWidgets';
+import WidgetRenderer from './WidgetRenderer';
 
 interface Props {
   steps: Step[];
@@ -13,6 +13,7 @@ interface Props {
   widgetTitle: string;
   widgetType: string;
   result?: WidgetResult | null;
+  config?: Record<string, unknown>;
   onTitleChange: (v: string) => void;
   onCollapse: () => void;
   onDragStart: (e: React.MouseEvent) => void;
@@ -30,14 +31,12 @@ export default function FintChatPanel({
   widgetTitle,
   widgetType,
   result,
+  config: widgetConfig = {},
   onTitleChange,
   onCollapse,
   onDragStart,
   chatHistory = [],
 }: Props) {
-  const data = (result?.data as Record<string, unknown> | undefined) ?? {};
-  const labels = Array.isArray(data.labels) ? (data.labels as string[]) : undefined;
-  const values = Array.isArray(data.values) ? (data.values as number[]) : undefined;
   const insightText = result?.insightText && result.insightText.trim().length > 0
     ? result.insightText
     : FALLBACK_INSIGHT;
@@ -182,13 +181,16 @@ export default function FintChatPanel({
             );
           }
           // done assistant message with optional widget preview
-          const msgData = (msg.widget?.data as Record<string, unknown> | undefined) ?? {};
-          const msgLabels = Array.isArray(msgData.labels) ? (msgData.labels as string[]) : undefined;
-          const msgValues = Array.isArray(msgData.values) ? (msgData.values as number[]) : undefined;
           const msgInsight = msg.content && msg.content.trim().length > 0
             ? msg.content
             : FALLBACK_INSIGHT;
           const msgWidgetType = msg.widget?.widgetType ?? 'BAR_CHART';
+          const msgWidgetData = Array.isArray(msg.widget?.data)
+            ? (msg.widget.data as Record<string, unknown>[])
+            : null;
+          const msgWidgetResult = !msgWidgetData && msg.widget?.data
+            ? { data: msg.widget.data, insightText: '' }
+            : null;
           return (
             <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <p
@@ -231,18 +233,13 @@ export default function FintChatPanel({
                       {msg.widget.title}
                     </span>
                   </div>
-                  <div style={{ padding: '4px 10px 6px' }}>
-                    {msgWidgetType === 'LINE_CHART' ? (
-                      <LineChartSvg size="mini" values={msgValues} labels={msgLabels} />
-                    ) : msgWidgetType === 'PIE' || msgWidgetType === 'SEGMENT' ? (
-                      <SegmentChart labels={msgLabels} values={msgValues} />
-                    ) : msgWidgetType === 'KPI' ? (
-                      <KpiCard value={msgValues?.[0] ?? (typeof msgData.value === 'number' ? msgData.value : undefined)} label={msgLabels?.[0]} />
-                    ) : msgWidgetType === 'TABLE' ? (
-                      <TableWidget data={msgData} />
-                    ) : (
-                      <BarChartSvg size="mini" values={msgValues} labels={msgLabels} />
-                    )}
+                  <div style={{ padding: '4px 10px 6px', height: 120 }}>
+                    <WidgetRenderer
+                      widgetType={msgWidgetType}
+                      config={msg.widget.config ?? {}}
+                      data={msgWidgetData}
+                      result={msgWidgetResult}
+                    />
                   </div>
                 </div>
               )}
@@ -468,18 +465,13 @@ export default function FintChatPanel({
                   드래그 ↗
                 </span>
               </div>
-              <div style={{ padding: '6px 12px 8px' }}>
-                {widgetType === 'LINE_CHART' ? (
-                  <LineChartSvg size="mini" values={values} labels={labels} />
-                ) : widgetType === 'PIE' || widgetType === 'SEGMENT' ? (
-                  <SegmentChart labels={labels} values={values} />
-                ) : widgetType === 'KPI' ? (
-                  <KpiCard value={values?.[0] ?? (typeof data.value === 'number' ? data.value : undefined)} label={labels?.[0]} />
-                ) : widgetType === 'TABLE' ? (
-                  <TableWidget data={data} />
-                ) : (
-                  <BarChartSvg size="mini" values={values} labels={labels} />
-                )}
+              <div style={{ padding: '6px 12px 8px', height: 140 }}>
+                <WidgetRenderer
+                  widgetType={widgetType}
+                  config={widgetConfig}
+                  data={null}
+                  result={result ?? null}
+                />
               </div>
             </div>
           </>
