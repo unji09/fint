@@ -26,11 +26,12 @@ public class MoodCallbackController {
     public void callback(
         @PathVariable Long activityId,
         @RequestBody MoodCallbackRequest request,
-        @RequestHeader(value = "X-Internal-Secret", required = false) String secret) {
+        @RequestHeader(value = "X-Internal-Secret", required = false) String secret,
+        @RequestHeader(value = "X-Tenant-Id", required = false) Long tenantId) {
         if(!internalSecret.equals(secret)){
             throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
         }
-        log.info("{MoodCallback} received activityId={} accountId={}", activityId, request.accountId());
-        moodAnalysisService.processCallback(activityId, request);
+        log.info("{MoodCallback} received activityId={} accountId={} tenantId={}", activityId, request.accountId(), tenantId);
+        moodAnalysisService.processCallback(activityId, request, tenantId);
     }
 }

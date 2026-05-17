@@ -1,9 +1,9 @@
 package com.ssafy.fint.domain.activity.service;
 
 import com.ssafy.fint.domain.activity.dto.SttCallbackRequest;
-import com.ssafy.fint.domain.activity.entity.Activity;
+import com.ssafy.fint.domain.activity.entity.Recording;
 import com.ssafy.fint.domain.activity.entity.SttStatus;
-import com.ssafy.fint.domain.activity.repository.ActivityRepository;
+import com.ssafy.fint.domain.activity.repository.RecordingRepository;
 import com.ssafy.fint.domain.mood.client.MoodClient;
 import com.ssafy.fint.global.exception.ActivityErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
@@ -21,13 +21,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SttCallbackService {
 
-    private final ActivityRepository activityRepository;
+    private final RecordingRepository recordingRepository;
     private final MoodClient moodClient;
 
     @Transactional
-    public void processCallback(Long activityId, SttCallbackRequest request) {
-        Activity activity = activityRepository.findDetail(request.tenantId(), activityId)
-                .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
+    public void processCallback(Long recordingId, Long activityId, SttCallbackRequest request) {
+        Recording recording = recordingRepository.findByIdAndTenantId(recordingId, request.tenantId())
+                .orElseThrow(() -> new BusinessException(ActivityErrorCode.RECORDING_NOT_FOUND));
 
         List<Map<String, Object>> segments = request.segments().stream()
                 .map(s -> Map.<String, Object>of(
@@ -38,23 +38,23 @@ public class SttCallbackService {
                 ))
                 .collect(Collectors.toList());
 
-        activity.updateTranscript(Map.of("segments", segments));
-        activity.changeSttStatus(SttStatus.COMPLETED);
+        recording.updateTranscript(Map.of("segments", segments));
+        recording.changeSttStatus(SttStatus.COMPLETED);
 
         String transcript = request.segments().stream()
                 .map(s -> s.speakerId() + ": " + s.text())
                 .collect(Collectors.joining("\n"));
 
-        moodClient.requestMoodAnalysis(activityId, request.accountId(), transcript);
+        moodClient.requestMoodAnalysis(activityId, request.accountId(), request.tenantId(), transcript);
 
-        log.info("[SttCallback] 처리 완료 activityId={} tenantId={} segments={}",
-                activityId, request.tenantId(), segments.size());
+        log.info("[SttCallback] 처리 완료 recordingId={} activityId={} tenantId={} segments={}",
+                recordingId, activityId, request.tenantId(), segments.size());
     }
 
     @Transactional
-    public void markFailed(Long activityId, Long tenantId) {
-        activityRepository.findDetail(tenantId, activityId)
-                .ifPresent(a -> a.changeSttStatus(SttStatus.FAILED));
-        log.warn("[SttCallback] STT 실패 처리 activityId={} tenantId={}", activityId, tenantId);
+    public void markFailed(Long recordingId, Long tenantId) {
+        recordingRepository.findByIdAndTenantId(recordingId, tenantId)
+                .ifPresent(r -> r.changeSttStatus(SttStatus.FAILED));
+        log.warn("[SttCallback] STT 실패 처리 recordingId={} tenantId={}", recordingId, tenantId);
     }
 }

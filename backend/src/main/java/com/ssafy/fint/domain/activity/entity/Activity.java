@@ -71,26 +71,19 @@ public class Activity extends BaseUpdatableEntity {
     private List<Map<String, Object>> attendees;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "transcript", columnDefinition = "jsonb")
-    private Map<String, Object> transcript;
-
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "summary", columnDefinition = "jsonb")
     private Map<String, Object> summary;
 
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 
-    @Column(name = "recording_key", length = 100)
-    private String recordingKey;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "stt_status", nullable = false, length = 20)
-    private SttStatus sttStatus;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "mood_status", nullable = false, length = 20)
     private MoodStatus moodStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "briefing", columnDefinition = "jsonb")
+    private Map<String, Object> briefing;
 
     @Builder
     private Activity(
@@ -103,8 +96,7 @@ public class Activity extends BaseUpdatableEntity {
             OffsetDateTime startAt,
             OffsetDateTime endAt,
             List<Map<String, Object>> attendees,
-            String memo,
-            String recordingKey
+            String memo
     ) {
         this.user = user;
         this.deal = deal;
@@ -116,17 +108,7 @@ public class Activity extends BaseUpdatableEntity {
         this.endAt = endAt;
         this.attendees = attendees;
         this.memo = memo;
-        this.sttStatus = SttStatus.PENDING;
         this.moodStatus = MoodStatus.PENDING;
-        this.recordingKey = recordingKey;
-    }
-
-    public void updateRecordingKey(String recordingKey) {
-        this.recordingKey = recordingKey;
-    }
-
-    public void changeSttStatus(SttStatus sttStatus) {
-        this.sttStatus = sttStatus;
     }
 
     public void changeType(ActivityType type) {
@@ -162,10 +144,6 @@ public class Activity extends BaseUpdatableEntity {
         this.deviceEventId = null;
     }
 
-    public void updateTranscript(Map<String, Object> transcript) {
-        this.transcript = transcript;
-    }
-
     public void updateSummary(Map<String, Object> summary) {
         this.summary = summary;
     }
@@ -178,8 +156,7 @@ public class Activity extends BaseUpdatableEntity {
         this.moodStatus = moodStatus;
     }
 
-    public void saveRecordingKey(String recordingKey) {
-        this.recordingKey = recordingKey;
+    public void updateBriefing(Map<String, Object> briefing) {
+        this.briefing = briefing;
     }
 }
-

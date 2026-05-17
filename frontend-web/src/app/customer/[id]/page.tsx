@@ -44,7 +44,7 @@ export default function CustomerDetailPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   // accounts 목록은 layout 의 사이드바가 관리한다. page 에서는 acc 정보가 필요할 때만 같은 hook 호출 (모듈 캐시로 즉시 반환됨)
   const { accounts } = useAccountList();
-  const { signals, deals, refetch: refDetail } = useAccountDetail(id ?? null);
+  const { signals, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
   const { remove: delContact } = useDeleteContact();
   const { update: updContact } = useUpdateContact();
@@ -129,9 +129,12 @@ export default function CustomerDetailPage() {
             {acc && <span style={{ fontFamily: F, fontSize: 12, color: '#94a3b8' }}>{acc.industry}</span>}
           </div>
 
-          {/* 분위기(날씨) 인라인 한 줄 — AI 감정 분석 결과 read-only */}
+          {/* 분위기(날씨) — 미팅 분석 결과 기반. useAccountDetail 에서 mood history 의 최신 항목 사용. */}
           {acc && !selDeal && !selContact && (
-            <WeatherPanel mood={acc.temperature} reason={acc.moodReason} />
+            <WeatherPanel
+              mood={latestMood ?? acc.temperature}
+              reason={latestMoodReason ?? acc.moodReason ?? null}
+            />
           )}
 
           {/* 메인 카드 — height 자동. 카드 수에 따라 박스 세로가 자라/줄어 빈 공간을 없앤다.

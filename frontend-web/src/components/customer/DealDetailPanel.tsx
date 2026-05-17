@@ -36,7 +36,19 @@ interface Activity {
   title: string;
   startAt: string;
   memo: string | null;
+  /** Activity Detail API 의 summary (AI 분석 결과). list 응답엔 없고 detail 호출로 보강. */
+  summary?: Record<string, string | string[]> | null;
 }
+
+// summary key → 한글 라벨
+const SUMMARY_LABELS: Record<string, string> = {
+  highlights: '주요 내용',
+  decisions: '결정 사항',
+  actionItems: '실행 항목',
+  nextSteps: '다음 단계',
+  risks: '리스크',
+  notes: '비고',
+};
 
 // DB pipeline_stages 와 1:1 매칭 (한글 7단계)
 const PIPELINE_LABELS = ['발굴', '가치 제안', '솔루션 설계', '제안 제출', '협상', '계약 대기', '수주'];
@@ -69,6 +81,7 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
   const [detail, setDetail] = useState<DealDetail | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedMeetingId, setExpandedMeetingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!deal.dealId) return;
@@ -76,17 +89,35 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
 
     Promise.allSettled([
       fetchWithAuth(`/deals/${deal.dealId}`).then((r) => r.json()),
-      fetchWithAuth(`/activities?dealId=${deal.dealId}&size=5`).then((r) => r.json()),
-    ]).then(([detailRes, actRes]) => {
+      // 미팅만 — 날짜 desc 정렬은 백엔드 기본
+      fetchWithAuth(`/activities?dealId=${deal.dealId}&type=MEETING&size=20`).then((r) => r.json()),
+    ]).then(async ([detailRes, actRes]) => {
       if (detailRes.status === 'fulfilled') setDetail(detailRes.value.data);
+      let list: Activity[] = [];
       if (actRes.status === 'fulfilled') {
         const ad = actRes.value.data;
-        const list =
+        list =
           (Array.isArray(ad?.data) ? ad.data : null) ??
           ad?.content ??
           (Array.isArray(ad) ? ad : []);
-        setActivities(list);
       }
+      // 각 미팅 detail 호출 → summary 보강. 백엔드 list 응답엔 summary 없음.
+      const detailedList = await Promise.all(
+        list.map(async (a) => {
+          try {
+            const r = await fetchWithAuth(`/activities/${a.activityId}`);
+            if (!r.ok) return a;
+            const j = await r.json();
+            const d = j?.data ?? j;
+            return { ...a, summary: d?.summary ?? null } as Activity;
+          } catch {
+            return a;
+          }
+        }),
+      );
+      // 날짜 desc 정렬 (최신이 위)
+      detailedList.sort((x, y) => new Date(y.startAt).getTime() - new Date(x.startAt).getTime());
+      setActivities(detailedList);
       setLoading(false);
     });
   }, [deal.dealId]);
@@ -208,31 +239,82 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
 
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 18, color: '#1e293b' }}>활동 내역</span>
+            <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 18, color: '#1e293b' }}>미팅 내역</span>
+            <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 12, color: '#94a3b8' }}>{activities.length}회</span>
           </div>
           {activities.length > 0 ? (
-            <div style={{ border: '1px solid #e2eaf0', borderRadius: 8, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Pretendard,sans-serif', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e2eaf0' }}>
-                    {['날짜', '유형', '제목'].map((h) => (
-                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontFamily: 'Inter,sans-serif', fontWeight: 600, fontSize: 11, color: '#475569', letterSpacing: '0.5px' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activities.map((a, i) => (
-                    <tr key={a.activityId} style={{ borderTop: i > 0 ? '1px solid #e2eaf0' : 'none' }}>
-                      <td style={{ padding: '12px 14px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtDate(a.startAt)}</td>
-                      <td style={{ padding: '12px 14px', color: '#64748b', whiteSpace: 'nowrap' }}>{a.type}</td>
-                      <td style={{ padding: '12px 14px', color: '#1e293b' }}>{a.title}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {activities.map((a) => {
+                const expanded = expandedMeetingId === a.activityId;
+                const hasSummary = a.summary && Object.keys(a.summary).length > 0;
+                return (
+                  <div
+                    key={a.activityId}
+                    onClick={() => setExpandedMeetingId(expanded ? null : a.activityId)}
+                    style={{
+                      border: `1px solid ${expanded ? '#06b6d4' : '#e2eaf0'}`,
+                      borderRadius: 8,
+                      padding: '12px 14px',
+                      cursor: 'pointer',
+                      background: '#fff',
+                      transition: 'border-color 0.12s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontFamily: 'Inter,sans-serif', fontSize: 11, color: '#475569', fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 90 }}>
+                        {fmtDate(a.startAt)}
+                      </span>
+                      <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 13, fontWeight: expanded ? 600 : 500, color: '#1e293b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {a.title}
+                      </span>
+                      {hasSummary && (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#0686d4', background: '#eef6ff', padding: '2px 7px', borderRadius: 3, flexShrink: 0 }}>
+                          요약
+                        </span>
+                      )}
+                      <svg width="12" height="7" viewBox="0 0 12 7" fill="none" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s' }}>
+                        <path d="M1 1l5 5 5-5" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    {expanded && (
+                      <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {hasSummary ? (
+                          Object.entries(a.summary!).map(([k, v]) => (
+                            <div key={k}>
+                              <div style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 4, letterSpacing: '0.02em' }}>
+                                {SUMMARY_LABELS[k] ?? k}
+                              </div>
+                              {Array.isArray(v) ? (
+                                <ul style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                  {v.map((item, i) => (
+                                    <li key={i} style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 12, color: '#334155', lineHeight: 1.55 }}>{item}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p style={{ margin: 0, fontFamily: 'Pretendard,sans-serif', fontSize: 12, color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                                  {v}
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        ) : a.memo ? (
+                          <div>
+                            <div style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 4 }}>메모</div>
+                            <p style={{ margin: 0, fontFamily: 'Pretendard,sans-serif', fontSize: 12, color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{a.memo}</p>
+                          </div>
+                        ) : (
+                          <p style={{ margin: 0, fontFamily: 'Pretendard,sans-serif', fontSize: 12, color: '#94a3b8' }}>
+                            AI 요약이 아직 없습니다. 녹음 후 자동 생성됩니다.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <p style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 13, color: '#94a3b8' }}>활동 내역이 없습니다.</p>
+            <p style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 13, color: '#94a3b8' }}>미팅 내역이 없습니다.</p>
           )}
         </div>
       </div>

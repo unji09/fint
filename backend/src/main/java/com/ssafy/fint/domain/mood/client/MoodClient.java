@@ -24,18 +24,19 @@ public class MoodClient {
         this.pythonBaseUrl = pythonBaseUrl;
     }
 
-    public void requestMoodAnalysis(Long activityId, Long accountId, String transcript) {
+    public void requestMoodAnalysis(Long activityId, Long accountId, Long tenantId, String transcript) {
         try{
             restTemplate.postForEntity(
                 pythonBaseUrl + "/api/v1/mood/analyze",
                 Map.of(
                     "activity_id", activityId,
                     "account_id", accountId,
+                    "tenant_id", tenantId,
                     "transcript", transcript
                 ),
                 Void.class
             );
-            log.info("[MoodClient] 날씨 분석 요청 완료 activityId={}", activityId);
+            log.info("[MoodClient] 날씨 분석 요청 완료 activityId={} tenantId={}", activityId, tenantId);
         } catch (Exception e){
             log.error("[MoodClient] 날씨 분석 요청 실패 activityId={} error={}", activityId, e.getMessage());
         }

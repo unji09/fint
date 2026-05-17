@@ -1,17 +1,30 @@
 package com.ssafy.fint.domain.activity.dto;
 
-import com.ssafy.fint.domain.activity.entity.Activity;
+import com.ssafy.fint.domain.activity.entity.Recording;
+
+import java.time.OffsetDateTime;
+import java.util.Map;
 
 public record RecordingResponse(
+    Long recordingId,
     Long activityId,
+    String fileKey,
+    String title,
+    int duration,
     String sttStatus,
-    String moodStatus
+    Map<String, Object> transcript,
+    OffsetDateTime createdAt
 ) {
-    public static RecordingResponse from(Activity activity) {
+    public static RecordingResponse from(Recording recording) {
         return new RecordingResponse(
-            activity.getActivityId(),
-            activity.getSttStatus().name(),
-            activity.getMoodStatus().name()
+            recording.getRecordingId(),
+            recording.getActivity().getActivityId(),
+            recording.getFileKey(),
+            recording.getTitle(),
+            recording.getDuration(),
+            recording.getSttStatus().name(),
+            recording.getTranscript(),
+            recording.getCreatedAt()
         );
     }
 }

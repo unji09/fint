@@ -16,12 +16,13 @@ import WeekGrid, { PipelineItem } from '@/components/calendar/WeekGrid';
 import EventDetailPanel from '@/components/calendar/EventDetailPanel';
 import AddEventModal from '@/components/calendar/AddEventModal';
 import type { CalendarEvent, ViewMode } from '@/components/calendar/types';
-import { CATEGORY_COLOR, CATEGORY_BG } from '@/components/calendar/types';
+import { getEventColor } from '@/components/calendar/types';
 import { useCalendarEvents, fetchEventDetail, resizeActivity } from '@/hooks/useCalendarEvents';
 import {
   addMonths,
   addWeeks,
   getEventsForDay,
+  getWeekDays,
   isToday,
   isSameDay,
 } from '@/components/calendar/utils';
@@ -86,9 +87,15 @@ function getMondayWeek(d: Date): Date[] {
 // 제목: Inter:SemiBold 14px #1f2126
 // Cat pill: bg-catBg, rounded-[10px], dot 6px rounded-[3px]
 // Pipeline: bg-[#f0edf7] rounded-[3px] px-[8px] py-[3px], progress bar
-function AsideCard({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
-  const col = event.category ? CATEGORY_COLOR[event.category] : '#7F77DD';
-  const bg = event.category ? CATEGORY_BG[event.category] : '#ECEBFA';
+function AsideCard({ event, onClick, height }: { event: CalendarEvent; onClick: () => void; height: number }) {
+  const { color: col, bg } = getEventColor(event);
+  const pad = 24;
+  const titleH = 22;
+  const badgeH = 22;
+  const gap = 8;
+  const inner = height - pad;
+  const showPipeline = inner >= titleH + gap + badgeH;
+  const showCategory = inner >= titleH + gap + badgeH + gap + badgeH;
 
   return (
     <button
@@ -99,8 +106,8 @@ function AsideCard({ event, onClick }: { event: CalendarEvent; onClick: () => vo
         textAlign: 'left',
         cursor: 'pointer',
         borderRadius: 10,
-        backgroundColor: '#F6F7F9',
-        border: `1px solid ${bg}`,
+        backgroundColor: bg,
+        border: `1px solid ${col}`,
         padding: '12px 14px',
         display: 'flex',
         flexDirection: 'column',
@@ -111,59 +118,56 @@ function AsideCard({ event, onClick }: { event: CalendarEvent; onClick: () => vo
         fontFamily: F_INTER,
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#F0F2F7';
+        (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(0.95)';
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#F6F7F9';
+        (e.currentTarget as HTMLButtonElement).style.filter = '';
       }}
     >
       <span
         style={{
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: 600,
           color: TXT1,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           display: 'block',
+          minWidth: 0,
         }}
       >
         {event.title}
       </span>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        {event.category && (
-          <span
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              backgroundColor: bg,
-              borderRadius: 10,
-              padding: '3px 8px',
-              fontSize: 11,
-              color: col,
-            }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: col }} />
-            {event.category}
-          </span>
-        )}
-        {event.pipelineStage && (
-          <span
-            style={{
-              backgroundColor: '#F0EDF7',
-              borderRadius: 3,
-              padding: '3px 8px',
-              fontSize: 10,
-              color: '#534AB7',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {event.pipelineStage.stageName}
-          </span>
-        )}
-      </div>
+      {showCategory && event.category && (
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 9,
+            color: col,
+          }}
+        >
+          <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: col, flexShrink: 0 }} />
+          {event.category}
+        </span>
+      )}
+      {showPipeline && event.pipelineStage && (
+        <span
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.6)',
+            borderRadius: 4,
+            padding: '2px 6px',
+            fontSize: 7,
+            color: col,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            alignSelf: 'flex-start',
+          }}
+        >
+          {event.pipelineStage.stageName}
+        </span>
+      )}
     </button>
   );
 }
@@ -189,6 +193,7 @@ function DayTimeView({
   onTimeClick,
   onTimeRangeSelect,
   onResized,
+  onNotificationDrop,
 }: {
   events: CalendarEvent[];
   selectedDate: Date;
@@ -196,6 +201,7 @@ function DayTimeView({
   onTimeClick?: (d: Date) => void;
   onTimeRangeSelect?: (start: Date, end: Date) => void;
   onResized?: () => void;
+  onNotificationDrop?: (date: Date, data: string) => void;
 }) {
   // SSR 시점의 시각과 client hydration 시점의 시각이 달라 hydration mismatch 가 발생할 수 있다.
   // 따라서 초기엔 null 로 두고 mount 후에만 현재 시각 라인을 렌더한다.
@@ -227,6 +233,7 @@ function DayTimeView({
     curMouseY: number;
     moved: boolean;
   } | null>(null);
+  const justMovedRef = useRef(false);
   const colRef = useRef<HTMLDivElement>(null);
 
   const yToDate = (y: number): Date => {
@@ -322,6 +329,7 @@ function DayTimeView({
       const m = move;
       setMove(null);
       if (!m.moved) return;
+      justMovedRef.current = true;
       const dy = m.curMouseY - m.startMouseY;
       const minutesDelta = Math.round((dy / A_H) * 60 / 15) * 15;
       const newStart = new Date(m.event.startAt);
@@ -402,6 +410,21 @@ function DayTimeView({
       <div
         ref={colRef}
         onMouseDown={handleMouseDown}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('application/x-fint-notification')) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }
+        }}
+        onDrop={(e) => {
+          const raw = e.dataTransfer.getData('application/x-fint-notification');
+          if (raw && onNotificationDrop) {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            onNotificationDrop(yToDate(y), raw);
+          }
+        }}
         style={{ position: 'relative', height: total, cursor: 'crosshair', userSelect: 'none' }}
       >
         {/* 드래그 highlight overlay */}
@@ -489,14 +512,47 @@ function DayTimeView({
             <div style={{ flex: 1, height: 2, backgroundColor: RED }} />
           </div>
         )}
-        {events.map((ev) => {
+        {(() => {
+          const sorted = [...events].sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+          const colAssign = new Map<string, { colIdx: number; totalCols: number }>();
+          const groups: CalendarEvent[][] = [];
+          let group: CalendarEvent[] = [];
+          let groupEnd = 0;
+          for (const ev of sorted) {
+            const s = new Date(ev.startAt).getTime();
+            if (group.length === 0 || s < groupEnd) {
+              group.push(ev);
+              groupEnd = Math.max(groupEnd, new Date(ev.endAt).getTime());
+            } else {
+              groups.push(group);
+              group = [ev];
+              groupEnd = new Date(ev.endAt).getTime();
+            }
+          }
+          if (group.length) groups.push(group);
+          for (const g of groups) {
+            const colEnds: number[] = [];
+            const cols: number[] = [];
+            for (const ev of g) {
+              const evS = new Date(ev.startAt).getTime();
+              let placed = -1;
+              for (let c = 0; c < colEnds.length; c++) {
+                if (evS >= colEnds[c]) { placed = c; break; }
+              }
+              if (placed === -1) { placed = colEnds.length; colEnds.push(0); }
+              colEnds[placed] = new Date(ev.endAt).getTime();
+              cols.push(placed);
+            }
+            const totalCols = colEnds.length;
+            g.forEach((ev, i) => colAssign.set(ev.eventId, { colIdx: cols[i], totalCols }));
+          }
+          return events.map((ev) => {
           const s = new Date(ev.startAt);
           const en = new Date(ev.endAt);
           const top = (s.getHours() - A_S + s.getMinutes() / 60) * A_H + 4;
           if (top < 0 || top > total) return null;
           const isResizing = resize?.event.eventId === ev.eventId;
           const isMoving = move?.event.eventId === ev.eventId && move.moved;
-          // 평소 wrapper height = 일정 시간 길이 (사이드도 시간만큼 늘어나 보임)
           const sH = s.getHours() + s.getMinutes() / 60;
           const eH = en.getHours() + en.getMinutes() / 60;
           const naturalHeight = Math.max(50, (eH - sH) * A_H - 2);
@@ -512,6 +568,9 @@ function DayTimeView({
             }
           }
           const moveTransform = isMoving ? `translateY(${move.curMouseY - move.startMouseY}px)` : undefined;
+          const ol = colAssign.get(ev.eventId) ?? { colIdx: 0, totalCols: 1 };
+          const colW = ol.totalCols > 1 ? `calc((100% - 56px) / ${ol.totalCols})` : undefined;
+          const colL = ol.totalCols > 1 ? `calc(50px + (100% - 56px) * ${ol.colIdx} / ${ol.totalCols})` : 50;
           return (
             <div
               key={ev.eventId}
@@ -520,8 +579,9 @@ function DayTimeView({
               style={{
                 position: 'absolute',
                 top: wrapperTop,
-                left: 42,
-                right: 6,
+                left: colL,
+                width: colW,
+                right: ol.totalCols > 1 ? undefined : 6,
                 height: wrapperHeight,
                 zIndex: isMoving ? 10 : isResizing ? 4 : 1,
                 transform: moveTransform,
@@ -531,7 +591,11 @@ function DayTimeView({
             >
               <AsideCard
                 event={ev}
-                onClick={() => onEventClick(ev)}
+                onClick={() => {
+                  if (justMovedRef.current) { justMovedRef.current = false; return; }
+                  onEventClick(ev);
+                }}
+                height={wrapperHeight}
               />
               {/* 리사이즈 핸들 — button 밖 형제 div (이벤트 충돌 방지). FINT 활동만. */}
               {ev.eventId.startsWith('act-') && (
@@ -578,7 +642,8 @@ function DayTimeView({
               )}
             </div>
           );
-        })}
+        });
+        })()}
       </div>
     </div>
   );
@@ -720,18 +785,32 @@ export default function CalendarPage() {
 
   const pipeline: PipelineItem[] = useMemo(() => {
     const counts: Record<string, number> = {};
-    const y = currentDate.getFullYear();
-    const m = currentDate.getMonth();
-    apiEvents.forEach((ev) => {
-      const stage = ev.pipelineStage?.stageName;
-      if (!stage) return;
-      const d = new Date(ev.startAt);
-      if (d.getFullYear() === y && d.getMonth() === m) {
-        counts[stage] = (counts[stage] ?? 0) + 1;
-      }
-    });
+    if (viewMode === 'month') {
+      const y = currentDate.getFullYear();
+      const m = currentDate.getMonth();
+      apiEvents.forEach((ev) => {
+        const stage = ev.pipelineStage?.stageName;
+        if (!stage) return;
+        const d = new Date(ev.startAt);
+        if (d.getFullYear() === y && d.getMonth() === m) {
+          counts[stage] = (counts[stage] ?? 0) + 1;
+        }
+      });
+    } else {
+      const weekDays = getWeekDays(currentDate);
+      const wStart = weekDays[0].getTime();
+      const wEnd = new Date(weekDays[6]).setHours(23, 59, 59, 999);
+      apiEvents.forEach((ev) => {
+        const stage = ev.pipelineStage?.stageName;
+        if (!stage) return;
+        const t = new Date(ev.startAt).getTime();
+        if (t >= wStart && t <= wEnd) {
+          counts[stage] = (counts[stage] ?? 0) + 1;
+        }
+      });
+    }
     return PIPELINE_STYLES.map((s) => ({ ...s, count: counts[s.label] ?? 0 }));
-  }, [apiEvents, currentDate]);
+  }, [apiEvents, currentDate, viewMode]);
 
   const events = useMemo(() => {
     if (!selectedPipeline) return apiEvents;
@@ -791,10 +870,28 @@ export default function CalendarPage() {
   };
   const miniWk = getMondayWeek(selectedDate);
 
+  // ── 알림 드롭 → 일정 추가 prefill ──
+  const [dropPrefill, setDropPrefill] = useState<{
+    title?: string; category?: string; accountId?: number; accountName?: string;
+  } | null>(null);
+
   const openAdd = (d: Date, endD?: Date) => {
     setAddDate(new Date(d));
     setAddEndDate(endD ? new Date(endD) : undefined);
     setIsAddOpen(true);
+  };
+
+  const handleNotificationDrop = (date: Date, raw: string) => {
+    try {
+      const data = JSON.parse(raw);
+      setDropPrefill({
+        title: data.title,
+        accountName: data.accountName,
+        accountId: data.accountId,
+        category: data.category,
+      });
+      openAdd(date);
+    } catch { /* ignore malformed data */ }
   };
   const onDayClick = (d: Date) => {
     const dt = new Date(d);
@@ -963,6 +1060,7 @@ export default function CalendarPage() {
               onTimeClick={onTimeClick}
               onTimeRangeSelect={onTimeRangeSelect}
               onResized={() => refetch()}
+              onNotificationDrop={handleNotificationDrop}
             />
           </aside>
         </div>
@@ -1173,7 +1271,7 @@ export default function CalendarPage() {
                       cursor: 'pointer',
                       backgroundColor: active ? s.cBg : 'transparent',
                       transition: 'background-color 150ms ease',
-                      fontFamily: F_INTER,
+                      fontFamily: 'inherit',
                     }}
                   >
                     <span
@@ -1229,8 +1327,6 @@ export default function CalendarPage() {
                 onDayClick={onDayClick}
                 onEventClick={(ev) => {
                   setSelectedDate(new Date(ev.startAt));
-                  // events 배열의 객체는 캘린더 응답 (memo 누락) 이므로
-                  // handleEventClick 으로 활동 상세 API 까지 받아온다.
                   handleEventClick(ev);
                 }}
                 onMoreClick={(d) => {
@@ -1239,6 +1335,7 @@ export default function CalendarPage() {
                 }}
                 onDayRangeSelect={onDayRangeSelect}
                 onResized={() => refetch()}
+                onNotificationDrop={handleNotificationDrop}
               />
             ) : (
               <WeekGrid
@@ -1253,6 +1350,9 @@ export default function CalendarPage() {
                 onTimeRangeSelect={onTimeRangeSelect}
                 onResized={() => refetch()}
                 pipeline={pipeline}
+                selectedPipeline={selectedPipeline}
+                onPipelineClick={(label) => setSelectedPipeline(selectedPipeline === label ? null : label)}
+                onNotificationDrop={handleNotificationDrop}
               />
             )}
             {/* FAB */}
@@ -1308,13 +1408,19 @@ export default function CalendarPage() {
         onClose={() => {
           setIsAddOpen(false);
           setEditEvent(null);
+          setDropPrefill(null);
         }}
         onSaved={() => {
           refetch();
           setEditEvent(null);
+          setDropPrefill(null);
         }}
         defaultDate={addDate}
         defaultEndDate={addEndDate}
+        defaultTitle={dropPrefill?.title}
+        defaultCategory={dropPrefill?.category ?? undefined}
+        defaultAccountId={dropPrefill?.accountId}
+        defaultAccountName={dropPrefill?.accountName}
         editEvent={editEvent}
       />
     </div>

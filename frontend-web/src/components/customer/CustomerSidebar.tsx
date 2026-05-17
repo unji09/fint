@@ -404,10 +404,7 @@ export default function CustomerSidebar({
                               background: 'none',
                               border: 'none',
                               cursor: 'pointer',
-                              borderBottom:
-                                i < accountContacts.length - 1
-                                  ? '1px solid rgba(226,232,240,0.5)'
-                                  : 'none',
+                              borderBottom: 'none',
                               borderLeft: isActive ? '2px solid #06b6d4' : '2px solid transparent',
                               paddingLeft: isActive ? 6 : 0,
                               transition: 'border-color 0.15s',
@@ -464,7 +461,6 @@ export default function CustomerSidebar({
                             display: 'flex',
                             justifyContent: 'center',
                             padding: '7px 0',
-                            borderTop: accountContacts.length > 0 ? '1px solid rgba(226,232,240,0.5)' : 'none',
                             marginTop: 2,
                           }}
                         >
@@ -501,7 +497,6 @@ export default function CustomerSidebar({
                             flexDirection: 'column',
                             gap: 5,
                             padding: '8px 0 4px',
-                            borderTop: accountContacts.length > 0 ? '1px solid rgba(226,232,240,0.5)' : 'none',
                           }}
                         >
                           <input
@@ -537,7 +532,7 @@ export default function CustomerSidebar({
                         </div>
                       )}
                       {/* 고객사 관리 */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6, paddingTop: 6 }}>
                         {onDeleteAccount && (
                           <button onClick={(e) => { e.stopPropagation(); onDeleteAccount(acc.accountId, acc.name); }}
                             style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 10, color: '#cbd5e1', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}>

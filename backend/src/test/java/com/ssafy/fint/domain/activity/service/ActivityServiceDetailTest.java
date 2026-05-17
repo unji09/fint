@@ -3,7 +3,6 @@ package com.ssafy.fint.domain.activity.service;
 import com.ssafy.fint.domain.activity.dto.ActivityDetailResponse;
 import com.ssafy.fint.domain.activity.entity.Activity;
 import com.ssafy.fint.domain.activity.entity.ActivityType;
-import com.ssafy.fint.domain.activity.entity.SttStatus;
 import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.deal.entity.Deal;
 import com.ssafy.fint.domain.deal.entity.PipelineStage;
@@ -91,26 +90,12 @@ class ActivityServiceDetailTest {
         assertThat(res.startAt()).isEqualTo(start);
         assertThat(res.endAt()).isEqualTo(end);
         assertThat(res.memo()).isEqualTo("고객이 예산 확인 필요");
-        assertThat(res.sttStatus()).isEqualTo("PENDING");
-        assertThat(res.transcript()).isNull();
         assertThat(res.summary()).isNull();
         assertThat(res.dealId()).isEqualTo(DEAL_ID);
         assertThat(res.pipelineStage().stageId()).isEqualTo(STAGE_ID);
         assertThat(res.pipelineStage().stageName()).isEqualTo("제안");
         assertThat(res.attendees().internal()).containsExactly("홍길동");
         assertThat(res.attendees().external()).containsExactly("김철수");
-    }
-
-    @Test
-    @DisplayName("STT 가 완료된 활동은 sttStatus 가 'COMPLETED' 로 매핑된다.")
-    void detailMapsCompletedSttStatus() {
-        Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
-        activity.changeSttStatus(SttStatus.COMPLETED);
-        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
-
-        ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
-
-        assertThat(res.sttStatus()).isEqualTo("COMPLETED");
     }
 
     @Test
@@ -186,6 +171,34 @@ class ActivityServiceDetailTest {
 
         assertThat(res.attendees().internal()).containsExactly("김영업");
         assertThat(res.attendees().external()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("briefing 이 null 이면 aiSummary 는 null 로 반환된다.")
+    void aiSummaryIsNullWhenBriefingAbsent() {
+        Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
+
+        ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
+
+        assertThat(res.aiSummary()).isNull();
+    }
+
+    @Test
+    @DisplayName("briefing 이 있으면 aiSummary 에 그대로 반영된다.")
+    void aiSummaryReflectsBriefingData() {
+        Activity activity = newActivity(OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), null, null);
+        activity.updateBriefing(Map.of(
+                "key_points", List.of("ISO 27001 자료 준비 확인"),
+                "alerts", List.of("분위기 점수 72→55 하락")
+        ));
+        when(activityRepository.findDetail(TENANT_ID, ACTIVITY_ID)).thenReturn(Optional.of(activity));
+
+        ActivityDetailResponse res = activityService.findDetail(ACTIVITY_ID, null);
+
+        assertThat(res.aiSummary()).isNotNull();
+        assertThat(res.aiSummary().get("key_points")).isEqualTo(List.of("ISO 27001 자료 준비 확인"));
+        assertThat(res.aiSummary().get("alerts")).isEqualTo(List.of("분위기 점수 72→55 하락"));
     }
 
     private Activity newActivity(
