@@ -7,6 +7,7 @@ import LoginModal from '@/components/common/LoginModal';
 import NotificationPanel, { type NotificationItem } from '@/components/common/NotificationPanel';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import { useNotificationSocket } from '@/hooks/useNotificationSocket';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 const F = "'Pretendard', -apple-system, sans-serif";
 const NAV = [
@@ -20,6 +21,8 @@ interface SearchResult { type: 'account' | 'contact' | 'deal'; id: number; label
 export default function GNB() {
   const pathname = usePathname();
   const router = useRouter();
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   const [showLogin, setShowLogin] = useState(false);
 
   // 검색
@@ -181,20 +184,20 @@ export default function GNB() {
 
   return (
     <>
-      <header style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
-        {/* 로고 — 캘린더 사이드바 너비(300px)에 맞춤 */}
-        <div onClick={() => router.push('/calendar')} style={{ width: 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%' }}>
-          <img src="/logo.png" alt="F!NT" style={{ maxHeight: 44, maxWidth: 200, objectFit: 'contain' }} />
+      <header style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: isMobile ? '0 12px' : '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
+        {/* 로고 */}
+        <div onClick={() => router.push('/calendar')} style={{ width: isMobile ? 'auto' : 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%', padding: isMobile ? '0 8px' : 0 }}>
+          <img src="/logo.png" alt="F!NT" style={{ maxHeight: isMobile ? 32 : 44, maxWidth: isMobile ? 80 : 200, objectFit: 'contain' }} />
         </div>
 
-        {/* 네비게이션 — 로고 오른쪽, 캘린더 그리드와 정렬 */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 4, height: '100%' }}>
+        {/* 네비게이션 */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 4, height: '100%' }}>
           {NAV.map(({ label, href }) => {
             const active = pathname === href || pathname.startsWith(href + '/');
             return (
               <button key={href} onClick={() => router.push(href)}
                 onMouseEnter={() => router.prefetch(href)}
-                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400, fontFamily: F, color: active ? '#0f172a' : '#64748b', padding: '0 16px', height: '100%', borderBottom: active ? '2px solid #0f172a' : '2px solid transparent', display: 'flex', alignItems: 'center', transition: 'color 0.12s, background-color 0.12s' }}
+                style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: isMobile ? 12 : 14, fontWeight: active ? 600 : 400, fontFamily: F, color: active ? '#0f172a' : '#64748b', padding: isMobile ? '0 8px' : '0 16px', height: '100%', borderBottom: active ? '2px solid #0f172a' : '2px solid transparent', display: 'flex', alignItems: 'center', transition: 'color 0.12s, background-color 0.12s', whiteSpace: 'nowrap' }}
                 onMouseOver={(e) => { if (!active) e.currentTarget.style.color = '#0f172a'; }}
                 onMouseOut={(e) => { if (!active) e.currentTarget.style.color = '#64748b'; }}>
                 {label}
@@ -207,8 +210,8 @@ export default function GNB() {
 
         {/* 우측: 검색 + 알림 + 프로필 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* 검색 */}
-          <div ref={searchRef} style={{ position: 'relative' }}>
+          {/* 검색 — 모바일에서 숨김 */}
+          {!isMobile && <div ref={searchRef} style={{ position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', borderRadius: 6, padding: '5px 10px', backgroundColor: '#f8fafc', width: 200 }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
                 <circle cx="6" cy="6" r="4" stroke="#94a3b8" strokeWidth="1.2" />
@@ -233,7 +236,7 @@ export default function GNB() {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* 알림 — 우측 슬라이드 오버 패널 (NotificationPanel). 로그인 상태에서만 노출. */}
           {isLoggedIn && (

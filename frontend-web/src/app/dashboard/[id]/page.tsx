@@ -8,6 +8,7 @@ import FintChatPanel from '@/components/dashboard/FintChatPanel';
 import type { CanvasWidget, Step } from '@/types/dashboard';
 import QueryBar from '@/components/dashboard/QueryBar';
 import { BarChartSvg } from '@/components/dashboard/ChartWidgets';
+import useBreakpoint from '@/hooks/useBreakpoint';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import {
   useDeleteDashboard,
@@ -34,6 +35,8 @@ export default function DashboardDetailPage() {
   const searchParams = useSearchParams();
   const confirm = useConfirm();
   const alert = useAlert();
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
 
   // SSR/hydration mismatch 방지: 초기값은 항상 [], 마운트 후 useEffect에서 캐시 복원
   const [allDashboards, setAllDashboards] = useState<Dashboard[]>([]);
@@ -673,11 +676,12 @@ export default function DashboardDetailPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            padding: '4px 16px',
+            padding: isMobile ? '4px 8px' : '4px 16px',
             height: 36,
             background: 'rgba(255,255,255,0.88)',
             backdropFilter: 'blur(8px)',
             borderBottom: '1px solid #e2e8f0',
+            overflowX: 'auto',
           }}
         >
           {/* 대시보드 목록·템플릿 화면으로 돌아가기 — 아이콘 단독 */}
@@ -724,6 +728,9 @@ export default function DashboardDetailPage() {
               padding: '3px 4px',
               border: '1px solid #f1f3ff',
               boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              overflowX: 'auto',
+              flex: '0 1 auto',
+              scrollbarWidth: 'none',
             }}
           >
             {allDashboards.length === 0 ? (
@@ -772,7 +779,7 @@ export default function DashboardDetailPage() {
                       <button
                         onClick={() => { if (!active) router.push(`/dashboard/${d.dashboardId}`); }}
                         onDoubleClick={(e) => { e.stopPropagation(); beginRename(d.dashboardId, d.title); }}
-                        title="더블클릭하면 이름을 바꿀 수 있어요"
+                        title={d.title}
                         style={{
                           padding: '2px 2px',
                           border: 'none',
@@ -783,9 +790,10 @@ export default function DashboardDetailPage() {
                           fontSize: 13,
                           color: active ? 'white' : '#6d797d',
                           transition: 'color 0.15s',
+                          whiteSpace: 'nowrap',
                         }}
                       >
-                        {d.title}
+                        {d.title.length > 6 ? d.title.slice(0, 6) + '..' : d.title}
                       </button>
                     )}
                     <button
@@ -894,8 +902,9 @@ export default function DashboardDetailPage() {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-start',
-              bottom: 20,
-              left: 20,
+              bottom: isMobile ? 8 : 20,
+              left: isMobile ? 8 : 20,
+              right: isMobile ? 8 : undefined,
             }}
           >
             <div

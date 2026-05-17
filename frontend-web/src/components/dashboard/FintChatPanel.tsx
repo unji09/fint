@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Step, WidgetResult, ChatMessage } from '@/types/dashboard';
 import WidgetRenderer from './WidgetRenderer';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface Props {
   steps: Step[];
@@ -39,6 +40,8 @@ export default function FintChatPanel({
   onDragStart,
   chatHistory = [],
 }: Props) {
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   const insightText = result?.insightText && result.insightText.trim().length > 0
     ? result.insightText
     : FALLBACK_INSIGHT;
@@ -46,7 +49,7 @@ export default function FintChatPanel({
   const [titleVal, setTitleVal] = useState(widgetTitle);
 
   /* 리사이즈 */
-  const [panelSize, setPanelSize] = useState({ w: 390, h: 420 });
+  const [panelSize, setPanelSize] = useState({ w: isMobile ? 0 : 390, h: isMobile ? 320 : 420 });
   const resizing = useRef(false);
   const resizeStart = useRef({ x: 0, y: 0, w: 390, h: 420 });
   const handleResizeStart = (e: React.MouseEvent) => {
@@ -94,7 +97,7 @@ export default function FintChatPanel({
   }, [isDone]);
 
   return (
-    <div style={{ position: 'relative', width: panelSize.w, marginBottom: 10 }}>
+    <div style={{ position: 'relative', width: isMobile ? '100%' : panelSize.w, marginBottom: 10 }}>
       {/* 리사이즈 핸들 — 패널 바깥 레이어, 투명 영역은 클릭 통과 */}
       <div
         style={{
