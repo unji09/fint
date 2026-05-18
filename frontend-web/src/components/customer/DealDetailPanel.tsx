@@ -42,9 +42,12 @@ interface Activity {
 
 // summary key → 한글 라벨
 const SUMMARY_LABELS: Record<string, string> = {
+  keyDiscussion: '핵심 논의',
+  customerNeeds: '고객 니즈',
+  agreements: '합의 사항',
+  actionItems: '실행 항목',
   highlights: '주요 내용',
   decisions: '결정 사항',
-  actionItems: '실행 항목',
   nextSteps: '다음 단계',
   risks: '리스크',
   notes: '비고',
