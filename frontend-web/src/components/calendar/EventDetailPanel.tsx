@@ -1,7 +1,7 @@
 'use client';
 // src/components/calendar/EventDetailPanel.tsx
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
@@ -29,8 +29,8 @@ function authHeader(): HeadersInit {
   return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : {};
 }
 
-// briefing 은 백엔드 미구현 (V19 엔티티 필드만 존재, 조회 endpoint 없음) → 탭 제거
-type RightView = 'memo' | 'recording' | 'stt';
+// memo/stt 는 같은 컬럼(메모 + 녹음 카드)에서 노출. briefing 은 별도 탭.
+type RightView = 'memo' | 'recording' | 'stt' | 'briefing';
 
 type AiSummary = Record<string, string | string[]>;
 
@@ -79,6 +79,14 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const [memoText, setMemoText] = useState('');
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoSaving, setMemoSaving] = useState(false);
+
+  // ── 브리핑 ──
+  // 자동 생성(미팅 30분 전 스케줄) 결과는 활동 상세의 briefing 필드에 들어있고,
+  // 없는 경우 사용자가 "생성하기" 를 누르면 POST /ai/briefing 으로 즉시 만든다.
+  const [briefing, setBriefing] = useState<{ key_points: string[]; alerts: string[] } | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  const [briefingLoaded, setBriefingLoaded] = useState(false); // 첫 로드 완료 플래그 — 두 번 자동 fetch 방지
+  const [briefingError, setBriefingError] = useState<string | null>(null);
 
   // 녹음 종료 시 duration 캡처용 ref — stopRec의 setRecordSec(0) 이후 onstop이 비동기로 실행되므로 state 대신 사용
   const finalDurationRef = useRef<number>(0);
@@ -216,10 +224,83 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordings, pendingRecordingId, numericActivityId]);
 
+  // event 가 null 일 수 있으니 hooks 가 안전하게 참조할 수 있도록 prop 에서 직접 유도.
+  // (아래 early return 보다 위에서 hooks 가 호출되어야 React hooks 순서 규칙을 어기지 않는다.)
+  const activityId =
+    event?.source === 'FINT' ? event.eventId.replace(/^act-/, '') : null;
+
+  // ── 브리핑 로드 / 생성 ──
+  // 활동 상세에 저장된 브리핑(스케줄러 자동 생성 결과 등)을 먼저 확인. 없으면 사용자가 명시적으로 생성.
+  const loadBriefingFromActivity = useCallback(async () => {
+    if (!activityId) return;
+    setBriefingLoading(true);
+    setBriefingError(null);
+    try {
+      const res = await fetch(`${API_BASE}/activities/${activityId}`, { headers: authHeader() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const j = await res.json();
+      const data = j?.data ?? j;
+      const b = data?.briefing;
+      if (b && typeof b === 'object' && (Array.isArray(b.key_points) || Array.isArray(b.alerts))) {
+        setBriefing({
+          key_points: Array.isArray(b.key_points) ? b.key_points : [],
+          alerts: Array.isArray(b.alerts) ? b.alerts : [],
+        });
+      } else {
+        setBriefing(null);
+      }
+    } catch (e) {
+      console.error('[EDP] 브리핑 조회 실패', e);
+      setBriefingError('브리핑을 불러오지 못했어요.');
+    } finally {
+      setBriefingLoading(false);
+      setBriefingLoaded(true);
+    }
+  }, [activityId]);
+
+  // POST /ai/briefing?activityId=N — FastAPI 호출 비용이 있어 사용자가 직접 트리거할 때만 실행.
+  const generateBriefing = useCallback(async () => {
+    if (!activityId) return;
+    setBriefingLoading(true);
+    setBriefingError(null);
+    try {
+      const res = await fetch(`${API_BASE}/ai/briefing?activityId=${activityId}`, {
+        method: 'POST',
+        headers: authHeader(),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const j = await res.json();
+      const data = j?.data ?? j;
+      setBriefing({
+        key_points: Array.isArray(data?.key_points) ? data.key_points : [],
+        alerts: Array.isArray(data?.alerts) ? data.alerts : [],
+      });
+    } catch (e) {
+      console.error('[EDP] 브리핑 생성 실패', e);
+      setBriefingError('브리핑 생성에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setBriefingLoading(false);
+      setBriefingLoaded(true);
+    }
+  }, [activityId]);
+
+  // 브리핑 탭 첫 진입 시 활동 상세에서 한 번만 로드.
+  useEffect(() => {
+    if (rightView === 'briefing' && !briefingLoaded && !briefingLoading) {
+      loadBriefingFromActivity();
+    }
+  }, [rightView, briefingLoaded, briefingLoading, loadBriefingFromActivity]);
+
+  // 활동(=event)이 바뀌면 브리핑 상태 초기화 (다음 활동의 브리핑 다시 로드되도록).
+  useEffect(() => {
+    setBriefing(null);
+    setBriefingLoaded(false);
+    setBriefingError(null);
+  }, [activityId]);
+
   if (!event) return null;
 
   const isFint = event.source === 'FINT';
-  const activityId = isFint ? event.eventId.replace(/^act-/, '') : null;
   const catColor = event.category ? CATEGORY_COLOR[event.category] : '#7F77DD';
   const catBg = event.category ? CATEGORY_BG[event.category] : '#ECEBFA';
 
@@ -433,13 +514,46 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           <div style={{ flex: 1, padding: isMobile ? '16px 20px' : '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
             {rightView !== 'recording' && (
               <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #E5E6DE', paddingBottom: 10 }}>
-                <button
-                  onClick={() => setRightView('memo')}
-                  style={{ padding: '6px 14px', borderRadius: 6, border: 'none', backgroundColor: '#06B6D4', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'default' }}
-                >
-                  메모
-                </button>
+                {(() => {
+                  const memoActive = rightView === 'memo' || rightView === 'stt';
+                  return (
+                    <button
+                      onClick={() => setRightView('memo')}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        border: 'none',
+                        backgroundColor: memoActive ? '#06B6D4' : 'transparent',
+                        color: memoActive ? '#fff' : '#737880',
+                        fontSize: 13,
+                        fontWeight: memoActive ? 600 : 500,
+                        cursor: memoActive ? 'default' : 'pointer',
+                        transition: 'background-color 0.15s, color 0.15s',
+                      }}
+                    >
+                      메모
+                    </button>
+                  );
+                })()}
                 {isFint && (
+                  <button
+                    onClick={() => setRightView('briefing')}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 6,
+                      border: 'none',
+                      backgroundColor: rightView === 'briefing' ? '#06B6D4' : 'transparent',
+                      color: rightView === 'briefing' ? '#fff' : '#737880',
+                      fontSize: 13,
+                      fontWeight: rightView === 'briefing' ? 600 : 500,
+                      cursor: rightView === 'briefing' ? 'default' : 'pointer',
+                      transition: 'background-color 0.15s, color 0.15s',
+                    }}
+                  >
+                    브리핑
+                  </button>
+                )}
+                {isFint && rightView !== 'briefing' && (
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                     <label
                       style={{
@@ -611,6 +725,78 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               </div>
             )}
 
+            {/* 브리핑 탭 */}
+            {rightView === 'briefing' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <SectionLabel>미팅 사전 브리핑</SectionLabel>
+                  {briefing && !briefingLoading && (
+                    <button
+                      onClick={generateBriefing}
+                      style={{
+                        fontSize: 11,
+                        color: '#475569',
+                        backgroundColor: '#fff',
+                        border: '1px solid #E5E6DE',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      다시 생성
+                    </button>
+                  )}
+                </div>
+
+                {briefingLoading && (
+                  <div style={{ fontSize: 13, color: '#737880', padding: 16, textAlign: 'center', backgroundColor: '#F8F8F5', borderRadius: 8 }}>
+                    브리핑을 불러오는 중입니다…
+                  </div>
+                )}
+
+                {!briefingLoading && briefingError && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 14, backgroundColor: '#FEF2F2', borderRadius: 8 }}>
+                    <span style={{ fontSize: 13, color: '#B91C1C' }}>{briefingError}</span>
+                    <button
+                      onClick={generateBriefing}
+                      style={{ alignSelf: 'flex-start', padding: '5px 12px', borderRadius: 6, border: '1px solid #E5E6DE', backgroundColor: '#fff', fontSize: 12, color: '#475569', cursor: 'pointer' }}
+                    >
+                      다시 시도
+                    </button>
+                  </div>
+                )}
+
+                {!briefingLoading && !briefingError && !briefing && briefingLoaded && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '24px 16px', backgroundColor: '#F8F8F5', borderRadius: 8, textAlign: 'center' }}>
+                    <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>아직 작성된 브리핑이 없어요.</span>
+                    <span style={{ fontSize: 11, color: '#9CA193' }}>최근 뉴스·공시·미팅 내역을 정리해 드릴게요.</span>
+                    <button
+                      onClick={generateBriefing}
+                      style={{ marginTop: 6, padding: '7px 16px', borderRadius: 6, border: 'none', backgroundColor: '#06B6D4', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      브리핑 생성하기
+                    </button>
+                  </div>
+                )}
+
+                {!briefingLoading && !briefingError && briefing && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {briefing.key_points.length > 0 && (
+                      <BriefingSection label="핵심 포인트" items={briefing.key_points} accent="#0E7490" bg="#F0FAFC" />
+                    )}
+                    {briefing.alerts.length > 0 && (
+                      <BriefingSection label="주의 사항" items={briefing.alerts} accent="#B45309" bg="#FFF8EC" />
+                    )}
+                    {briefing.key_points.length === 0 && briefing.alerts.length === 0 && (
+                      <div style={{ fontSize: 13, color: '#9CA193', padding: 16, textAlign: 'center', backgroundColor: '#F8F8F5', borderRadius: 8 }}>
+                        정리할 만한 내용이 없어요.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 녹음 뷰 */}
             {rightView === 'recording' && (
               <>
@@ -730,6 +916,18 @@ function Muted({ children }: { children: ReactNode }) {
 }
 function SectionLabel({ children }: { children: ReactNode }) {
   return <div style={{ fontSize: 12, fontWeight: 600, color: '#9CA193', letterSpacing: '0.03em' }}>{children}</div>;
+}
+function BriefingSection({ label, items, accent, bg }: { label: string; items: string[]; accent: string; bg: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', backgroundColor: bg, borderRadius: 8 }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: accent, letterSpacing: '0.02em' }}>{label}</span>
+      <ul style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {items.map((item, i) => (
+          <li key={i} style={{ fontSize: 13, color: '#1F2126', lineHeight: 1.55 }}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 function Chip({ label, color, bg }: { label: string; color: string; bg: string }) {
   return <span style={{ fontSize: 11, color, backgroundColor: bg, padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>{label}</span>;
