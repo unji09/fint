@@ -41,7 +41,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         log.info("Embedding model download started in background")
 
     if settings.GPU_SERVER_URL:
-        _app.state.gpu_stt_client = GpuSttClient(base_url=settings.GPU_SERVER_URL)
+        _app.state.gpu_stt_client = GpuSttClient(base_url=settings.GPU_SERVER_URL, timeout=1800.0)
         log.info("GPU STT client initialized: %s", settings.GPU_SERVER_URL)
     else:
         _app.state.gpu_stt_client = None

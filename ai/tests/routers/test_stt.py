@@ -49,6 +49,34 @@ class FakeGpuStt:
         )
 
 
+class FakeGpuSttWithHallucination:
+
+    async def transcribe_batch(
+        self, audio_bytes: bytes, language: str = "ko", num_speakers: int | None = None
+    ):
+        from app.schemas.stt import SttDiarizedResponse, SttSegment
+
+        return SttDiarizedResponse(
+            segments=[
+                SttSegment(text="안녕하세요", speaker_id="SPEAKER_00", start_ms=0, end_ms=1000),
+                # 알려진 환각 패턴
+                SttSegment(
+                    text="자막은 설정에서 선택하실 수 있습니다",
+                    speaker_id="SPEAKER_00",
+                    start_ms=1100,
+                    end_ms=1500,
+                ),
+                SttSegment(text="반갑습니다", speaker_id="SPEAKER_01", start_ms=1600, end_ms=2500),
+                SttSegment(
+                    text="시청해주셔서 감사합니다",
+                    speaker_id="SPEAKER_00",
+                    start_ms=2600,
+                    end_ms=3000,
+                ),
+            ]
+        )
+
+
 # ── fixtures ────────────────────────────────────────────────────────────────
 
 
@@ -202,6 +230,38 @@ async def test_transcribe_diarize_success(client_with_gpu):
     assert data["segments"][0]["speaker_id"] == "SPEAKER_00"
     assert data["segments"][1]["speaker_id"] == "SPEAKER_01"
     assert data["segments"][0]["text"] == "안녕하세요"
+
+
+@pytest.mark.asyncio
+async def test_transcribe_diarize_hallucination_filtered():
+    """배치 전사 결과에서 환각 세그먼트가 제거된다."""
+    fake_redis = FakeRedis()
+    application = create_app()
+    application.dependency_overrides[get_tenant_id] = lambda: 1
+    application.dependency_overrides[get_s3_client] = lambda: FakeS3()
+    application.dependency_overrides[get_whisper_client] = lambda: FakeWhisper()
+    application.dependency_overrides[get_gpu_stt_client] = lambda: FakeGpuSttWithHallucination()
+    application.dependency_overrides[get_redis] = lambda: fake_redis
+
+    async with AsyncClient(transport=ASGITransport(application), base_url="http://test") as ac:
+        post = await ac.post(
+            "/api/v1/stt/transcribe",
+            json={"s3_key": "recordings/test.m4a", "diarize": True},
+        )
+        assert post.status_code == 202
+        job_id = post.json()["data"]["job_id"]
+
+        get = await ac.get(f"/api/v1/stt/jobs/{job_id}")
+        assert get.status_code == 200
+        data = get.json()["data"]
+        assert data["status"] == "COMPLETED"
+        texts = [s["text"] for s in data["segments"]]
+        # 환각 패턴이 포함된 2개 세그먼트는 제거되고 실제 발화 2개만 남아야 함
+        assert len(texts) == 2
+        assert "자막은 설정에서 선택하실 수 있습니다" not in texts
+        assert "시청해주셔서 감사합니다" not in texts
+        assert "안녕하세요" in texts
+        assert "반갑습니다" in texts
 
 
 @pytest.mark.asyncio

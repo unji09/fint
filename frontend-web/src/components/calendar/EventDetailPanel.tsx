@@ -35,9 +35,10 @@ type RightView = 'memo' | 'recording' | 'stt';
 type AiSummary = Record<string, string | string[]>;
 
 const SUMMARY_LABELS: Record<string, string> = {
-  keyPoints: '핵심 포인트',
-  talkingPoints: '대화 포인트',
-  riskFactors: '리스크 요인',
+  keyDiscussion: '핵심 논의',
+  customerNeeds: '고객 니즈',
+  agreements: '합의 사항',
+  actionItems: '다음 액션',
 };
 
 // 화자 라벨: speakerName > speakerId의 끝 숫자 추출해 "화자 N" > fallbackIndex 기반 "화자 N" > "화자"
@@ -61,11 +62,12 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const moodPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
   const [activitySummary, setActivitySummary] = useState<AiSummary | null>(null);
   const [expandedRecordingId, setExpandedRecordingId] = useState<number | null>(null);
   const { upload: uploadRecording, uploading: uploadingRec } = useUploadRecording();
-  const { connect: connectWs, sendChunk: sendWsChunk, disconnect: disconnectWs } = useTranscriptStream();
+  const { connect: connectWs, sendChunk: sendWsChunk, sendEOS, disconnect: disconnectWs } = useTranscriptStream();
   const numericActivityId = event?.source === 'FINT' ? (Number(event.eventId.replace(/^act-/, '')) || null) : null;
   const { recordings, refetch: refetchRecordings } = useRecordingList(numericActivityId);
   const { remove: deleteRecording } = useDeleteRecording();
@@ -81,7 +83,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   // 녹음 종료 시 duration 캡처용 ref — stopRec의 setRecordSec(0) 이후 onstop이 비동기로 실행되므로 state 대신 사용
   const finalDurationRef = useRef<number>(0);
 
-  // ── 녹음 중 실시간 전사 (mock) — 후속 이슈에서 WS hook으로 교체 ──
+  // ── 녹음 중 실시간 전사 ──
   const liveSegRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [liveSegments, setLiveSegments] = useState<SttLine[]>([]);
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
@@ -119,19 +121,66 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       setLiveSegments([]);
       setPendingRecordingId(null);
       disconnectWs();
-      [timerRef, pollRef, liveSegRef].forEach((r) => { if (r.current) { clearInterval(r.current); r.current = null; } });
+      [timerRef, pollRef, liveSegRef, moodPollRef].forEach((r) => { if (r.current) { clearInterval(r.current); r.current = null; } });
       if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') mediaRecRef.current.stop();
       mediaRecRef.current = null;
     }
   }, [event]);
 
-  // Activity 열릴 때 + STT 완료 시 aiSummary 조회
+  // Activity가 전환될 때 mood 폴링 초기화
+  useEffect(() => {
+    if (moodPollRef.current) { clearInterval(moodPollRef.current); moodPollRef.current = null; }
+    setActivitySummary(null);
+  }, [numericActivityId]);
+
+  /**
+   * mood/analyze 완료(= activity.moodStatus 가 COMPLETED/FAILED)될 때까지
+   * 5초 간격으로 GET /activities/{id} 를 폴링해 summary 를 갱신한다.
+   *
+   * 흐름:
+   *   1. POST recording  → Spring STT 시작
+   *   2. STT 완료 콜백   → SttCallbackService → POST /mood/analyze (FastAPI)
+   *   3. FastAPI mood 분석 완료 → POST /activities/{id}/ai/mood/callback → activity.summary 저장
+   *   4. 이 함수가 GET /activities/{id} 로 summary 를 읽어서 화면에 반영
+   */
+  const startMoodPoll = (activityId: number) => {
+    if (moodPollRef.current) clearInterval(moodPollRef.current);
+    let attempts = 0;
+    moodPollRef.current = setInterval(() => {
+      attempts += 1;
+      if (attempts > 24) { // 최대 2분(24 × 5s)
+        if (moodPollRef.current) { clearInterval(moodPollRef.current); moodPollRef.current = null; }
+        return;
+      }
+      fetch(`${API_BASE}/activities/${activityId}`, { headers: authHeader() })
+        .then((r) => r.json())
+        .then((j) => {
+          const d = j?.data ?? j;
+          if (d?.moodStatus === 'COMPLETED' || d?.moodStatus === 'FAILED') {
+            if (moodPollRef.current) { clearInterval(moodPollRef.current); moodPollRef.current = null; }
+            setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+          }
+        })
+        .catch(() => {});
+    }, 5_000);
+  };
+
+  // Activity 열릴 때 summary 조회
+  // — moodStatus 가 이미 PENDING/PROCESSING 이면 즉시 폴링 시작
+  //   (녹음 후 페이지를 떠났다 돌아온 경우 등)
   useEffect(() => {
     if (!numericActivityId) return;
     fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
       .then((r) => r.json())
-      .then((j) => { const d = j?.data ?? j; setActivitySummary((d?.summary ?? d?.aiSummary) ?? null); })
+      .then((j) => {
+        const d = j?.data ?? j;
+        setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+        if (d?.moodStatus === 'PENDING' || d?.moodStatus === 'PROCESSING') {
+          startMoodPoll(numericActivityId);
+        }
+      })
       .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numericActivityId]);
 
   // 업로드 직후 recording이 PROCESSING인 동안 5초마다 목록 재조회
@@ -141,20 +190,30 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     return () => clearInterval(timer);
   }, [pendingRecordingId, numericActivityId, refetchRecordings]);
 
-  // 해당 recording의 STT가 완료/실패되면 폴링 종료 + summary 갱신
+  // 해당 recording의 STT가 완료/실패되면 폴링 종료 + mood 완료 대기 폴링 시작
   useEffect(() => {
     if (!pendingRecordingId || !numericActivityId) return;
     const rec = recordings.find((r) => r.recordingId === pendingRecordingId);
     if (rec && (rec.sttStatus === 'COMPLETED' || rec.sttStatus === 'FAILED')) {
       setPendingRecordingId(null);
       setExpandedRecordingId(rec.recordingId);
-      if (rec.sttStatus === 'COMPLETED') {
-        fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
-          .then((r) => r.json())
-          .then((j) => { const d = j?.data ?? j; setActivitySummary((d?.summary ?? d?.aiSummary) ?? null); })
-          .catch(() => {});
-      }
+
+      if (rec.sttStatus !== 'COMPLETED') return;
+
+      // STT 완료 직후 1회 즉시 fetch — 이미 mood 가 빠르게 완료됐을 수도 있음
+      fetch(`${API_BASE}/activities/${numericActivityId}`, { headers: authHeader() })
+        .then((r) => r.json())
+        .then((j) => {
+          const d = j?.data ?? j;
+          setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+          // mood 분석이 아직 진행 중이면 폴링 시작
+          if (d?.moodStatus === 'PENDING' || d?.moodStatus === 'PROCESSING') {
+            startMoodPoll(numericActivityId);
+          }
+        })
+        .catch(() => {});
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordings, pendingRecordingId, numericActivityId]);
 
   if (!event) return null;
@@ -222,7 +281,9 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mt = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-      const rec = new MediaRecorder(stream, { mimeType: mt });
+      // audioBitsPerSecond 미지정 시 브라우저 기본값이 16~32kbps → Whisper 음질 저하
+      // 128kbps: Opus 기준 speech 투명 품질 (배치 파일 업로드와 동등한 수준)
+      const rec = new MediaRecorder(stream, { mimeType: mt, audioBitsPerSecond: 128000 });
       chunksRef.current = []; finalDurationRef.current = 0;
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -230,11 +291,24 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           sendWsChunk(e.data);
         }
       };
-      rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); handleUpload(new Blob(chunksRef.current, { type: mt }), finalDurationRef.current); };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        // EOS 신호 전송 → FastAPI가 남은 버퍼를 처리하고 stream_ended 응답
+        sendEOS();
+        handleUpload(new Blob(chunksRef.current, { type: mt }), finalDurationRef.current);
+      };
       rec.start(2000); mediaRecRef.current = rec;
       setRightView('recording');
       timerRef.current = setInterval(() => setRecordSec((s) => { finalDurationRef.current = s + 1; return s + 1; }), 1000);
-      connectWs(Number(activityId), (line) => setLiveSegments((prev) => [...prev, line]));
+      connectWs(
+        Number(activityId),
+        (line) => setLiveSegments((prev) => [...prev, line]),
+        // stream_ended 수신 시 — 화면 전환
+        () => {
+          disconnectWs();
+          setRightView('memo');
+        },
+      );
 
     } catch { setRecError('마이크 접근 권한이 필요합니다.'); }
   };
@@ -242,9 +316,11 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const stopRec = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (liveSegRef.current) { clearInterval(liveSegRef.current); liveSegRef.current = null; }
-    disconnectWs();
-    if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') { mediaRecRef.current.stop(); mediaRecRef.current = null; }
-    setRecordSec(0); setRightView('memo');
+    setRecordSec(0);
+    if (mediaRecRef.current && mediaRecRef.current.state !== 'inactive') {
+      mediaRecRef.current.stop();
+      mediaRecRef.current = null;
+    }
   };
 
   const p = (n: number) => String(n).padStart(2, '0');
@@ -445,7 +521,6 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                           rec={rec}
                           index={recordings.length - idx}
                           isMobile={isMobile}
-                          summary={activitySummary}
                           expanded={expandedRecordingId === rec.recordingId}
                           onToggle={() => setExpandedRecordingId((prev) =>
                             prev === rec.recordingId ? null : rec.recordingId
@@ -508,9 +583,30 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               </>
             )}
 
-            {/* 'AI 브리핑' 탭은 백엔드 미구현으로 제거. STT 요약(aiSummary) 은 녹음 카드에서 표시. */}
+            {/* AI 미팅 요약 — mood analysis 완료 시 독립 섹션으로 표시 */}
+            {(rightView === 'memo' || rightView === 'stt') && activitySummary && Object.keys(activitySummary).length > 0 && (
+              <div
+                style={{
+                  border: '1px solid #E5E6DE',
+                  borderRadius: 10,
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                  backgroundColor: '#FAFAF7',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1F2126' }}>AI 미팅 요약</span>
+                  <span style={{ fontSize: 10, color: '#9CA193', backgroundColor: '#F0F0EE', padding: '2px 7px', borderRadius: 10, fontWeight: 500 }}>자동 생성</span>
+                </div>
+                {Object.entries(activitySummary).map(([k, v]) => (
+                  <SummarySection key={k} label={SUMMARY_LABELS[k] ?? k} value={v} />
+                ))}
+              </div>
+            )}
 
-            {/* 녹음 뷰 — 단순 시간 표시 + 중지 (사인파/빨간 강조 톤다운) */}
+            {/* 녹음 뷰 */}
             {rightView === 'recording' && (
               <>
                 {/* REQ-ACT-01: AI 기록 고지 */}
@@ -568,10 +664,11 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                   </button>
                   <style>{`@keyframes recordingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
                 </div>
-                <div style={{ fontSize: 11, color: '#9CA193', textAlign: 'center' }}>녹음 중지 시 자동으로 STT 분석이 시작됩니다.</div>
 
-                {/* 실시간 전사 — 컨트롤 박스 아래에 표시. 일정 높이 이상이면 스크롤. */}
-                <SectionLabel>실시간 전사</SectionLabel>
+                {/* 실시간 전사 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <SectionLabel>실시간 전사</SectionLabel>
+                </div>
                 <div
                   ref={liveScrollRef}
                   data-testid="live-transcript-scroll"
@@ -653,10 +750,14 @@ export function SpeakerLine({ line, fallbackIndex }: { line: SttLine; fallbackIn
           gap: 2,
         }}
       >
-        {line.timestamp && (
-          <span style={{ fontSize: 10, color: '#9CA193', fontVariantNumeric: 'tabular-nums' }}>{line.timestamp}</span>
-        )}
-        <span style={{ fontSize: 13, lineHeight: 1.7, color: '#1F2126', whiteSpace: 'pre-wrap' }}>{line.text}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {line.timestamp && (
+            <span style={{ fontSize: 10, color: '#9CA193', fontVariantNumeric: 'tabular-nums' }}>{line.timestamp}</span>
+          )}
+        </div>
+        <span style={{ fontSize: 13, lineHeight: 1.7, color: '#1F2126', whiteSpace: 'pre-wrap' }}>
+          {line.text}
+        </span>
       </div>
     </div>
   );
@@ -667,7 +768,6 @@ function RecordingCard({
   rec,
   index,
   isMobile,
-  summary,
   expanded,
   onToggle,
   deleting,
@@ -677,7 +777,6 @@ function RecordingCard({
   rec: RecordingItem;
   index: number;
   isMobile: boolean;
-  summary?: AiSummary | null;
   expanded: boolean;
   onToggle: () => void;
   deleting: boolean;
@@ -858,20 +957,8 @@ function RecordingCard({
             backgroundColor: '#F8F8F5',
           }}
         >
-          {summary && Object.keys(summary).length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {Object.entries(summary).map(([k, v]) => (
-                <SummarySection key={k} label={SUMMARY_LABELS[k] ?? k} value={v} compact />
-              ))}
-            </div>
-          )}
           {lines.length > 0 ? (
-            <details
-              style={{
-                borderTop: summary && Object.keys(summary).length > 0 ? '1px solid #ECEDE5' : 'none',
-                paddingTop: summary && Object.keys(summary).length > 0 ? 8 : 0,
-              }}
-            >
+            <details style={{ borderTop: 'none', paddingTop: 0 }}>
               <summary
                 style={{ fontSize: 12, color: '#737880', cursor: 'pointer', listStyle: 'none', userSelect: 'none', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
               >

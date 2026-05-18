@@ -10,6 +10,7 @@ from app.clients.gpu_stt import GpuSttClient
 from app.clients.s3 import S3Client
 from app.clients.whisper import WhisperClient
 from app.core.errors import BusinessException, CommonErrorCode
+from app.core.hallucination import is_hallucination
 from app.core.redis import get_redis
 from app.core.response import ApiResponse
 from app.core.security import get_tenant_id
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api/v1/stt", tags=["STT"])
 
 _JOB_TTL = 86400  # 24시간
 _JOB_KEY_PREFIX = "stt:job:"
+
 
 
 def get_gpu_stt_client(request: Request) -> GpuSttClient | None:
@@ -54,6 +56,17 @@ async def _process_transcription(
             result: SttDiarizedResponse = await gpu_stt.transcribe_batch(
                 audio_bytes, language=body.language
             )
+            # GPU 서버 transcribe_batch 는 환각 필터를 거치지 않으므로 여기서 제거
+            raw_count = len(result.segments)
+            result.segments = [
+                seg for seg in result.segments
+                if seg.text.strip() and not is_hallucination(seg.text)
+            ]
+            if raw_count != len(result.segments):
+                log.info(
+                    "[STT batch] hallucination filtered: %d → %d segments",
+                    raw_count, len(result.segments),
+                )
             segments_data = [seg.model_dump() for seg in result.segments]
         else:
             transcript = await whisper.transcribe(audio_bytes, language=body.language)

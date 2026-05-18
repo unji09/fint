@@ -31,7 +31,7 @@ public class MoodCallbackController {
         if(!internalSecret.equals(secret)){
             throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
         }
-        log.info("{MoodCallback} received activityId={} accountId={} tenantId={}", activityId, request.accountId(), tenantId);
+        log.info("[MoodCallback] received activityId={} accountId={} tenantId={}", activityId, request.accountId(), tenantId);
         moodAnalysisService.processCallback(activityId, request, tenantId);
     }
 }

@@ -53,6 +53,8 @@ class SttJobResponse(BaseModel):
 
 
 class SttStreamChunk(BaseModel):
-    type: Literal["transcript", "error", "end"]
+    type: Literal["transcript", "error", "end", "stream_ended"]
     segment: SttSegment | None = None
     message: str | None = None
+    range_start_ms: int | None = None
+    range_end_ms: int | None = None
