@@ -174,7 +174,7 @@ export default function CustomerSidebar({
           height: 56,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
           gap: 12,
           borderBottom: '1px solid rgba(6,182,212,0.8)',
           padding: '0 14px',
