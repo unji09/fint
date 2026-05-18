@@ -15,7 +15,8 @@ public enum ActivityErrorCode implements ErrorCode {
     ACTIVITY_NOT_FOUND(HttpStatus.NOT_FOUND, "AC303", "활동을 찾을 수 없습니다."),
     STT_ALREADY_PROCESSING(HttpStatus.CONFLICT, "AC409", "STT 처리가 이미 진행 중입니다."),
     RECORDING_NOT_FOUND(HttpStatus.NOT_FOUND, "AC304", "녹음 기록을 찾을 수 없습니다."),
-    MEETING_TYPE_REQUIRED(HttpStatus.BAD_REQUEST, "AC305", "브리핑은 미팅 유형 활동에만 생성할 수 있습니다.");
+    MEETING_TYPE_REQUIRED(HttpStatus.BAD_REQUEST, "AC305", "브리핑은 미팅 유형 활동에만 생성할 수 있습니다."),
+    DEAL_NOT_LINKED(HttpStatus.BAD_REQUEST, "AC306", "Activity에 연결된 딜이 없습니다.");
 
     private final HttpStatus status;
     private final String code;

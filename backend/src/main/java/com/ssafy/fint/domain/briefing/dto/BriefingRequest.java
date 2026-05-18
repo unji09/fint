@@ -17,7 +17,7 @@ public record BriefingRequest(
         @JsonProperty("contacts") List<ContactInfo> contacts,
         @JsonProperty("deals") List<DealSummary> deals,
         @JsonProperty("recent_meetings") List<MeetingHistory> recentMeetings,
-            @JsonProperty("signals") List<SignalItem> signals,
+        @JsonProperty("signals") List<SignalItem> signals,
         @JsonProperty("wiki_summary") String wikiSummary
 ) {
 

@@ -25,7 +25,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -112,7 +115,7 @@ class BriefingServiceTest {
                 ACTIVITY_ID, USER_ID, TENANT_ID))
                 .thenReturn(Optional.of(activity));
         when(activityRepository.findRecentMeetingsByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
-                .thenReturn(List.of());
+                .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
         when(accountDartDisclosureRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(String.class)))
@@ -163,7 +166,7 @@ class BriefingServiceTest {
     }
 
     @Test
-    @DisplayName("deal 이 없으면 DEAL_NOT_FOUND 예외")
+    @DisplayName("deal 이 없으면 DEAL_NOT_LINKED 예외")
     void generateForActivity_noDeal() {
         Tenant tenant = tenant();
         Activity noDealActivity = Activity.builder()
@@ -179,7 +182,7 @@ class BriefingServiceTest {
         assertThatThrownBy(() -> briefingService.generateForActivity(ACTIVITY_ID, me))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ActivityErrorCode.DEAL_NOT_FOUND);
+                .isEqualTo(ActivityErrorCode.DEAL_NOT_LINKED);
     }
 
     // ─────────────────── generateAndSave (스케줄러 경로) ───────────────────
@@ -205,7 +208,7 @@ class BriefingServiceTest {
         Activity activity = meetingActivity(user(tenant), deal(account()));
 
         when(activityRepository.findRecentMeetingsByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
-                .thenReturn(List.of());
+                .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
         when(accountDartDisclosureRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(String.class)))
@@ -225,7 +228,7 @@ class BriefingServiceTest {
         Activity activity = meetingActivity(user(tenant), deal(account()));
 
         when(activityRepository.findRecentMeetingsByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
-                .thenReturn(List.of());
+                .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
         when(accountDartDisclosureRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(String.class)))
@@ -245,7 +248,7 @@ class BriefingServiceTest {
         Activity activity = meetingActivity(user(tenant), deal(account()));
 
         when(activityRepository.findRecentMeetingsByAccountId(any(), any(), any()))
-                .thenReturn(List.of());
+                .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(any(), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
         when(accountDartDisclosureRepository.findRecentByAccountId(any(), any(String.class)))
@@ -266,5 +269,41 @@ class BriefingServiceTest {
         assertThat(req.industry()).isEqualTo("IT서비스");
         assertThat(req.deals()).hasSize(1);
         assertThat(req.deals().get(0).currentStage()).isEqualTo("NEGOTIATION");
+    }
+
+    @Test
+    @DisplayName("attendees 중 name 이 null 인 항목은 contacts 에서 제외된다.")
+    void generateAndSave_nullNameAttendeeSkipped() {
+        Tenant tenant = tenant();
+        Activity activity = meetingActivity(user(tenant), deal(account()));
+
+        List<Map<String, Object>> attendees = new ArrayList<>();
+        Map<String, Object> nullNameAttendee = new HashMap<>();
+        nullNameAttendee.put("name", null);
+        nullNameAttendee.put("position", "팀장");
+        attendees.add(nullNameAttendee);
+        Map<String, Object> validAttendee = new HashMap<>();
+        validAttendee.put("name", "김철수");
+        validAttendee.put("position", "대표");
+        attendees.add(validAttendee);
+        ReflectionTestUtils.setField(activity, "attendees", attendees);
+
+        when(activityRepository.findRecentMeetingsByAccountId(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(accountNewsArticleRepository.findRecentByAccountId(any(), any(OffsetDateTime.class)))
+                .thenReturn(List.of());
+        when(accountDartDisclosureRepository.findRecentByAccountId(any(), any(String.class)))
+                .thenReturn(List.of());
+        when(briefingClient.generate(any(), any()))
+                .thenReturn(sampleBriefingResponse());
+
+        briefingService.generateAndSave(activity);
+
+        ArgumentCaptor<com.ssafy.fint.domain.briefing.dto.BriefingRequest> captor =
+                ArgumentCaptor.forClass(com.ssafy.fint.domain.briefing.dto.BriefingRequest.class);
+        verify(briefingClient).generate(eq(TENANT_ID), captor.capture());
+
+        assertThat(captor.getValue().contacts()).hasSize(1);
+        assertThat(captor.getValue().contacts().get(0).name()).isEqualTo("김철수");
     }
 }

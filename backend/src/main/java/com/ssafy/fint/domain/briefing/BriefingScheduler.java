@@ -24,11 +24,12 @@ public class BriefingScheduler {
 
     @Scheduled(fixedRate = 60_000)
     public void triggerMeetingBriefings() {
-        OffsetDateTime from = OffsetDateTime.now().plusMinutes(WINDOW_START_MINUTES);
-        OffsetDateTime to = OffsetDateTime.now().plusMinutes(WINDOW_END_MINUTES);
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime from = now.plusMinutes(WINDOW_START_MINUTES);
+        OffsetDateTime to = now.plusMinutes(WINDOW_END_MINUTES);
 
         List<Activity> meetings =
-                activityRepository.findUpcomingMeetingsWithoutBriefing(ActivityType.MEETING, from, to);
+                activityRepository.systemFindUpcomingMeetingsWithoutBriefing(ActivityType.MEETING, from, to);
 
         if (meetings.isEmpty()) {
             return;

@@ -37,7 +37,6 @@ public class BriefingService {
     private final AccountDartDisclosureRepository accountDartDisclosureRepository;
     private final BriefingClient briefingClient;
 
-    @Transactional
     public BriefingResponse generateForActivity(Long activityId, CustomUserDetails me) {
         Activity activity = activityRepository
                 .findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(
@@ -49,7 +48,7 @@ public class BriefingService {
         }
         if (activity.getDeal() == null) {
             log.info("[Briefing] activityId={} has no deal — cannot generate briefing", activityId);
-            throw new BusinessException(ActivityErrorCode.DEAL_NOT_FOUND);
+            throw new BusinessException(ActivityErrorCode.DEAL_NOT_LINKED);
         }
 
         BriefingResponse response = doGenerate(activity, me.getTenantId());
@@ -57,7 +56,6 @@ public class BriefingService {
         return response;
     }
 
-    @Transactional
     public void generateAndSave(Activity activity) {
         if (activity.getDeal() == null) {
             log.info("[Briefing] skip activityId={} — no deal associated", activity.getActivityId());
@@ -87,7 +85,8 @@ public class BriefingService {
         return briefingClient.generate(tenantId, request);
     }
 
-    private void persistAndSave(Activity activity, BriefingResponse response) {
+    @Transactional
+    public void persistAndSave(Activity activity, BriefingResponse response) {
         activity.updateBriefing(Map.of(
                 "key_points", response.keyPoints(),
                 "alerts", response.alerts()
@@ -149,20 +148,19 @@ public class BriefingService {
     }
 
     private List<BriefingRequest.MeetingHistory> buildRecentMeetings(Long accountId, Long tenantId, OffsetDateTime before) {
-        List<Activity> meetings = activityRepository.findRecentMeetingsByAccountId(accountId, tenantId, before);
-        List<BriefingRequest.MeetingHistory> result = new ArrayList<>();
-        for (Activity m : meetings) {
-            String summaryText = extractSummaryText(m);
-            result.add(new BriefingRequest.MeetingHistory(
-                    m.getActivityId(),
-                    m.getTitle(),
-                    m.getStartAt().toLocalDate().toString(),
-                    summaryText,
-                    null,
-                    null
-            ));
-        }
-        return result;
+        return activityRepository.findRecentMeetingsByAccountId(accountId, tenantId, before)
+                .map(m -> {
+                    String summaryText = extractSummaryText(m);
+                    return List.of(new BriefingRequest.MeetingHistory(
+                            m.getActivityId(),
+                            m.getTitle(),
+                            m.getStartAt().toLocalDate().toString(),
+                            summaryText,
+                            null,
+                            null
+                    ));
+                })
+                .orElse(List.of());
     }
 
     private String extractSummaryText(Activity activity) {

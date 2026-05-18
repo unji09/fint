@@ -65,7 +65,7 @@ class BriefingSchedulerTest {
     @DisplayName("윈도우 내 MEETING 이 2개면 generateAndSave 가 2회 호출된다.")
     void triggerCallsServiceForEachMeeting() {
         List<Activity> meetings = List.of(fakeMeeting(1L), fakeMeeting(2L));
-        when(activityRepository.findUpcomingMeetingsWithoutBriefing(
+        when(activityRepository.systemFindUpcomingMeetingsWithoutBriefing(
                 eq(ActivityType.MEETING), any(OffsetDateTime.class), any(OffsetDateTime.class)))
                 .thenReturn(meetings);
 
@@ -77,7 +77,7 @@ class BriefingSchedulerTest {
     @Test
     @DisplayName("윈도우 내 대상이 없으면 generateAndSave 가 호출되지 않는다.")
     void triggerSkipsWhenNoMeetings() {
-        when(activityRepository.findUpcomingMeetingsWithoutBriefing(
+        when(activityRepository.systemFindUpcomingMeetingsWithoutBriefing(
                 eq(ActivityType.MEETING), any(OffsetDateTime.class), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
 
@@ -89,7 +89,7 @@ class BriefingSchedulerTest {
     @Test
     @DisplayName("쿼리에 ActivityType.MEETING 과 29~31분 범위 인자가 전달된다.")
     void triggerPassesCorrectWindowToRepository() {
-        when(activityRepository.findUpcomingMeetingsWithoutBriefing(
+        when(activityRepository.systemFindUpcomingMeetingsWithoutBriefing(
                 any(), any(), any()))
                 .thenReturn(List.of());
 
@@ -100,7 +100,7 @@ class BriefingSchedulerTest {
         ArgumentCaptor<OffsetDateTime> fromCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
         ArgumentCaptor<OffsetDateTime> toCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
 
-        verify(activityRepository).findUpcomingMeetingsWithoutBriefing(
+        verify(activityRepository).systemFindUpcomingMeetingsWithoutBriefing(
                 typeCaptor.capture(), fromCaptor.capture(), toCaptor.capture());
 
         assertThat(typeCaptor.getValue()).isEqualTo(ActivityType.MEETING);

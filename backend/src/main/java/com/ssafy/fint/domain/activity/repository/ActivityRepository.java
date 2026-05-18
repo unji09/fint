@@ -61,8 +61,9 @@ public interface ActivityRepository
     Optional<Activity> findLatestPipelineActivityByDealId(@Param("dealId") Long dealId);
 
     /**
-     * 브리핑 스케줄러 전용 — 전 테넌트 대상으로 실행하는 시스템 배치 쿼리.
-     * tenant_id 필터 미적용은 의도적이며, tenantId는 각 Activity에서 추출해 FastAPI 호출 시 사용한다.
+     * 브리핑 스케줄러 전용 시스템 배치 쿼리 — 전 테넌트 대상.
+     * tenant_id 필터 미적용은 의도적: 스케줄러는 모든 테넌트의 미팅을 한 번에 조회하고,
+     * 각 Activity에서 tenantId를 추출해 FastAPI 호출 시 사용한다.
      */
     @Query("""
             SELECT a FROM Activity a
@@ -74,7 +75,7 @@ public interface ActivityRepository
               AND a.startAt BETWEEN :from AND :to
               AND a.briefing IS NULL
             """)
-    List<Activity> findUpcomingMeetingsWithoutBriefing(
+    List<Activity> systemFindUpcomingMeetingsWithoutBriefing(
             @Param("type") ActivityType type,
             @Param("from") OffsetDateTime from,
             @Param("to") OffsetDateTime to
@@ -89,7 +90,7 @@ public interface ActivityRepository
             ORDER BY a.startAt DESC
             LIMIT 1
             """)
-    List<Activity> findRecentMeetingsByAccountId(
+    Optional<Activity> findRecentMeetingsByAccountId(
             @Param("accountId") Long accountId,
             @Param("tenantId") Long tenantId,
             @Param("before") OffsetDateTime before
