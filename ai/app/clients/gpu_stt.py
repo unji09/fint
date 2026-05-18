@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import httpx
 from pydantic import ValidationError
 
@@ -36,7 +37,10 @@ class GpuSttClient:
                 headers["X-Session-Id"] = session_id
             if prev_text:
                 # 직전 청크 전사 텍스트를 GPU 서버로 전달 — Whisper initial_prompt로 활용
-                headers["X-Prev-Text"] = prev_text[:200]
+                # HTTP 헤더는 ASCII만 허용하므로 base64로 인코딩
+                headers["X-Prev-Text"] = base64.b64encode(
+                    prev_text[:200].encode("utf-8")
+                ).decode("ascii")
             response = await self._client.post(
                 "/stt/chunk",
                 content=audio_bytes,
