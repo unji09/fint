@@ -159,9 +159,7 @@ export default function CustomerDetailPage() {
                   <button onClick={() => setAllDeals(false)} style={{ fontFamily: F, fontSize: 12, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>접기</button>
                 </div>
                 {visDeal.length > 0 ? (
-                  // 박스 height 자동 → flex 컨테이너만 콘텐츠 크기로. wrap 으로 자연스럽게 줄바꿈.
-                  // space-evenly: 양옆 / 카드 사이 빈 공간 균등 분배.
-                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-evenly', alignItems: 'center', gap: 16 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 16 }}>
                     {visDeal.map(d => (
                       <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} isCompact={isCompact} />
                     ))}
