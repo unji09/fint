@@ -18,6 +18,7 @@ import AddEventModal from '@/components/calendar/AddEventModal';
 import type { CalendarEvent, ViewMode } from '@/components/calendar/types';
 import { getEventColor } from '@/components/calendar/types';
 import { useCalendarEvents, fetchEventDetail, resizeActivity } from '@/hooks/useCalendarEvents';
+import useBreakpoint from '@/hooks/useBreakpoint';
 import {
   addMonths,
   addWeeks,
@@ -764,6 +765,10 @@ function DatePicker({
 
 // ── 메인 ─────────────────────────────────────────────────────
 export default function CalendarPage() {
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
+  const isTablet = bp === 'tablet';
+  const isCompact = isMobile || isTablet;
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -846,14 +851,16 @@ export default function CalendarPage() {
     };
   }, []);
 
-  const goPrev = () =>
-    viewMode === 'month'
-      ? setCurrentDate((d) => addMonths(d, -1))
-      : setCurrentDate((d) => addWeeks(d, -1));
-  const goNext = () =>
-    viewMode === 'month'
-      ? setCurrentDate((d) => addMonths(d, 1))
-      : setCurrentDate((d) => addWeeks(d, 1));
+  const goPrev = () => {
+    if (viewMode === 'month') setCurrentDate((d) => addMonths(d, -1));
+    else if (viewMode === 'week') setCurrentDate((d) => addWeeks(d, -1));
+    else setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); setCurrentDate(n); return n; });
+  };
+  const goNext = () => {
+    if (viewMode === 'month') setCurrentDate((d) => addMonths(d, 1));
+    else if (viewMode === 'week') setCurrentDate((d) => addWeeks(d, 1));
+    else setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); setCurrentDate(n); return n; });
+  };
 
   const dayEvs = getEventsForDay(events, selectedDate);
 
@@ -897,7 +904,11 @@ export default function CalendarPage() {
     const dt = new Date(d);
     dt.setHours(9, 0, 0, 0);
     setSelectedDate(dt);
-    openAdd(dt);
+    if (isCompact) {
+      setViewMode('day');
+    } else {
+      openAdd(dt);
+    }
   };
   const onTimeClick = (d: Date) => openAdd(d);
   const onTimeRangeSelect = (start: Date, end: Date) => openAdd(start, end);
@@ -927,8 +938,8 @@ export default function CalendarPage() {
       }}
     >
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* ── Aside (Figma: w-[300px] overflow-auto border-r #e5e6de) ── */}
-        <div
+        {/* ── Aside (데스크톱 전용) ── */}
+        {!isCompact && (<><div
           style={{
             maxWidth: asideOpen ? asideWidth : 0,
             minWidth: 0,
@@ -1065,7 +1076,7 @@ export default function CalendarPage() {
           </aside>
         </div>
 
-        {/* ── 드래그 핸들 ── */}
+        {/* ── 드래그 핸들 (데스크톱 전용) ── */}
         <div
           onMouseDown={asideOpen ? onDragStart : undefined}
           style={{
@@ -1103,7 +1114,7 @@ export default function CalendarPage() {
                 style={{ width: 3, height: 3, borderRadius: '50%', backgroundColor: '#CDD0D8' }}
               />
             ))}
-        </div>
+        </div></>)}
 
         {/* ── 메인 영역 ── */}
         <div
@@ -1124,7 +1135,7 @@ export default function CalendarPage() {
               borderBottom: `1px solid ${BORDER}`,
               display: 'flex',
               alignItems: 'center',
-              padding: '0 20px',
+              padding: isCompact ? '0 10px' : '0 20px',
               position: 'relative',
             }}
           >
@@ -1182,6 +1193,7 @@ export default function CalendarPage() {
                 [
                   { t: '월', m: 'month' },
                   { t: '주', m: 'week' },
+                  { t: '일', m: 'day' },
                 ] as { t: string; m: ViewMode }[]
               ).map(({ t, m }) => (
                 <button
@@ -1247,7 +1259,7 @@ export default function CalendarPage() {
                 gridTemplateColumns: 'repeat(7, 1fr)',
                 alignItems: 'stretch',
                 overflow: 'hidden',
-                height: 44,
+                height: isCompact ? 36 : 44,
               }}
             >
               {pipeline.map((s, i) => {
@@ -1260,8 +1272,9 @@ export default function CalendarPage() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
-                      padding: '0 16px',
+                      justifyContent: isCompact ? 'center' : 'flex-start',
+                      gap: isCompact ? 4 : 8,
+                      padding: isCompact ? '0 4px' : '0 16px',
                       borderRight: i < 6 ? '1px solid #D6D6D6' : 'none',
                       borderTop: 'none',
                       borderBottom: 'none',
@@ -1283,20 +1296,22 @@ export default function CalendarPage() {
                         flexShrink: 0,
                       }}
                     />
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: active ? 700 : 500,
-                        color: active ? s.cTxt : TXT1,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        flex: 1,
-                        textAlign: 'left',
-                      }}
-                    >
-                      {s.label}
-                    </span>
+                    {!isCompact && (
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: active ? 700 : 500,
+                          color: active ? s.cTxt : TXT1,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          flex: 1,
+                          textAlign: 'left',
+                        }}
+                      >
+                        {s.label}
+                      </span>
+                    )}
                     <span
                       style={{
                         fontSize: 11,
@@ -1319,7 +1334,20 @@ export default function CalendarPage() {
 
           {/* ── 달력 그리드 ── */}
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-            {viewMode === 'month' ? (
+            {viewMode === 'day' ? (
+              <DayTimeView
+                events={events}
+                selectedDate={selectedDate}
+                onEventClick={(ev) => {
+                  setSelectedDate(new Date(ev.startAt));
+                  handleEventClick(ev);
+                }}
+                onTimeClick={onTimeClick}
+                onTimeRangeSelect={onTimeRangeSelect}
+                onResized={() => refetch()}
+                onNotificationDrop={handleNotificationDrop}
+              />
+            ) : viewMode === 'month' ? (
               <MonthGrid
                 currentDate={currentDate}
                 events={events}
