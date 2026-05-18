@@ -73,7 +73,7 @@ class NextActionCreateServiceTest {
                         "클라우드 전환 비용 절감 제안",
                         "최근 인프라 비용 증가 이슈 감지",
                         "COST_REDUCTION", "ACCOUNT",
-                        87.5, 89,
+                        4.5, 89,
                         Map.of("news", List.of(), "dart", List.of(), "crm", List.of()),
                         "인프라 비용 절감 효과를 수치로 제시하세요",
                         STAGE_ID
@@ -82,7 +82,7 @@ class NextActionCreateServiceTest {
                         "EB 식별 및 컨택",
                         "EB 미참여 상태",
                         "Qualification", "ACCOUNT",
-                        72.0, 72,
+                        3.5, 72,
                         Map.of("news", List.of(), "dart", List.of(), "crm", List.of()),
                         "Champion 에게 EB 소개 요청",
                         STAGE_ID
@@ -117,12 +117,12 @@ class NextActionCreateServiceTest {
         assertThat(first.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(first.accountName()).isEqualTo("(주)삼성전자");
         assertThat(first.action()).isEqualTo("클라우드 전환 비용 절감 제안");
-        assertThat(first.importanceScore()).isEqualTo(87.5);
+        assertThat(first.importanceScore()).isEqualTo(4.5);
 
         NextActionCreateResponse second = responses.get(1);
         assertThat(second.nextActionId()).isEqualTo(101L);
         assertThat(second.action()).isEqualTo("EB 식별 및 컨택");
-        assertThat(second.importanceScore()).isEqualTo(72.0);
+        assertThat(second.importanceScore()).isEqualTo(3.5);
 
         verify(aiSuggestionRepository, times(2)).save(any(AiSuggestion.class));
         verify(notificationService, times(1)).pushNotification(any(AiSuggestion.class));
@@ -137,7 +137,7 @@ class NextActionCreateServiceTest {
 
         List<NextActionAiResponse> aiResponses = List.of(new NextActionAiResponse(
                 "제목", "설명", "MARKET_EXPANSION", "ACCOUNT",
-                75.0, 75, sources, "멘트", STAGE_ID
+                3.8, 75, sources, "멘트", STAGE_ID
         ));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
@@ -168,7 +168,7 @@ class NextActionCreateServiceTest {
         assertThat(saved.getContent()).isEqualTo("설명");
         assertThat(saved.getCategory()).isEqualTo("MARKET_EXPANSION");
         assertThat(saved.getSuccessProbability()).isEqualTo(75);
-        assertThat(saved.getImportanceScore()).isEqualTo(75.0);
+        assertThat(saved.getImportanceScore()).isEqualTo(3.8);
         assertThat(saved.getRelatedType()).isEqualTo(AiSuggestionRelatedType.ACCOUNT);
         assertThat(saved.getReason()).containsKey("sources");
         assertThat(saved.getReason()).containsEntry("recommendedScript", "멘트");
@@ -183,7 +183,7 @@ class NextActionCreateServiceTest {
 
         List<NextActionAiResponse> aiResponses = List.of(new NextActionAiResponse(
                 "미팅 후속 액션", "미팅 기반 추천", "FOLLOW_UP", null,
-                60.0, 70, Map.of(), "멘트", STAGE_ID
+                3.0, 70, Map.of(), "멘트", STAGE_ID
         ));
 
         NextActionCreateRequest request = new NextActionCreateRequest(
@@ -233,7 +233,7 @@ class NextActionCreateServiceTest {
 
         List<NextActionAiResponse> aiResponses = List.of(new NextActionAiResponse(
                 "제목", "설명", "전략", "ACCOUNT",
-                50.0, 50, Map.of(), "멘트", 999L
+                2.5, 50, Map.of(), "멘트", 999L
         ));
 
         NextActionCreateRequest request = new NextActionCreateRequest(

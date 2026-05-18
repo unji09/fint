@@ -33,7 +33,7 @@ import java.util.Map;
 @Transactional(readOnly = true)
 public class AiSuggestionService {
 
-    private static final double URGENT_NOTIFICATION_THRESHOLD = 80.0;
+    private static final double URGENT_NOTIFICATION_THRESHOLD = 4.0;
 
     private final AccountRepository accountRepository;
     private final AiSuggestionRepository aiSuggestionRepository;
