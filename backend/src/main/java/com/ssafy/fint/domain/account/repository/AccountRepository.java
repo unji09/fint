@@ -56,7 +56,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
             where u.tenant.tenantId = :tenantId
               and (:callerTeamId is null or (u.team is not null and u.team.teamId = :callerTeamId))
               and u.isDeleted = false
-              and a.name like concat('%', cast(:keyword as string), '%')
+              and lower(a.name) like lower(concat('%', cast(:keyword as string), '%'))
             """)
     List<Account> searchInTeam(
             @Param("keyword") String keyword,
@@ -76,7 +76,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
             where aua.user.userId = :userId
               and aua.user.tenant.tenantId = :tenantId
               and aua.user.isDeleted = false
-              and (:keyword is null or a.name like concat('%', cast(:keyword as string), '%'))
+              and (:keyword is null or lower(a.name) like lower(concat('%', cast(:keyword as string), '%')))
               and (:industry is null or a.industry = cast(:industry as string))
             """,
             countQuery = """
@@ -85,7 +85,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
             where aua.user.userId = :userId
               and aua.user.tenant.tenantId = :tenantId
               and aua.user.isDeleted = false
-              and (:keyword is null or a.name like concat('%', cast(:keyword as string), '%'))
+              and (:keyword is null or lower(a.name) like lower(concat('%', cast(:keyword as string), '%')))
               and (:industry is null or a.industry = cast(:industry as string))
             """)
     Page<Account> findMineByFilter(
