@@ -873,6 +873,32 @@ export default function CalendarPage() {
     // 응답 도착 시 여전히 같은 이벤트를 보고 있는지 확인 (race condition 방지)
     if (detail && clickedIdRef.current === ev.eventId) setSelectedEvent(detail);
   };
+
+  // 외부 진입(딜 상세 등) → ?activityId=&date= 로 들어오면 해당 활동 모달 자동 오픈
+  // useSearchParams 대신 window.location 을 useEffect 내부에서 읽어 빌드 시
+  // Suspense 경계 요구를 회피한다. (next build deopt 방지)
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const aid = params.get('activityId');
+    if (!aid) return;
+    const dateParam = params.get('date');
+    if (dateParam) {
+      const d = new Date(dateParam);
+      if (!isNaN(d.getTime())) {
+        setCurrentDate(d);
+        setSelectedDate(d);
+      }
+    }
+    const found = apiEvents.find((e) => e.eventId === `act-${aid}`);
+    if (!found) return; // 이벤트 목록 아직 로드 안 됨 → apiEvents 갱신 시 재시도
+    autoOpenedRef.current = true;
+    handleEventClick(found);
+    window.history.replaceState({}, '', '/calendar');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiEvents]);
   const miniWk = getWeekDays(selectedDate);
 
   // ── 알림 드롭 → 일정 추가 prefill ──

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import PipelineProgress from './PipelineProgress';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import { useConfirm, usePrompt } from '@/components/common/ConfirmDialog';
@@ -79,6 +80,7 @@ interface Props {
 }
 
 export default function DealDetailPanel({ deal, onDealChanged }: Props) {
+  const router = useRouter();
   const confirm = useConfirm();
   const prompt = usePrompt();
   const [detail, setDetail] = useState<DealDetail | null>(null);
@@ -310,6 +312,31 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
                             AI 요약이 아직 없습니다. 녹음 후 자동 생성됩니다.
                           </p>
                         )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const q = new URLSearchParams({
+                                activityId: String(a.activityId),
+                                date: a.startAt,
+                              });
+                              router.push(`/calendar?${q.toString()}`);
+                            }}
+                            style={{
+                              fontFamily: 'Pretendard,sans-serif',
+                              fontSize: 12,
+                              fontWeight: 500,
+                              color: '#0686d4',
+                              background: 'transparent',
+                              border: 'none',
+                              padding: '4px 6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            전체 보기 →
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
