@@ -55,7 +55,7 @@ async def stt_stream(
 
     # MediaRecorder timeslice 모드의 fragmented webm 처리:
     # 첫 번째 청크에만 EBML+Segment+Tracks 헤더가 포함되어 있으므로 저장해두고
-    # 이후 Cluster들을 두 개의 버퍼(_FAST_, _REFINE_)에 각각 누적한다.
+    # 이후 Cluster들을 fast_buffer에 누적한다.
     webm_header: bytes = b""
     is_first_chunk = True
     elapsed_ms: int = 0
@@ -96,7 +96,6 @@ async def stt_stream(
 
             msg = SttStreamChunk(
                 type="transcript",
-                is_draft=False,
                 range_start_ms=range_start,
                 range_end_ms=range_end,
                 segment=SttSegment(
@@ -140,8 +139,7 @@ async def stt_stream(
 
             # ── EOS 신호 (0-byte) — 남은 버퍼 플러시 후 stream_ended 전송 ────
             # 클라이언트가 녹음을 종료할 때 마지막으로 0-byte 프레임을 전송한다.
-            # refine_buffer에 아직 처리하지 못한 클러스터가 남아있을 수 있으므로
-            # 이 시점에 동기로 처리하고 완료 신호를 돌려준다.
+            # fast_buffer에 남은 클러스터를 플러시하고 완료 신호를 돌려준다.
             if len(audio_bytes) == 0:
                 log.info("[STT EOS] session=%s fast_buf=%d", session_key, len(fast_buffer))
                 # 버퍼 잔량 플러시

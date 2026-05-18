@@ -1,7 +1,6 @@
 package com.s14p31a301.fint.feature.debug
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +43,6 @@ import com.s14p31a301.fint.ui.theme.BrandCyan
 fun DebugEntryOverlay(
     onOpenBusinessCardScanner: () -> Unit,
     onOpenDeviceContactPicker: () -> Unit,
-    onOpenMeetingRecorder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -78,9 +76,6 @@ fun DebugEntryOverlay(
                         }
                         DebugButton("👤 담당자 추가") {
                             expanded = false; onOpenDeviceContactPicker()
-                        }
-                        DebugButton("🎙 미팅 녹음") {
-                            expanded = false; onOpenMeetingRecorder()
                         }
                     }
                 }

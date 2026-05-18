@@ -1,6 +1,6 @@
 """NaverNewsCollector 단위 테스트."""
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import numpy as np
 import pytest
@@ -154,3 +154,75 @@ class TestExistingLinkMerge:
         assert result.new_articles == []
         link_accounts = result.existing_links["https://n.news.naver.com/existing"]
         assert sorted(link_accounts) == [1, 2]
+
+
+def _fixed_embedder(seed: int = 42, dim: int = 384):
+    """매번 동일한 정규화 임베딩을 반환하는 mock embedder."""
+    rng = np.random.RandomState(seed)
+    vec = rng.randn(dim).astype(np.float32)
+    vec = vec / np.linalg.norm(vec)
+
+    embedder = MagicMock()
+    embedder.dimension = dim
+    embedder.embed_passages = MagicMock(
+        side_effect=lambda texts: np.tile(vec, (len(texts), 1)),
+    )
+    return embedder, vec
+
+
+class TestDbDedup:
+    """DB 기존 기사 대비 의미적 중복 제거 통합 테스트."""
+
+    @pytest.mark.asyncio
+    async def test_article_filtered_when_db_has_similar(self):
+        """DB에 유사 임베딩이 있으면 신규 기사에서 제거한다."""
+        item = _make_item("https://n.news.naver.com/new1")
+        naver = _mock_naver_client([item])
+        embedder, vec = _fixed_embedder(42)
+        db = _mock_db()
+
+        link_check = _make_fetch_result([])
+        embedding_fetch = _make_fetch_result([(vec.tolist(),)])
+        db.execute = AsyncMock(side_effect=[link_check, embedding_fetch])
+
+        collector = NaverNewsCollector(naver, embedder)
+        result = await collector.collect_for_accounts([ACCOUNT], db)
+
+        assert len(result.new_articles) == 0
+
+    @pytest.mark.asyncio
+    async def test_article_kept_when_db_has_no_similar(self):
+        """DB 기사와 유사도가 낮으면 신규 기사를 유지한다."""
+        item = _make_item("https://n.news.naver.com/new1")
+        naver = _mock_naver_client([item])
+        embedder, vec = _fixed_embedder(42)
+        db = _mock_db()
+
+        different_vec = np.random.RandomState(99).randn(384).astype(np.float32)
+        different_vec = different_vec / np.linalg.norm(different_vec)
+
+        link_check = _make_fetch_result([])
+        embedding_fetch = _make_fetch_result([(different_vec.tolist(),)])
+        db.execute = AsyncMock(side_effect=[link_check, embedding_fetch])
+
+        collector = NaverNewsCollector(naver, embedder)
+        result = await collector.collect_for_accounts([ACCOUNT], db)
+
+        assert len(result.new_articles) == 1
+
+    @pytest.mark.asyncio
+    async def test_article_kept_when_db_empty(self):
+        """DB에 최근 기사가 없으면 모든 신규 기사를 유지한다."""
+        item = _make_item("https://n.news.naver.com/new1")
+        naver = _mock_naver_client([item])
+        embedder, _ = _fixed_embedder(42)
+        db = _mock_db()
+
+        link_check = _make_fetch_result([])
+        embedding_fetch = _make_fetch_result([])
+        db.execute = AsyncMock(side_effect=[link_check, embedding_fetch])
+
+        collector = NaverNewsCollector(naver, embedder)
+        result = await collector.collect_for_accounts([ACCOUNT], db)
+
+        assert len(result.new_articles) == 1

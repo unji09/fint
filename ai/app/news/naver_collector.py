@@ -9,12 +9,13 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
+import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.embedder import EmbedderClient
 from app.clients.naver import NaverNewsClient, NaverNewsItem
-from app.news.dedup import deduplicate_articles
+from app.news.dedup import deduplicate_articles, deduplicate_against_existing
 
 logger = logging.getLogger(__name__)
 
@@ -113,10 +114,18 @@ class NaverNewsCollector:
 
         new_articles = deduplicate_articles(new_articles)
 
+        if new_articles:
+            db_embeddings = await self._fetch_recent_title_embeddings(db)
+            new_articles = deduplicate_against_existing(
+                new_articles, db_embeddings,
+            )
+
         return NaverCollectResult(
             new_articles=new_articles,
             existing_links=existing_links_map,
         )
+
+    _DB_DEDUP_DAYS = 7
 
     async def _get_existing_links(
         self, links: list[str], db: AsyncSession,
@@ -130,3 +139,20 @@ class NaverNewsCollector:
             {"links": links},
         )
         return {row[0] for row in result.fetchall()}
+
+    async def _fetch_recent_title_embeddings(
+        self, db: AsyncSession,
+    ) -> np.ndarray:
+        result = await db.execute(
+            text(
+                "SELECT title_embedding::real[]"
+                " FROM news_articles"
+                " WHERE published_at >= CURRENT_DATE - :days"
+                " AND title_embedding IS NOT NULL"
+            ),
+            {"days": self._DB_DEDUP_DAYS},
+        )
+        rows = result.fetchall()
+        if not rows:
+            return np.empty((0, 0), dtype=np.float32)
+        return np.array([row[0] for row in rows], dtype=np.float32)

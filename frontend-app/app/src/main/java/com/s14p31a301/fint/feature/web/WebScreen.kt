@@ -3,9 +3,10 @@ package com.s14p31a301.fint.feature.web
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.s14p31a301.fint.BuildConfig
 import com.s14p31a301.fint.core.webview.FintWebView
 import com.s14p31a301.fint.core.webview.WebViewBridge
 import com.s14p31a301.fint.core.webview.WebViewRoute
@@ -34,9 +35,12 @@ fun WebScreen(
         webViewModel
     }
 
+    val isLoggedIn by webViewModel.isLoggedIn.collectAsState()
+
     val bridge = remember(webViewModel) {
         WebViewBridge(
             onSaveAuthToken = webViewModel::saveAuthToken,
+            onLoggedOut = webViewModel::clearAuth,
             onOpenBusinessCardScanner = onOpenBusinessCardScanner,
             onOpenDeviceContactPicker = onOpenDeviceContactPicker,
             onOpenMeetingRecorder = onOpenMeetingRecorder,
@@ -52,12 +56,10 @@ fun WebScreen(
             onPageFinished = webViewModel::onPageFinished,
         )
 
-        // 디버그 빌드에서만 노출되는 Native 화면 진입 패널
-        if (BuildConfig.DEBUG) {
+        if (isLoggedIn) {
             DebugEntryOverlay(
                 onOpenBusinessCardScanner = onOpenBusinessCardScanner,
                 onOpenDeviceContactPicker = onOpenDeviceContactPicker,
-                onOpenMeetingRecorder = { onOpenMeetingRecorder(null) },
             )
         }
     }

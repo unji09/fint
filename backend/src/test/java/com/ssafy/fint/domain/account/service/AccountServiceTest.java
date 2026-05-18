@@ -1,5 +1,6 @@
 package com.ssafy.fint.domain.account.service;
 
+import com.ssafy.fint.domain.account.client.CompanyEnrichClient;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
 import com.ssafy.fint.domain.account.entity.Account;
@@ -65,6 +66,10 @@ class AccountServiceTest {
     @Mock
     @SuppressWarnings("unused")
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private CompanyEnrichClient companyEnrichClient;
 
     @InjectMocks
     private AccountService accountService;

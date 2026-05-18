@@ -24,6 +24,15 @@ class WebViewModel(
     private val _uiState = MutableStateFlow(WebUiState())
     val uiState: StateFlow<WebUiState> = _uiState.asStateFlow()
 
+    private val _isLoggedIn = MutableStateFlow(false)
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _isLoggedIn.value = !tokenDataStore.getAccessToken().isNullOrEmpty()
+        }
+    }
+
     private val _commands = MutableSharedFlow<WebCommand>(
         replay = 0,
         extraBufferCapacity = 8,
@@ -64,11 +73,13 @@ class WebViewModel(
         )
         viewModelScope.launch {
             tokenDataStore.saveTokens(accessToken, refreshToken)
+            _isLoggedIn.value = true
             android.util.Log.d("WebVM", "saveAuthToken persisted to DataStore")
         }
     }
 
     fun clearAuth() {
+        _isLoggedIn.value = false
         viewModelScope.launch { tokenDataStore.clear() }
     }
 }
