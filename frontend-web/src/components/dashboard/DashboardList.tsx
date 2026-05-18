@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Dashboard } from '@/types/dashboard';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -275,6 +276,8 @@ function DashboardCard({
 }
 
 export default function DashboardList({ dashboards, loading, onCreateNew, onDelete, deleting }: DashboardListProps) {
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   return (
     /* height 자동 → 카드 행수에 맞게 컨텐츠 기반 높이 */
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -282,7 +285,7 @@ export default function DashboardList({ dashboards, loading, onCreateNew, onDele
         style={{
           fontFamily: 'Pretendard, sans-serif',
           fontWeight: 600,
-          fontSize: 18,
+          fontSize: isMobile ? 16 : 18,
           lineHeight: '26px',
           letterSpacing: '-0.2px',
           color: '#1d1a24',
@@ -300,12 +303,12 @@ export default function DashboardList({ dashboards, loading, onCreateNew, onDele
           borderRadius: 12,
           background: 'white',
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gridAutoRows: '200px',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))',
+          gridAutoRows: isMobile ? '160px' : '200px',
           alignContent: 'flex-start',
-          padding: '20px 24px',
-          gap: 16,
-          maxHeight: 440,
+          padding: isMobile ? '12px 12px' : '20px 24px',
+          gap: isMobile ? 12 : 16,
+          maxHeight: isMobile ? 'none' : 440,
           overflowY: 'auto',
         }}
       >

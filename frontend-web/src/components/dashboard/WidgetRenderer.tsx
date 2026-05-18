@@ -30,18 +30,26 @@ interface WidgetRendererProps {
 }
 
 export default function WidgetRenderer({ widgetType, config, data, result }: WidgetRendererProps) {
-  // 프리셋 위젯: config.chart 존재 + data 있음 → Chart.js
-  if (widgetType === 'CHART' && config.chart && data && data.length > 0) {
-    return <PresetChartRenderer config={config} data={data} />;
+  const resultData = result?.data as Record<string, unknown> | unknown[] | null | undefined;
+  const extractedRows = Array.isArray(resultData)
+    ? (resultData as Record<string, unknown>[])
+    : (resultData && typeof resultData === 'object' && Array.isArray((resultData as Record<string, unknown>).rows))
+      ? ((resultData as Record<string, unknown>).rows as Record<string, unknown>[])
+      : null;
+  const resolvedData = (data && data.length > 0) ? data : extractedRows;
+
+  // config.chart 존재 → Chart.js (프리셋 + AI 공통)
+  if (config.chart && resolvedData && resolvedData.length > 0) {
+    return <PresetChartRenderer config={config} data={resolvedData} />;
   }
 
-  // 프리셋 TABLE: config.columns 존재 + data 있음
-  if (widgetType === 'TABLE' && config.columns && data && data.length > 0) {
-    return <PresetTableRenderer config={config} data={data} />;
+  // config.columns 존재 → 테이블 렌더링 (프리셋 + AI 공통)
+  if (config.columns && resolvedData && resolvedData.length > 0) {
+    return <PresetTableRenderer config={config} data={resolvedData} />;
   }
 
-  // 프리셋 위젯인데 data가 비어있는 경우 → 빈 상태 메시지
-  if (data !== null && data !== undefined && data.length === 0 && config.display) {
+  // data가 빈 배열인 경우 → 빈 상태 메시지
+  if (resolvedData !== null && resolvedData.length === 0 && config.display) {
     const display = config.display as { emptyMessage?: string };
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 13, fontFamily: 'Pretendard,sans-serif' }}>
@@ -50,7 +58,7 @@ export default function WidgetRenderer({ widgetType, config, data, result }: Wid
     );
   }
 
-  // AI 생성 위젯 (기존 SVG 렌더링)
+  // config.chart/columns 없는 레거시 AI 위젯 → SVG 폴백
   return <LegacyRenderer widgetType={widgetType} config={config} result={result} />;
 }
 

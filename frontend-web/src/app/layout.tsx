@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   },
 };
 
-const GNB_H = 80;
+const GNB_H = 64;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

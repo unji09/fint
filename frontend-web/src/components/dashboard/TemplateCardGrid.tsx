@@ -1,6 +1,7 @@
 'use client';
 
 import type { TemplateGroup } from '@/types/dashboard';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface TemplateCardGridProps {
   groups: TemplateGroup[];
@@ -203,6 +204,10 @@ const WIDGET_TYPE_ICON: Record<string, string> = {
 };
 
 export default function TemplateCardGrid({ groups, onSelect, loading }: TemplateCardGridProps) {
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
+  const isTablet = bp === 'tablet';
+  const maxCols = isMobile ? 1 : isTablet ? 2 : 3;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -231,9 +236,9 @@ export default function TemplateCardGrid({ groups, onSelect, loading }: Template
         style={{
           flex: 1,
           display: 'grid',
-          gridTemplateColumns: `repeat(${Math.min(groups.length || 1, 3)}, minmax(0, 1fr))`,
-          gridTemplateRows: '1fr',
-          gap: 20,
+          gridTemplateColumns: `repeat(${Math.min(groups.length || 1, maxCols)}, minmax(0, 1fr))`,
+          gridTemplateRows: isMobile ? 'auto' : '1fr',
+          gap: isMobile ? 12 : 20,
           minHeight: 0,
         }}
       >
@@ -268,6 +273,7 @@ export default function TemplateCardGrid({ groups, onSelect, loading }: Template
                     padding: 1,
                     transition: 'box-shadow 0.18s, border-color 0.18s, transform 0.18s',
                     height: '100%',
+                    minHeight: isMobile ? 200 : undefined,
                   }}
                   onMouseEnter={(e) => {
                     const el = e.currentTarget;
