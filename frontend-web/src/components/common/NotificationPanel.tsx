@@ -330,7 +330,15 @@ export default function NotificationPanel({ open, onClose, notifications, onItem
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
                     {unreadList.map((n) => (
-                      <NotificationCard key={n.notificationId} n={n} expanded={expandedId === n.notificationId} onClick={() => handleClick(n)} />
+                      <NotificationCard
+                        key={n.notificationId}
+                        n={n}
+                        expanded={expandedId === n.notificationId}
+                        onClick={() => handleClick(n)}
+                        draggable={isCalendar}
+                        onDragStart={() => setIsDragging(true)}
+                        onCardDragEnd={handleCardDragEnd}
+                      />
                     ))}
                   </div>
                 </section>
