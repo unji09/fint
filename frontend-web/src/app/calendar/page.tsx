@@ -935,9 +935,15 @@ export default function CalendarPage() {
         MozOsxFontSmoothing: 'grayscale',
       }}
     >
+      <style>{`
+        @media (max-width: 1024px) {
+          .calendar-aside, .calendar-drag-handle { display: none !important; }
+        }
+      `}</style>
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* ── Aside (데스크톱 전용) ── */}
         {!isCompact && (<><div
+          className="calendar-aside"
           style={{
             maxWidth: asideOpen ? asideWidth : 0,
             minWidth: 0,
@@ -1075,6 +1081,7 @@ export default function CalendarPage() {
 
         {/* ── 드래그 핸들 (데스크톱 전용) ── */}
         <div
+          className="calendar-drag-handle"
           onMouseDown={asideOpen ? onDragStart : undefined}
           style={{
             width: 14,
