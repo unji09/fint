@@ -9,6 +9,7 @@ import android.webkit.JavascriptInterface
  */
 class WebViewBridge(
     private val onSaveAuthToken: (accessToken: String, refreshToken: String) -> Unit,
+    private val onLoggedOut: () -> Unit,
     private val onOpenBusinessCardScanner: () -> Unit,
     private val onOpenDeviceContactPicker: () -> Unit,
     private val onOpenMeetingRecorder: (activityId: Long?) -> Unit,
@@ -16,6 +17,11 @@ class WebViewBridge(
     @JavascriptInterface
     fun saveAuthToken(accessToken: String, refreshToken: String) {
         onSaveAuthToken(accessToken, refreshToken)
+    }
+
+    @JavascriptInterface
+    fun notifyLoggedOut() {
+        onLoggedOut()
     }
 
     /** 디버그 로그 (웹 → 네이티브 Logcat 으로 흘려보내기) */
