@@ -28,7 +28,7 @@ export interface CalendarEvent {
   memo?: string;
 }
 
-export type ViewMode = 'month' | 'week';
+export type ViewMode = 'month' | 'week' | 'day';
 
 // ✅ 피그마 색상 규칙 기준 (색상_규칙.png 확인)
 export const CATEGORY_COLOR: Record<string, string> = {

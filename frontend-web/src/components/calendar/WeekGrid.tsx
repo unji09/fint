@@ -7,6 +7,7 @@ import type { CalendarEvent } from './types';
 import { getEventColor } from './types';
 import { getWeekDays, isToday } from './utils';
 import { resizeActivity } from '@/hooks/useCalendarEvents';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 export interface PipelineItem {
   label: string;
@@ -55,6 +56,7 @@ const BORDER = '#E5E6DE';
 const RED = '#EE5555';
 const TIME_C = '#9CA193';
 const DAY_FULL = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+const DAY_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
 const DAY_COLOR = (i: number) => (i === 0 || i === 6 ? RED : '#888888');
 
 const NEAR_MS = 60 * 60_000;
@@ -156,6 +158,7 @@ function WeekCard({
   onClick,
   selected,
   narrow,
+  compact,
   onResizeStartTop,
   onResizeStartBottom,
 }: {
@@ -163,10 +166,12 @@ function WeekCard({
   onClick: () => void;
   selected: boolean;
   narrow?: boolean;
+  compact?: boolean;
   onResizeStartTop?: (e: React.MouseEvent) => void;
   onResizeStartBottom?: (e: React.MouseEvent) => void;
 }) {
   const { color: col, bg } = getEventColor(event);
+  const useVertical = narrow || compact;
   return (
     <button
       data-event="true"
@@ -186,11 +191,11 @@ function WeekCard({
         borderTop: 'none',
         borderRight: 'none',
         borderBottom: 'none',
-        borderRadius: 8,
-        padding: '6px 10px',
+        borderRadius: compact ? 6 : 8,
+        padding: compact ? '3px 5px' : '6px 10px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 3,
+        gap: compact ? 1 : 3,
         overflow: 'hidden',
         outline: selected ? `2px solid ${col}` : 'none',
         outlineOffset: -1,
@@ -202,10 +207,10 @@ function WeekCard({
         (e.currentTarget as HTMLButtonElement).style.filter = '';
       }}
     >
-      <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'flex-start' : 'center', gap: narrow ? 2 : 5, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: useVertical ? 'column' : 'row', alignItems: useVertical ? 'flex-start' : 'center', gap: useVertical ? 0 : 5, overflow: 'hidden' }}>
         <span
           style={{
-            fontSize: 10,
+            fontSize: compact ? 9 : 10,
             color: col,
             fontWeight: 600,
             flexShrink: 0,
@@ -216,13 +221,15 @@ function WeekCard({
         </span>
         <span
           style={{
-            fontSize: 12,
+            fontSize: compact ? 10 : 12,
             fontWeight: 600,
             color: '#1F2126',
-            whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             minWidth: 0,
+            ...(compact
+              ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, whiteSpace: 'normal' as const, wordBreak: 'break-all' as const, lineHeight: '1.2' }
+              : { whiteSpace: 'nowrap' as const }),
           }}
         >
           {event.title}
@@ -231,7 +238,7 @@ function WeekCard({
       <div
         style={{
           display: 'flex',
-          gap: 4,
+          gap: compact ? 2 : 4,
           alignItems: 'flex-start',
           overflow: 'hidden',
           flexWrap: 'wrap',
@@ -247,8 +254,8 @@ function WeekCard({
                 flexShrink: 0,
               }}
             >
-              <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: col }} />
-              <span style={{ fontSize: 9, fontWeight: 600, color: col }}>{event.category}</span>
+              <span style={{ width: compact ? 4 : 5, height: compact ? 4 : 5, borderRadius: '50%', backgroundColor: col }} />
+              <span style={{ fontSize: compact ? 8 : 9, fontWeight: 600, color: col }}>{event.category}</span>
             </span>
             <span style={{ flexBasis: '100%', height: 0 }} />
           </>
@@ -259,8 +266,8 @@ function WeekCard({
               style={{
                 backgroundColor: 'rgba(255,255,255,0.6)',
                 borderRadius: 4,
-                padding: '2px 6px',
-                fontSize: 8,
+                padding: compact ? '1px 4px' : '2px 6px',
+                fontSize: compact ? 7 : 8,
                 fontWeight: 600,
                 color: col,
                 flexShrink: 0,
@@ -277,8 +284,8 @@ function WeekCard({
             style={{
               backgroundColor: '#EBF2FF',
               borderRadius: 3,
-              padding: '1px 4px',
-              fontSize: 9,
+              padding: compact ? '0px 3px' : '1px 4px',
+              fontSize: compact ? 8 : 9,
               fontWeight: 500,
               color: '#3D78D9',
               flexShrink: 0,
@@ -327,6 +334,10 @@ export default function WeekGrid({
   onPipelineClick,
   onNotificationDrop,
 }: Props) {
+  const bp = useBreakpoint();
+  const isCompact = bp === 'mobile' || bp === 'tablet';
+  const timeColW = isCompact ? 36 : WEEK_TIME_COL;
+
   const [now, setNow] = useState(new Date());
   const [scrollTop, setST] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -612,10 +623,11 @@ export default function WeekGrid({
             style={{
               display: 'flex',
               borderBottom: `1px solid ${BORDER}`,
-              height: 44,
+              height: isCompact ? 'auto' : 44,
+              minHeight: isCompact ? 28 : 44,
             }}
           >
-            <div style={{ width: WEEK_TIME_COL, flexShrink: 0, borderRight: `1px solid ${BORDER}` }} />
+            <div style={{ width: timeColW, flexShrink: 0, borderRight: `1px solid ${BORDER}` }} />
             {pipeline.map((s, i) => {
               const active = selectedPipeline === s.label;
               return (
@@ -627,8 +639,9 @@ export default function WeekGrid({
                     flex: 1,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '0 16px',
+                    justifyContent: 'center',
+                    gap: isCompact ? 3 : 8,
+                    padding: isCompact ? '3px 2px' : '0 16px',
                     boxShadow: dividerShadow(i),
                     overflow: 'hidden',
                     minWidth: 0,
@@ -641,8 +654,8 @@ export default function WeekGrid({
                 >
                   <span
                     style={{
-                      width: 8,
-                      height: 8,
+                      width: isCompact ? 6 : 8,
+                      height: isCompact ? 6 : 8,
                       borderRadius: '50%',
                       backgroundColor: s.dot,
                       flexShrink: 0,
@@ -650,18 +663,21 @@ export default function WeekGrid({
                   />
                   <span
                     style={{
-                      fontSize: 13,
+                      fontSize: isCompact ? 10 : 13,
                       fontWeight: active ? 700 : 500,
                       color: active ? s.cTxt : '#1F2126',
-                      whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      flex: 1,
-                      textAlign: 'left',
+                      textAlign: 'center',
+                      lineHeight: '1.2',
+                      ...(isCompact
+                        ? { whiteSpace: 'normal' as const, wordBreak: 'keep-all' as const }
+                        : { whiteSpace: 'nowrap' as const, flex: 1, textAlign: 'left' as const }),
                     }}
                   >
                     {s.label}
                   </span>
+                  {!isCompact && (
                   <span
                     style={{
                       fontSize: 11,
@@ -675,6 +691,7 @@ export default function WeekGrid({
                   >
                     {s.count}
                   </span>
+                  )}
                 </button>
               );
             })}
@@ -688,7 +705,7 @@ export default function WeekGrid({
             borderBottom: `1px solid ${BORDER}`,
           }}
         >
-          <div style={{ width: WEEK_TIME_COL, flexShrink: 0, borderRight: `1px solid ${BORDER}` }} />
+          <div style={{ width: timeColW, flexShrink: 0, borderRight: `1px solid ${BORDER}` }} />
           {weekDays.map((day, i) => {
             const today = isToday(day);
             const cnt = events.filter((ev) => sameDay(ev, day)).length;
@@ -698,42 +715,43 @@ export default function WeekGrid({
                 style={{
                   flex: 1,
                   display: 'flex',
+                  flexDirection: isCompact ? 'column' : 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '6px 8px 7px',
+                  padding: isCompact ? '4px 2px' : '6px 8px 7px',
                   boxShadow: dividerShadow(i),
-                  gap: 5,
+                  gap: isCompact ? 1 : 5,
                   minWidth: 0,
                 }}
               >
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: isCompact ? 11 : 11,
                     fontWeight: 600,
                     color: DAY_COLOR(i),
                     letterSpacing: '0.02em',
                   }}
                 >
-                  {DAY_FULL[i]}
+                  {isCompact ? DAY_SHORT[i] : DAY_FULL[i]}
                 </span>
                 <span
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: isCompact ? 22 : 24,
+                    height: isCompact ? 22 : 24,
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: today ? '#06B6D4' : 'transparent',
-                    color: today ? '#fff' : i === 0 || i === 6 ? RED : '#1F2126',
+                    color: today ? '#fff' : (i === 0 || i === 6 ? RED : '#1F2126'),
                     fontSize: 13,
-                    fontWeight: 700,
+                    fontWeight: isCompact ? 600 : 700,
                     flexShrink: 0,
                   }}
                 >
                   {day.getDate()}
                 </span>
-                {cnt > 0 && (
+                {!isCompact && cnt > 0 && (
                   <span
                     style={{
                       fontSize: 9,
@@ -757,7 +775,7 @@ export default function WeekGrid({
       {/* ── 그리드 본문 ─────────────────────────────────────────── */}
       <div style={{ display: 'flex', width: '100%' }}>
         {/* 시간 레이블 컬럼 */}
-        <div style={{ width: WEEK_TIME_COL, flexShrink: 0, borderRight: `1px solid ${BORDER}` }}>
+        <div style={{ width: timeColW, flexShrink: 0, borderRight: `1px solid ${BORDER}` }}>
           {HOURS.map((h) => (
             <div
               key={h}
@@ -947,6 +965,7 @@ export default function WeekGrid({
                       }}
                       selected={selectedEvent?.eventId === ev.eventId}
                       narrow={layout.mode === 'side' && layout.totalCols > 1}
+                      compact={isCompact}
                       onResizeStartTop={
                         ev.eventId.startsWith('act-')
                           ? (e) => handleResizeStart(ev, colIdx, day, 'start', e)

@@ -17,6 +17,7 @@ import type { CalendarEvent } from './types';
 import { getEventColor } from './types';
 import { getCalendarDays, isToday, isSameDay } from './utils';
 import { resizeActivity } from '@/hooks/useCalendarEvents';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface Props {
   currentDate: Date;
@@ -61,6 +62,8 @@ const BORDER_CAL = '#E5E6DE'; // Figma: var(--color/yellow/89)
 
 const DAY_HEADERS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 
+const DAY_HEADERS_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
+
 function fmtTime(iso: string) {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -69,18 +72,14 @@ function fmtTime(iso: string) {
 // Figma 719:7601 "월간 일정" 카드
 // isMulti / isFirst / isLast: 다일 이벤트의 시각적 연결 표시용
 // showContent: 시간/제목 텍스트를 이 셀에 표시할지 (다일 이벤트는 row 내 중앙 셀에만 true)
-function MonthEventCard({ event, onClick, onMouseDownCard, isMoving, isMulti, isFirst, isLast, showContent }: { event: CalendarEvent; onClick: () => void; onMouseDownCard?: (e: React.MouseEvent) => void; isMoving?: boolean; isMulti?: boolean; isFirst?: boolean; isLast?: boolean; showContent?: boolean }) {
+function MonthEventCard({ event, onClick, onMouseDownCard, isMoving, isMulti, isFirst, isLast, showContent, compact }: { event: CalendarEvent; onClick: () => void; onMouseDownCard?: (e: React.MouseEvent) => void; isMoving?: boolean; isMulti?: boolean; isFirst?: boolean; isLast?: boolean; showContent?: boolean; compact?: boolean }) {
   const { color: col, bg } = getEventColor(event);
-  // 단일 이벤트는 첫이자 마지막. 다일이면 first 셀만 좌측 모서리, last 셀만 우측 모서리.
   const showLeftEdge = !isMulti || isFirst;
   const showRightEdge = !isMulti || isLast;
-  // 다일 카드는 width를 cell padding 만큼 확장해 paint 영역을 cell 가장자리까지 확장.
-  // cell padding-left: 6, padding-right: 7 → 좌측 침범 6px, 우측 침범 7px.
-  const extLeft = showLeftEdge ? 0 : 6;
-  const extRight = showRightEdge ? 0 : 7;
+  const extLeft = compact ? 0 : (showLeftEdge ? 0 : 6);
+  const extRight = compact ? 0 : (showRightEdge ? 0 : 7);
   const extraWidth = extLeft + extRight;
   return (
-    // 1줄 컴팩트: 높이 ~22px → 2개가 flex:1 행 안에 들어감
     <button
       data-event="true"
       onClick={(e) => {
@@ -92,7 +91,7 @@ function MonthEventCard({ event, onClick, onMouseDownCard, isMoving, isMulti, is
         width: extraWidth > 0 ? `calc(100% + ${extraWidth}px)` : '100%',
         marginLeft: -extLeft,
         cursor: 'pointer',
-        borderLeft: showLeftEdge ? `3px solid ${col}` : 'none',
+        borderLeft: showLeftEdge ? `${compact ? 2 : 3}px solid ${col}` : 'none',
         borderTop: 'none',
         borderRight: 'none',
         borderBottom: 'none',
@@ -101,29 +100,28 @@ function MonthEventCard({ event, onClick, onMouseDownCard, isMoving, isMulti, is
         borderTopRightRadius: showRightEdge ? 4 : 0,
         borderBottomRightRadius: showRightEdge ? 4 : 0,
         backgroundColor: bg,
-        // 다일 mid 셀(showContent && isMulti): 좌우 padding 0 → 제목 정확한 카드 가운데
-        padding: isMulti && showContent
+        padding: compact
+          ? '2px 4px'
+          : isMulti && showContent
           ? '3px 0'
           : showLeftEdge
           ? '3px 6px 3px 6px'
           : '3px 6px 3px 3px',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: isMulti && showContent ? 'center' : 'flex-start',
-        textAlign: isMulti && showContent ? 'center' : 'left',
-        gap: 5,
+        alignItems: compact ? 'flex-start' : 'center',
+        justifyContent: !compact && isMulti && showContent ? 'center' : 'flex-start',
+        textAlign: !compact && isMulti && showContent ? 'center' : 'left',
+        gap: compact ? 2 : 5,
         overflow: 'hidden',
         fontFamily: FONT_EVENT,
         position: 'relative',
         opacity: isMoving ? 0.5 : 1,
-        minHeight: 22,
+        minHeight: compact ? 16 : 22,
       }}
     >
-      {showContent && (
+      {(showContent || compact) && (
         <>
-          {/* 시간은 단일 이벤트만 표시 (다일은 시간 의미 약하므로 제목만) */}
-          {!isMulti && (
-            <>
+          {!compact && !isMulti && (
               <span
                 style={{
                   fontSize: 9,
@@ -135,21 +133,18 @@ function MonthEventCard({ event, onClick, onMouseDownCard, isMoving, isMulti, is
               >
                 {fmtTime(event.startAt)}
               </span>
-              <span
-                style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: col, flexShrink: 0 }}
-              />
-            </>
           )}
           <span
             style={{
-              fontSize: 11,
+              fontSize: compact ? 9 : 11,
               fontWeight: 600,
               color: '#1F2126',
-              whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              // 단일: flex 1 (좌측 정렬), 다일 mid: 가운데
               flex: isMulti ? 'none' : 1,
+              ...(compact
+                ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, whiteSpace: 'normal' as const, wordBreak: 'break-all' as const, lineHeight: '1.2' }
+                : { whiteSpace: 'nowrap' as const }),
             }}
           >
             {event.title}
@@ -171,6 +166,9 @@ export default function MonthGrid({
   onResized,
   onNotificationDrop,
 }: Props) {
+  const bp = useBreakpoint();
+  const isCompact = bp === 'mobile' || bp === 'tablet';
+
   const flat = getCalendarDays(currentDate.getFullYear(), currentDate.getMonth());
   const weeks = Array.from({ length: 6 }, (_, i) => flat.slice(i * 7, i * 7 + 7));
   const active = weeks.filter((w) => w.some((d) => d !== null));
@@ -382,17 +380,17 @@ export default function MonthGrid({
           fontSize: 11,
         }}
       >
-        {DAY_HEADERS.map((d, i) => (
+        {(isCompact ? DAY_HEADERS_SHORT : DAY_HEADERS).map((d, i) => (
           <div
             key={d}
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              // Figma: pt-[7px] pb-[8px] px-[8px]
-              padding: '7px 8px 8px',
+              padding: isCompact ? '5px 4px 6px' : '7px 8px 8px',
               color: i === 0 || i === 6 ? '#EE5555' : '#888888',
               fontWeight: 600,
+              fontSize: isCompact ? 10 : 11,
               borderRight: i < 6 ? `1px solid ${BORDER_CAL}` : 'none',
             }}
           >
@@ -482,7 +480,7 @@ export default function MonthGrid({
                       ? '#F5F7FA'
                       : '#FFFFFF',
                     opacity: otherMonth ? 0.5 : 1,
-                    padding: '6px 7px 7px 6px',
+                    padding: isCompact ? '4px 3px' : '6px 7px 7px 6px',
                     overflow: 'hidden',
                     cursor: move ? 'grabbing' : resize ? 'ew-resize' : drag ? 'crosshair' : 'pointer',
                     userSelect: 'none',
@@ -518,7 +516,24 @@ export default function MonthGrid({
                     </span>
                   </div>
 
-                  {/* 이벤트 목록: 2개 표시, 더보기 버튼은 overflow 밖 → 항상 보임 */}
+                  {/* 이벤트 목록 */}
+                  {isCompact ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {dayEvs.slice(0, 2).map((ev) => (
+                        <MonthEventCard
+                          key={ev.eventId}
+                          event={ev}
+                          onClick={() => onEventClick(ev)}
+                          compact
+                        />
+                      ))}
+                      {dayEvs.length > 2 && (
+                        <span style={{ fontSize: 8, color: '#0686D4', fontWeight: 600 }}>
+                          +{dayEvs.length - 2}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {dayEvs.slice(0, 2).map((ev) => {
                       const s = new Date(ev.startAt);
@@ -528,11 +543,10 @@ export default function MonthGrid({
                       const isMulti = sFloor !== eFloor;
                       const isFirst = dayFloor === sFloor;
                       const isLast = dayFloor === eFloor;
-                      // 다일 이벤트의 row 내 중앙 cell 계산 — 타임트리 스타일 중앙 제목 표시
                       const DAY_MS = 24 * 60 * 60 * 1000;
                       const weekStart = week[0];
                       const weekEnd = week[6];
-                      let isRowMid = !isMulti; // 단일은 항상 콘텐츠 표시
+                      let isRowMid = !isMulti;
                       if (isMulti && weekStart && weekEnd) {
                         const wsFloor = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate()).getTime();
                         const weFloor = new Date(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate()).getTime();
@@ -559,7 +573,6 @@ export default function MonthGrid({
                             isLast={isLast}
                             showContent={isRowMid}
                           />
-                          {/* 좌측 핸들 — first 셀에만 (다일 이벤트면 시작 셀). */}
                           {ev.eventId.startsWith('act-') && isFirst && (
                             <span
                               data-resize="true"
@@ -569,7 +582,6 @@ export default function MonthGrid({
                               style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 12, cursor: 'ew-resize', zIndex: 6, transition: 'background-color .12s', borderRadius: '4px 0 0 4px' }}
                             />
                           )}
-                          {/* 우측 핸들 — last 셀에만 (다일 이벤트면 끝 셀). */}
                           {ev.eventId.startsWith('act-') && isLast && (
                             <span
                               data-resize="true"
@@ -583,7 +595,8 @@ export default function MonthGrid({
                       );
                     })}
                   </div>
-                  {dayEvs.length > 2 && (
+                  )}
+                  {!isCompact && dayEvs.length > 2 && (
                     <button
                       // mousedown 까지 막아야 부모 셀의 drag-select 가 시작되지 않는다.
                       // click 단계 stopPropagation 만 있으면 mousedown→mouseup 동안 drag state 가 set 되어
