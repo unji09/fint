@@ -18,7 +18,7 @@ import AddEventModal from '@/components/calendar/AddEventModal';
 import type { CalendarEvent, ViewMode } from '@/components/calendar/types';
 import { getEventColor } from '@/components/calendar/types';
 import { useCalendarEvents, fetchEventDetail, resizeActivity } from '@/hooks/useCalendarEvents';
-import useBreakpoint from '@/hooks/useBreakpoint';
+import useBreakpoint, { TABLET_MAX } from '@/hooks/useBreakpoint';
 import {
   addMonths,
   addWeeks,
@@ -935,9 +935,16 @@ export default function CalendarPage() {
         MozOsxFontSmoothing: 'grayscale',
       }}
     >
+      {/* useBreakpoint 초기값이 'desktop'이라 hydration 직후 aside가 잠깐 보이는 FOUC 방지용 CSS 방어 레이어 */}
+      <style>{`
+        @media (max-width: ${TABLET_MAX}px) {
+          .calendar-aside, .calendar-drag-handle { display: none !important; }
+        }
+      `}</style>
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* ── Aside (데스크톱 전용) ── */}
         {!isCompact && (<><div
+          className="calendar-aside"
           style={{
             maxWidth: asideOpen ? asideWidth : 0,
             minWidth: 0,
@@ -1075,6 +1082,7 @@ export default function CalendarPage() {
 
         {/* ── 드래그 핸들 (데스크톱 전용) ── */}
         <div
+          className="calendar-drag-handle"
           onMouseDown={asideOpen ? onDragStart : undefined}
           style={{
             width: 14,

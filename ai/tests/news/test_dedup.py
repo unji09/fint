@@ -6,7 +6,11 @@ import pytest
 
 from app.clients.naver import NaverNewsItem
 from app.news.naver_collector import CollectedArticleData
-from app.news.dedup import deduplicate_articles, SIMILARITY_THRESHOLD
+from app.news.dedup import (
+    deduplicate_articles,
+    deduplicate_against_existing,
+    SIMILARITY_THRESHOLD,
+)
 
 
 DIM = 384
@@ -255,3 +259,71 @@ class TestMultipleClusters:
         assert len(result) == 3
         all_links = {a.item.link for a in result}
         assert "https://5" in all_links
+
+
+class TestDeduplicateAgainstExisting:
+    """DB 기존 기사 임베딩 대비 중복 제거 테스트."""
+
+    def test_empty_articles_returns_empty(self):
+        db_embeddings = np.array([EMBED_A], dtype=np.float32)
+        result = deduplicate_against_existing([], db_embeddings)
+        assert result == []
+
+    def test_empty_db_embeddings_returns_all(self):
+        """DB에 기사가 없으면 모든 신규 기사를 그대로 반환한다."""
+        articles = [
+            _make_article(title="기사 A", link="https://1", title_embedding=EMBED_A),
+            _make_article(title="기사 B", link="https://2", title_embedding=EMBED_B),
+        ]
+        empty_db = np.empty((0, DIM), dtype=np.float32)
+        result = deduplicate_against_existing(articles, empty_db)
+        assert len(result) == 2
+
+    def test_identical_embedding_filtered(self):
+        """DB에 동일 임베딩이 존재하면 해당 기사를 제거한다."""
+        articles = [
+            _make_article(title="삼성전자 실적", link="https://new", title_embedding=EMBED_A),
+        ]
+        db_embeddings = np.array([EMBED_A], dtype=np.float32)
+        result = deduplicate_against_existing(articles, db_embeddings)
+        assert len(result) == 0
+
+    def test_different_embedding_kept(self):
+        """DB 기사와 유사도가 낮으면 신규 기사를 유지한다."""
+        articles = [
+            _make_article(title="현대차 신차", link="https://new", title_embedding=EMBED_B),
+        ]
+        db_embeddings = np.array([EMBED_A], dtype=np.float32)
+        result = deduplicate_against_existing(articles, db_embeddings)
+        assert len(result) == 1
+        assert result[0].item.link == "https://new"
+
+    def test_mixed_some_filtered_some_kept(self):
+        """DB 중복인 기사만 제거하고 나머지는 유지한다."""
+        articles = [
+            _make_article(title="삼성 실적", link="https://1", title_embedding=EMBED_A),
+            _make_article(title="현대차 신차", link="https://2", title_embedding=EMBED_B),
+            _make_article(title="카카오 AI", link="https://3", title_embedding=EMBED_C),
+        ]
+        db_embeddings = np.array([EMBED_A, EMBED_C], dtype=np.float32)
+        result = deduplicate_against_existing(articles, db_embeddings)
+        assert len(result) == 1
+        assert result[0].item.link == "https://2"
+
+    def test_multiple_db_articles_best_match_wins(self):
+        """DB에 여러 기사가 있을 때 하나라도 유사도가 높으면 제거한다."""
+        articles = [
+            _make_article(title="삼성 실적", link="https://new", title_embedding=EMBED_A),
+        ]
+        db_embeddings = np.array([EMBED_B, EMBED_C, EMBED_A], dtype=np.float32)
+        result = deduplicate_against_existing(articles, db_embeddings)
+        assert len(result) == 0
+
+    def test_empty_embedding_skips_dedup(self):
+        """임베딩이 빈 리스트인 기사가 있으면 DB dedup을 스킵한다."""
+        articles = [
+            _make_article(title="기사 A", link="https://1", title_embedding=[]),
+        ]
+        db_embeddings = np.array([EMBED_A], dtype=np.float32)
+        result = deduplicate_against_existing(articles, db_embeddings)
+        assert len(result) == 1

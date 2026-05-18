@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 export type Breakpoint = 'mobile' | 'tablet' | 'desktop';
 
 const MOBILE_MAX = 640;
-const TABLET_MAX = 1024;
+export const TABLET_MAX = 1024;
 
 function getBreakpoint(w: number): Breakpoint {
   if (w < MOBILE_MAX) return 'mobile';
@@ -14,9 +14,7 @@ function getBreakpoint(w: number): Breakpoint {
 }
 
 export default function useBreakpoint(): Breakpoint {
-  const [bp, setBp] = useState<Breakpoint>(() =>
-    typeof window !== 'undefined' ? getBreakpoint(window.innerWidth) : 'desktop',
-  );
+  const [bp, setBp] = useState<Breakpoint>('desktop');
 
   useEffect(() => {
     const update = () => setBp(getBreakpoint(window.innerWidth));
