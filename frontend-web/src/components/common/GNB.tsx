@@ -7,7 +7,7 @@ import LoginModal from '@/components/common/LoginModal';
 import NotificationPanel, { type NotificationItem } from '@/components/common/NotificationPanel';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import { useNotificationSocket } from '@/hooks/useNotificationSocket';
-import useBreakpoint from '@/hooks/useBreakpoint';
+import useBreakpoint, { TABLET_MAX } from '@/hooks/useBreakpoint';
 
 const F = "'Pretendard', -apple-system, sans-serif";
 const NAV = [
@@ -184,14 +184,25 @@ export default function GNB() {
 
   return (
     <>
-      <header style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: isMobile ? '0 12px' : '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
+      {/* useBreakpoint 초기값이 'desktop'이라 hydration 직후 데스크탑 레이아웃이 잠깐 보이는 FOUC 방지용 CSS 방어 레이어 */}
+      <style>{`
+        @media (max-width: ${TABLET_MAX}px) {
+          .gnb-header { padding: 0 12px !important; }
+          .gnb-logo { width: auto !important; padding: 0 8px !important; }
+          .gnb-logo img { max-height: 32px !important; max-width: 80px !important; }
+          .gnb-nav { gap: 0 !important; }
+          .gnb-nav button { font-size: 12px !important; padding: 0 8px !important; }
+          .gnb-search { display: none !important; }
+        }
+      `}</style>
+      <header className="gnb-header" style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: isMobile ? '0 12px' : '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
         {/* 로고 */}
-        <div onClick={() => router.push('/calendar')} style={{ width: isMobile ? 'auto' : 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%', padding: isMobile ? '0 8px' : 0 }}>
+        <div className="gnb-logo" onClick={() => router.push('/calendar')} style={{ width: isMobile ? 'auto' : 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%', padding: isMobile ? '0 8px' : 0 }}>
           <img src="/logo.png" alt="F!NT" style={{ maxHeight: isMobile ? 32 : 44, maxWidth: isMobile ? 80 : 200, objectFit: 'contain' }} />
         </div>
 
         {/* 네비게이션 */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 4, height: '100%' }}>
+        <nav className="gnb-nav" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 4, height: '100%' }}>
           {NAV.map(({ label, href }) => {
             const active = pathname === href || pathname.startsWith(href + '/');
             return (
@@ -211,7 +222,7 @@ export default function GNB() {
         {/* 우측: 검색 + 알림 + 프로필 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* 검색 — 모바일에서 숨김 */}
-          {!isMobile && <div ref={searchRef} style={{ position: 'relative' }}>
+          {!isMobile && <div ref={searchRef} className="gnb-search" style={{ position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', borderRadius: 6, padding: '5px 10px', backgroundColor: '#f8fafc', width: 200 }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
                 <circle cx="6" cy="6" r="4" stroke="#94a3b8" strokeWidth="1.2" />
