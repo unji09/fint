@@ -93,4 +93,11 @@ public class RestTemplateConfig {
                 .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(30)))
                 .build();
     }
+
+    @Bean
+    public RestTemplate briefingRestTemplate(RestTemplateBuilder builder) {
+        return builder
+                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(15)))
+                .build();
+    }
 }
