@@ -50,6 +50,8 @@ interface CustomerSidebarProps {
   onContactAdded?: () => void;
   onAddAccount?: () => void;
   onDeleteAccount?: (accountId: number, name: string) => void;
+  isCompact?: boolean;
+  onAccountExpand?: (accountId: number | null) => void;
 }
 
 export default function CustomerSidebar({
@@ -63,6 +65,8 @@ export default function CustomerSidebar({
   onContactAdded,
   onAddAccount,
   onDeleteAccount,
+  isCompact = false,
+  onAccountExpand,
 }: CustomerSidebarProps) {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<number | null>(selectedId);
@@ -81,10 +85,11 @@ export default function CustomerSidebar({
   }, [selectedId]);
 
   const handleAddContact = async () => {
-    if (!selectedId || !newContactName.trim() || addingContact) return;
+    const targetAccountId = expandedId ?? selectedId;
+    if (!targetAccountId || !newContactName.trim() || addingContact) return;
     try {
       await createContact({
-        accountId: selectedId,
+        accountId: targetAccountId,
         name: newContactName.trim(),
         title: newContactTitle.trim() || undefined,
       });
@@ -118,14 +123,29 @@ export default function CustomerSidebar({
   }, [selectedId]);
 
   const handleAccountClick = (accountId: number) => {
-    router.push(`/customer/${accountId}`);
-    setExpandedId((prev) => (prev === accountId ? null : accountId));
-    setActiveContact(null);
-    onContactSelect?.(null);
+    if (isCompact) {
+      const nextId = expandedId === accountId ? null : accountId;
+      setExpandedId(nextId);
+      onAccountExpand?.(nextId);
+    } else {
+      router.push(`/customer/${accountId}`);
+      setExpandedId((prev) => (prev === accountId ? null : accountId));
+      setActiveContact(null);
+      onContactSelect?.(null);
+    }
   };
 
   const handleContactClick = (e: React.MouseEvent, contact: ContactInfo) => {
     e.stopPropagation();
+    if (isCompact) {
+      // 모바일: 담당자 선택 후 상세 페이지로 이동
+      const accountId = expandedId ?? selectedId;
+      if (accountId) {
+        onContactSelect?.(contact);
+        router.push(`/customer/${accountId}`);
+      }
+      return;
+    }
     const key = contact.name;
     if (activeContact === key) {
       setActiveContact(null);
@@ -138,11 +158,12 @@ export default function CustomerSidebar({
 
   return (
     <aside
+      className="customer-sidebar-wrap"
       style={{
-        width: 300,
+        width: isCompact ? '100%' : 300,
         flexShrink: 0,
         background: 'white',
-        borderRight: '1px solid #e2eaf0',
+        borderRight: isCompact ? 'none' : '1px solid #e2eaf0',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -153,7 +174,7 @@ export default function CustomerSidebar({
           height: 56,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
           gap: 12,
           borderBottom: '1px solid rgba(6,182,212,0.8)',
           padding: '0 14px',
@@ -281,8 +302,8 @@ export default function CustomerSidebar({
           : sortedAccounts.map((acc) => {
               const isSelected = acc.accountId === selectedId;
               const isExpanded = acc.accountId === expandedId;
-              // 선택된 고객사만 API 담당자 데이터 사용, 나머지는 빈 배열
-              const accountContacts = isSelected ? contacts : [];
+              // 데스크톱: 선택된 고객사만, 모바일: expand된 고객사도 contacts 표시
+              const accountContacts = (isSelected || (isCompact && isExpanded)) ? contacts : [];
 
               return (
                 <div key={acc.accountId} style={{ marginBottom: 7 }}>
@@ -300,7 +321,7 @@ export default function CustomerSidebar({
                       border: 'none',
                       borderLeft: `3px solid ${isSelected ? '#00bfff' : 'transparent'}`,
                       borderRadius: isExpanded ? '0 6px 0 0' : '0 6px 6px 0',
-                      padding: '10px 12px 10px 13px',
+                      padding: isCompact ? '14px 16px 14px 16px' : '10px 12px 10px 13px',
                       display: 'flex',
                       alignItems: 'center',
                       cursor: 'pointer',
@@ -379,8 +400,8 @@ export default function CustomerSidebar({
                     </svg>
                   </button>
 
-                  {/* 담당자 목록 + 액션 — 선택된 고객사만 표시 */}
-                  {isExpanded && isSelected && (
+                  {/* 담당자 목록 + 액션 — 데스크톱: 선택된 고객사만, 모바일: expand된 고객사 */}
+                  {isExpanded && (isSelected || isCompact) && (
                     <div
                       style={{
                         background: '#f2fcff',
@@ -530,6 +551,32 @@ export default function CustomerSidebar({
                             </button>
                           </div>
                         </div>
+                      )}
+                      {/* 모바일: 고객사 상세보기 버튼 */}
+                      {isCompact && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); router.push(`/customer/${acc.accountId}`); }}
+                          style={{
+                            width: '100%',
+                            padding: '10px 0',
+                            marginTop: 6,
+                            borderRadius: 6,
+                            border: '1px solid #06b6d4',
+                            backgroundColor: '#f2fcff',
+                            color: '#06b6d4',
+                            fontFamily: 'Pretendard,sans-serif',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          고객사 상세
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
                       )}
                       {/* 고객사 관리 */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6, paddingTop: 6 }}>
