@@ -54,7 +54,12 @@ export default function CustomerDetailPage() {
   const { selContact, setSelContact } = useCustomer();
   const confirm = useConfirm();
 
-  const strats: StrategyCard[] = nextActions.map(a => ({ id: a.suggestionId, title: a.title, category: a.category, successRate: a.successRate }));
+  // 추천 전략은 최근 4개만 노출 (suggestionId BIGSERIAL desc = 최신순).
+  const strats: StrategyCard[] = nextActions
+    .slice()
+    .sort((a, b) => b.suggestionId - a.suggestionId)
+    .slice(0, 4)
+    .map(a => ({ id: a.suggestionId, title: a.title, category: a.category, successRate: a.successRate }));
 
   // ── AI 추천 → 일정 추가 모달 ────────────────────────────────
   const [addEventOpen, setAddEventOpen] = useState(false);
