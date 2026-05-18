@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.clients.gpu_stt import GpuSttClient
 from app.core.errors import BusinessException
+from app.core.hallucination import clean_stream_text
 from app.core.security import decode_tenant_id
 from app.schemas.stt import SttSegment, SttStreamChunk
 
@@ -12,8 +13,6 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/stt", tags=["STT Stream"])
 
 _MAX_CHUNK_BYTES = 1 * 1024 * 1024
-# Whisper no_speech_prob 임계값 — 이 이상이면 hallucination으로 간주하고 버린다
-_NO_SPEECH_THRESHOLD = 0.6
 # Opus DTX 무음 프레임 최소 크기 임계값 (2s@128kbps ≈ 32KB, DTX 무음 ≈ < 2KB)
 _SILENT_CLUSTER_BYTES = 1500
 
@@ -24,30 +23,6 @@ _WEBM_CLUSTER_ID = b"\x1f\x43\xb6\x75"
 _FAST_CLUSTER_COUNT = 2
 _FAST_BEAM_SIZE = 5
 
-# Whisper가 YouTube/방송 학습 데이터 또는 initial_prompt에서 복사하는 알려진 환각 패턴.
-# initial_prompt 전체 문장이 아닌 일부 키워드로 등록해 변형도 잡는다.
-_HALLUCINATION_PATTERNS = (
-    "시청해주셔서 감사합니다",
-    "구독과 좋아요",
-    "자막 제공",
-    "자막을 사용",
-    "다음 영상에서 만나요",
-    "제작지원으로 제작",
-    "미팅 내용을 전사합니다",   # "영업 미팅 내용을 전사합니다" 포함 — initial_prompt 반복
-    "MBC 뉴스",
-    "KBS 뉴스",
-    "SBS 뉴스",
-    "翻訳",
-    "字幕",
-    "Subtitles by",
-    "amara.org",
-)
-
-# 환각 패턴을 제거한 뒤 남은 실제 발화로 간주하기 위한 최소 글자 수
-# 한국어는 한 글자가 영어 단어 수준의 정보량을 담으므로 4자로 설정
-# (ex: "짠" 1자 → 필터, "안녕하세요" 5자 → 통과)
-_MIN_REAL_LEN = 4
-
 
 def _extract_webm_header(first_chunk: bytes) -> bytes:
     """첫 번째 청크에서 Cluster 이전의 컨테이너 헤더만 추출한다."""
@@ -55,23 +30,6 @@ def _extract_webm_header(first_chunk: bytes) -> bytes:
     return first_chunk[:idx] if idx != -1 else b""
 
 
-def _clean_text(text: str, no_speech_prob: float) -> str:
-    """
-    환각 패턴을 제거하고 남은 실제 발화를 반환한다.
-
-    - no_speech_prob 임계값 초과 → 전체 무음으로 판단, "" 반환
-    - 환각 패턴이 중간/끝에 있으면 해당 위치부터 잘라낸다
-    - 잘라낸 뒤 남은 텍스트가 _MIN_REAL_LEN 미만이면 "" 반환
-    """
-    if no_speech_prob >= _NO_SPEECH_THRESHOLD:
-        return ""
-    for pattern in _HALLUCINATION_PATTERNS:
-        idx = text.find(pattern)
-        if idx >= 0:
-            text = text[:idx].rstrip(" .,。!?　")
-    if len(text) < _MIN_REAL_LEN:
-        return ""
-    return text
 
 
 @router.websocket("/stream/{activity_id}")
@@ -129,7 +87,7 @@ async def stt_stream(
             text = chunk.get("text", "").strip()
             no_speech_prob = float(chunk.get("no_speech_prob", 0.0))
 
-            text = _clean_text(text, no_speech_prob)
+            text = clean_stream_text(text, no_speech_prob)
             if not text:
                 log.info("[STT fast] skip: no_speech=%.2f", no_speech_prob)
                 return ""

@@ -10,6 +10,7 @@ from app.clients.gpu_stt import GpuSttClient
 from app.clients.s3 import S3Client
 from app.clients.whisper import WhisperClient
 from app.core.errors import BusinessException, CommonErrorCode
+from app.core.hallucination import is_hallucination
 from app.core.redis import get_redis
 from app.core.response import ApiResponse
 from app.core.security import get_tenant_id
@@ -28,29 +29,6 @@ router = APIRouter(prefix="/api/v1/stt", tags=["STT"])
 _JOB_TTL = 86400  # 24시간
 _JOB_KEY_PREFIX = "stt:job:"
 
-# 배치 전사 결과에서 걸러낼 Whisper 환각 패턴
-# (실시간 스트림은 stt_stream.py 에서 별도로 처리)
-_BATCH_HALLUCINATION_PATTERNS = (
-    "자막은 설정에서",
-    "시청해주셔서 감사합니다",
-    "구독과 좋아요",
-    "자막 제공",
-    "자막을 사용",
-    "다음 영상에서 만나요",
-    "제작지원으로 제작",
-    "영업 미팅 내용을 전사합니다",
-    "MBC 뉴스",
-    "KBS 뉴스",
-    "SBS 뉴스",
-    "翻訳",
-    "字幕",
-    "Subtitles by",
-    "amara.org",
-)
-
-
-def _is_batch_hallucination(text: str) -> bool:
-    return any(p in text for p in _BATCH_HALLUCINATION_PATTERNS)
 
 
 def get_gpu_stt_client(request: Request) -> GpuSttClient | None:
@@ -82,7 +60,7 @@ async def _process_transcription(
             raw_count = len(result.segments)
             result.segments = [
                 seg for seg in result.segments
-                if seg.text.strip() and not _is_batch_hallucination(seg.text)
+                if seg.text.strip() and not is_hallucination(seg.text)
             ]
             if raw_count != len(result.segments):
                 log.info(

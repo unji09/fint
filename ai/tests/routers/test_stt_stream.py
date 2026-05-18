@@ -9,7 +9,7 @@ from app.clients.gpu_stt import GpuSttClient
 from app.core.security import get_tenant_id
 from app.main import create_app
 from app.routers.stt import get_gpu_stt_client
-from app.routers.stt_stream import _clean_text
+from app.core.hallucination import clean_stream_text as _clean_text
 
 # Spring JwtTokenProvider와 동일: base64url-encoded 시크릿 사용
 _RAW_TEST_KEY = b"test-secret-key-12345678901234"
