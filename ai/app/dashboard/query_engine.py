@@ -471,11 +471,33 @@ class QueryEngine:
     def _build_source_query(self, intent: IntentResult, tenant_id: int) -> str | None:
         if intent.query_spec:
             try:
-                sql, _ = build_query(intent.query_spec, tenant_id=tenant_id)
-                return sql
+                sql, params = build_query(intent.query_spec, tenant_id=tenant_id)
+                return _resolve_params(sql, params)
             except QueryBuildError:
                 return None
         return None
+
+
+_SOURCE_QUERY_PARAM = re.compile(r":p(\d+)\b")
+
+
+def _resolve_params(sql: str, params: dict[str, object]) -> str:
+    """파라미터 플레이스홀더를 리터럴로 치환. tenant_id(:p1)만 :tenantId로 유지."""
+
+    def _replace(m: re.Match) -> str:
+        key = f"p{m.group(1)}"
+        if key == "p1":
+            return ":tenantId"
+        val = params.get(key)
+        if val is None:
+            return "NULL"
+        if isinstance(val, str):
+            return "'" + val.replace("'", "''") + "'"
+        if isinstance(val, (datetime, date)):
+            return "'" + val.isoformat() + "'"
+        return str(val)
+
+    return _SOURCE_QUERY_PARAM.sub(_replace, sql)
 
 
 def _normalize_rows(rows: list[dict]) -> list[dict]:

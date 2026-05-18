@@ -17,6 +17,9 @@ class _StubLLM:
     async def chat_structured(self, messages, response_model, *, model=None):
         return response_model.model_validate({})
 
+    async def chat_with_tools(self, messages, tools, *, model=None):
+        return None
+
 
 async def _mock_db():
     yield None
@@ -87,6 +90,22 @@ class TestNextActionsEndpoint:
         assert "pipeline_stage_id" in first
 
     @pytest.mark.asyncio
+    async def test_importance_score_is_0_to_5(self, client):
+        with (
+            patch("app.routers.strategy.build_context", new_callable=AsyncMock, return_value=_MOCK_CONTEXT),
+            patch("app.routers.strategy.load_pipeline_stages", new_callable=AsyncMock, return_value={}),
+        ):
+            resp = await client.post(
+                "/api/v1/ai/next-actions",
+                json=_VALID_BODY,
+                headers={"X-Tenant-Id": "1"},
+            )
+        body = resp.json()
+        for item in body:
+            assert isinstance(item["importance_score"], int)
+            assert 0 <= item["importance_score"] <= 5
+
+    @pytest.mark.asyncio
     async def test_empty_context_returns_400(self, client):
         with (
             patch("app.routers.strategy.build_context", new_callable=AsyncMock, return_value=_EMPTY_CONTEXT),
@@ -111,7 +130,7 @@ class TestNextActionsEndpoint:
     async def test_feature_extraction_failure_returns_502(self, client):
         with (
             patch("app.routers.strategy.build_context", new_callable=AsyncMock, return_value=_MOCK_CONTEXT),
-            patch("app.routers.strategy.extract_features_dummy", return_value={}),
+            patch("app.routers.strategy.extract_features", new_callable=AsyncMock, return_value={}),
             patch("app.routers.strategy.load_pipeline_stages", new_callable=AsyncMock, return_value={}),
         ):
             resp = await client.post(
@@ -139,7 +158,8 @@ class TestNextActionsEndpoint:
         item = body[0]
         assert isinstance(item["success_probability"], int)
         assert 0 <= item["success_probability"] <= 99
-        assert isinstance(item["importance_score"], (int, float))
+        assert isinstance(item["importance_score"], int)
+        assert 0 <= item["importance_score"] <= 5
         assert "sources" in item
         assert "news" in item["sources"]
         assert "dart" in item["sources"]

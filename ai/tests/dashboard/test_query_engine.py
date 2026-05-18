@@ -1,12 +1,12 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import numpy as np
 
-from app.dashboard.query_engine import QueryEngine, _normalize_rows, _has_aggregate, _derive_detail_spec
+from app.dashboard.query_engine import QueryEngine, _normalize_rows, _has_aggregate, _derive_detail_spec, _resolve_params
 from app.schemas.dashboard import (
     DashboardQueryRequest,
     DatasetSpec,
@@ -1344,3 +1344,142 @@ class TestEnrichedContextPrompt:
         assert entry.get("source_query") is not None
         assert entry.get("row_count") is not None
         assert entry.get("columns") is not None
+
+
+class TestResolveParams:
+    """_resolve_params: 파라미터 플레이스홀더 → 리터럴 치환 검증."""
+
+    def test_tenant_id_becomes_named_param(self):
+        sql = "SELECT * FROM t WHERE tenant_id = :p1"
+        result = _resolve_params(sql, {"p1": 42})
+        assert ":tenantId" in result
+        assert ":p1" not in result
+
+    def test_string_filter_literal(self):
+        sql = "WHERE tenant_id = :p1 AND name LIKE :p2 LIMIT :p3"
+        params = {"p1": 1, "p2": "%삼성%", "p3": 50}
+        result = _resolve_params(sql, params)
+        assert "LIKE '%삼성%'" in result
+        assert "LIMIT 50" in result
+        assert ":p2" not in result
+        assert ":p3" not in result
+
+    def test_single_quote_escape(self):
+        sql = "WHERE tenant_id = :p1 AND name = :p2"
+        params = {"p1": 1, "p2": "O'Brien"}
+        result = _resolve_params(sql, params)
+        assert "'O''Brien'" in result
+
+    def test_numeric_filter_no_quotes(self):
+        sql = "WHERE tenant_id = :p1 AND amount > :p2"
+        params = {"p1": 1, "p2": 50000000}
+        result = _resolve_params(sql, params)
+        assert "> 50000000" in result
+
+    def test_datetime_literal(self):
+        dt = datetime(2026, 1, 1, 0, 0, 0)
+        sql = "WHERE tenant_id = :p1 AND created_at >= :p2"
+        params = {"p1": 1, "p2": dt}
+        result = _resolve_params(sql, params)
+        assert "'2026-01-01" in result
+        assert ":p2" not in result
+
+    def test_date_literal(self):
+        d = date(2026, 3, 15)
+        sql = "WHERE tenant_id = :p1 AND expected_close = :p2"
+        params = {"p1": 1, "p2": d}
+        result = _resolve_params(sql, params)
+        assert "'2026-03-15'" in result
+
+    def test_null_value(self):
+        sql = "WHERE tenant_id = :p1 AND lost_at = :p2"
+        params = {"p1": 1, "p2": None}
+        result = _resolve_params(sql, params)
+        assert "= NULL" in result
+
+    def test_p1_and_p10_no_collision(self):
+        sql = "WHERE t = :p1 AND a = :p10 AND b = :p2"
+        params = {"p1": 1, "p2": "x", "p10": "y"}
+        result = _resolve_params(sql, params)
+        assert ":tenantId" in result
+        assert "'y'" in result
+        assert "'x'" in result
+        assert ":p10" not in result
+        assert ":p1" not in result
+
+    def test_many_params_all_resolved(self):
+        sql = "WHERE t = :p1 AND a = :p2 AND b BETWEEN :p3 AND :p4 LIMIT :p5"
+        params = {"p1": 1, "p2": "IT", "p3": "2026-01-01", "p4": "2026-03-31", "p5": 100}
+        result = _resolve_params(sql, params)
+        assert ":p" not in result.replace(":tenantId", "")
+
+
+class TestBuildSourceQueryIntegration:
+    """실무 시나리오: _build_source_query가 Spring 재실행 가능한 SQL을 반환하는지 검증."""
+
+    async def test_filtered_aggregate_query_produces_executable_sql(self):
+        """'삼성전자 월별 매출 추이' — 필터 + 집계 + GROUP BY 시나리오."""
+        intent = IntentResult(
+            search_type="STRUCTURED",
+            query_spec=QuerySpec(
+                table="deals",
+                columns=["DATE_TRUNC('month',created_at)", "SUM(amount)"],
+                joins=[JoinSpec(table="accounts", on_self="account_id", on_other="account_id")],
+                filters=[FilterCondition(column="accounts.name", operator=FilterOperator.LIKE, value="%삼성전자%")],
+                group_by=["DATE_TRUNC('month',created_at)"],
+                order_by=[OrderSpec(column="DATE_TRUNC('month',created_at)", direction=OrderDirection.ASC)],
+            ),
+            suggested_title="삼성전자 월별 매출 추이",
+        )
+        db = FakeDB(rows=[
+            {"month": "2026-01", "total": 500_000_000},
+            {"month": "2026-02", "total": 720_000_000},
+        ])
+        ctx = FakeContextStore()
+        engine = _make_engine(llm=FakeLLM(intent=intent), db=db, context_store=ctx)
+
+        result = await engine.run(_make_request(input_text="삼성전자 월별 매출 추이 보여줘"))
+
+        assert result["status"] == "COMPLETED"
+        sq = result["result"]["source_query"]
+        assert sq is not None
+
+        # tenant_id는 :tenantId 플레이스홀더로 유지
+        assert ":tenantId" in sq
+        # 필터 값이 리터럴로 치환됨
+        assert "'%삼성전자%'" in sq
+        # 미해결 플레이스홀더 없음
+        assert ":p" not in sq.replace(":tenantId", "")
+
+        # context_store에도 동일 형식으로 저장됨
+        stored = ctx._data[0]["source_query"]
+        assert ":tenantId" in stored
+        assert ":p" not in stored.replace(":tenantId", "")
+
+    async def test_no_filter_query_only_has_tenant_param(self):
+        """'전체 딜 목록' — 필터 없는 단순 조회."""
+        intent = IntentResult(
+            search_type="STRUCTURED",
+            query_spec=QuerySpec(table="deals", columns=["title", "amount"]),
+            suggested_title="전체 딜 목록",
+        )
+        engine = _make_engine(llm=FakeLLM(intent=intent))
+
+        result = await engine.run(_make_request(input_text="전체 딜 목록 보여줘"))
+
+        sq = result["result"]["source_query"]
+        assert ":tenantId" in sq
+        assert ":p" not in sq.replace(":tenantId", "")
+
+    async def test_semantic_search_source_query_is_none(self):
+        """뉴스 검색 — source_query가 None (SQL 없음)."""
+        intent = IntentResult(
+            search_type="SEMANTIC",
+            suggested_title="삼성전자 뉴스",
+            semantic_spec=SemanticSearchSpec(search_text="삼성전자 실적"),
+        )
+        engine = _make_engine(llm=FakeLLM(intent=intent))
+
+        result = await engine.run(_make_request(input_text="삼성전자 관련 뉴스"))
+
+        assert result["result"]["source_query"] is None

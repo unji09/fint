@@ -598,6 +598,10 @@ export default function MonthGrid({
                   )}
                   {!isCompact && dayEvs.length > 2 && (
                     <button
+                      // mousedown 까지 막아야 부모 셀의 drag-select 가 시작되지 않는다.
+                      // click 단계 stopPropagation 만 있으면 mousedown→mouseup 동안 drag state 가 set 되어
+                      // mouseup 에서 onDayClick(=일정 추가 모달) 이 발화되는 버그가 생긴다.
+                      onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         onMoreClick?.(day);
