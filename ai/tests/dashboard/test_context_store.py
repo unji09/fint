@@ -1,9 +1,6 @@
 import pytest
 
-from app.dashboard.context_store import ContextStore
-
-MAX_ENTRIES = 5
-TTL_SECONDS = 1800
+from app.dashboard.context_store import MAX_ENTRIES, TTL_SECONDS, ContextStore
 
 
 @pytest.fixture
@@ -70,7 +67,8 @@ class TestContextStore:
         assert result[2]["input_text"] == "질의 2"
 
     async def test_max_entries_evicts_oldest(self, store):
-        for i in range(MAX_ENTRIES + 2):
+        total = MAX_ENTRIES + 2
+        for i in range(total):
             await store.add_entry(
                 tenant_id=42,
                 dashboard_id=1,
@@ -82,7 +80,7 @@ class TestContextStore:
         result = await store.get_context(tenant_id=42, dashboard_id=1, user_id=1)
         assert len(result) == MAX_ENTRIES
         assert result[0]["input_text"] == "질의 2"
-        assert result[-1]["input_text"] == "질의 6"
+        assert result[-1]["input_text"] == f"질의 {total - 1}"
 
     async def test_different_users_isolated(self, store):
         await store.add_entry(
@@ -157,3 +155,54 @@ class TestContextStore:
 
         result = await store.get_context(tenant_id=42, dashboard_id=1, user_id=1)
         assert result == []
+
+
+class TestContextStoreEnrichedFields:
+    """확장 필드(suggested_title, source_query, row_count, columns) 저장/조회 검증."""
+
+    async def test_enriched_fields_stored(self, store):
+        await store.add_entry(
+            tenant_id=42, dashboard_id=1, user_id=1,
+            input_text="고객사목록 5개만 보여줘",
+            search_type="STRUCTURED",
+            suggested_title="고객사 목록",
+            source_query="SELECT name, industry FROM accounts LIMIT 5",
+            row_count=5,
+            columns=["name", "industry"],
+        )
+
+        result = await store.get_context(tenant_id=42, dashboard_id=1, user_id=1)
+        entry = result[0]
+        assert entry["suggested_title"] == "고객사 목록"
+        assert entry["source_query"] == "SELECT name, industry FROM accounts LIMIT 5"
+        assert entry["row_count"] == 5
+        assert entry["columns"] == ["name", "industry"]
+
+    async def test_enriched_fields_optional(self, store):
+        await store.add_entry(
+            tenant_id=42, dashboard_id=1, user_id=1,
+            input_text="딜 목록", search_type="STRUCTURED",
+        )
+
+        result = await store.get_context(tenant_id=42, dashboard_id=1, user_id=1)
+        entry = result[0]
+        assert entry["input_text"] == "딜 목록"
+        assert entry.get("suggested_title") is None
+        assert entry.get("source_query") is None
+        assert entry.get("row_count") is None
+        assert entry.get("columns") is None
+
+    async def test_window_size_is_15(self):
+        assert MAX_ENTRIES == 15
+
+    async def test_15_entries_kept(self, store):
+        for i in range(17):
+            await store.add_entry(
+                tenant_id=42, dashboard_id=1, user_id=1,
+                input_text=f"질의 {i}", search_type="STRUCTURED",
+            )
+
+        result = await store.get_context(tenant_id=42, dashboard_id=1, user_id=1)
+        assert len(result) == 15
+        assert result[0]["input_text"] == "질의 2"
+        assert result[-1]["input_text"] == "질의 16"
