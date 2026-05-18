@@ -413,7 +413,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               {event.pipelineStage ? <span style={{ fontSize: 12, color: '#534AB7' }}>{event.pipelineStage.stageName}</span> : <Muted>없음</Muted>}
             </MetaRow>
             <MetaRow label="일정">
-              <span style={{ fontSize: 12, color: '#737880' }}>{formatFullDate(new Date(event.startAt))} — {formatTime(event.endAt)}</span>
+              <span style={{ fontSize: 12, color: '#737880' }}>{formatFullDate(new Date(event.startAt))} — {formatTime(event.startAt)} ~ {formatTime(event.endAt)}</span>
             </MetaRow>
             <MetaRow label="생성일">
               <span style={{ fontSize: 12, color: '#737880' }}>{new Date(event.startAt).toLocaleDateString('ko-KR')}</span>

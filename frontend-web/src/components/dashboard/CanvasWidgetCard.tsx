@@ -20,9 +20,10 @@ interface Props {
   onUpdate: (id: number, changes: Partial<CanvasWidget>) => void;
   onTitleChange: (id: number, t: string) => void;
   onRemove?: (id: number) => void;
+  canvasRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-export default function CanvasWidgetCard({ w, onUpdate, onTitleChange, onRemove }: Props) {
+export default function CanvasWidgetCard({ w, onUpdate, onTitleChange, onRemove, canvasRef }: Props) {
   const [editTitle, setEditTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(w.title);
   const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
@@ -33,11 +34,54 @@ export default function CanvasWidgetCard({ w, onUpdate, onTitleChange, onRemove 
     if (editTitle) return;
     e.preventDefault();
     dragRef.current = { sx: e.clientX, sy: e.clientY, ox: w.px, oy: w.py };
+
+    const EDGE_ZONE = 40;
+    const SCROLL_SPEED = 12;
+    let lastMouse = { x: e.clientX, y: e.clientY };
+    let scrollId: number | null = null;
+
+    const doScroll = () => {
+      const canvas = canvasRef?.current;
+      if (!canvas || !dragRef.current) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = lastMouse.x;
+      const my = lastMouse.y;
+      let dx = 0;
+      let dy = 0;
+      if (mx < rect.left + EDGE_ZONE && mx >= rect.left) dx = -SCROLL_SPEED;
+      else if (mx > rect.right - EDGE_ZONE && mx <= rect.right) dx = SCROLL_SPEED;
+      if (my < rect.top + EDGE_ZONE && my >= rect.top) dy = -SCROLL_SPEED;
+      else if (my > rect.bottom - EDGE_ZONE && my <= rect.bottom) dy = SCROLL_SPEED;
+      if (dx || dy) {
+        const prevLeft = canvas.scrollLeft;
+        const prevTop = canvas.scrollTop;
+        canvas.scrollBy(dx, dy);
+        const actualDx = canvas.scrollLeft - prevLeft;
+        const actualDy = canvas.scrollTop - prevTop;
+        if (actualDx || actualDy) {
+          dragRef.current.sx -= actualDx;
+          dragRef.current.sy -= actualDy;
+          onUpdate(w.widgetId, {
+            px: dragRef.current.ox + lastMouse.x - dragRef.current.sx,
+            py: dragRef.current.oy + lastMouse.y - dragRef.current.sy,
+          });
+        }
+      }
+      scrollId = requestAnimationFrame(doScroll);
+    };
+    if (canvasRef?.current) scrollId = requestAnimationFrame(doScroll);
+
     const onMove = (ev: MouseEvent) => {
       if (!dragRef.current) return;
+      lastMouse = { x: ev.clientX, y: ev.clientY };
       onUpdate(w.widgetId, { px: dragRef.current.ox + ev.clientX - dragRef.current.sx, py: dragRef.current.oy + ev.clientY - dragRef.current.sy });
     };
-    const onUp = () => { dragRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    const onUp = () => {
+      dragRef.current = null;
+      if (scrollId !== null) cancelAnimationFrame(scrollId);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };

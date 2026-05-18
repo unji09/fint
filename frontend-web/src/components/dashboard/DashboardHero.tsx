@@ -1,6 +1,7 @@
 'use client';
 
 import { KeyboardEvent, useState } from 'react';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface DashboardHeroProps {
   onSubmit: (query: string) => void;
@@ -15,6 +16,9 @@ const CHIPS = [
 ];
 
 export default function DashboardHero({ onSubmit, loading = false }: DashboardHeroProps) {
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
+  const isTablet = bp === 'tablet';
   const [input, setInput] = useState('');
   const handleSubmit = () => {
     if (!input.trim() || loading) return;
@@ -25,18 +29,20 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
   return (
     <div
       style={{
+        position: 'relative',
         width: '100%',
         maxWidth: 768,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
+        overflow: 'hidden',
       }}
     >
       <div
         style={{
           position: 'absolute',
-          width: 800,
-          height: 160,
+          width: isMobile ? 300 : 800,
+          height: isMobile ? 80 : 160,
           borderRadius: 12,
           background: 'rgba(76,215,246,0.05)',
           filter: 'blur(32px)',
@@ -48,12 +54,11 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
         style={{
           fontFamily: 'Pretendard, sans-serif',
           fontWeight: 500,
-          fontSize: 52,
-          lineHeight: '66px',
+          fontSize: isMobile ? 28 : isTablet ? 36 : 52,
+          lineHeight: isMobile ? '36px' : isTablet ? '46px' : '66px',
           letterSpacing: '-1.4px',
           color: '#141b2b',
           textAlign: 'center',
-          whiteSpace: 'nowrap',
           margin: '0 0 8px',
           position: 'relative',
         }}
@@ -65,12 +70,11 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
         style={{
           fontFamily: 'Pretendard, sans-serif',
           fontWeight: 500,
-          fontSize: 14,
+          fontSize: isMobile ? 12 : 14,
           lineHeight: '20px',
           letterSpacing: '0.35px',
           color: 'rgba(61,73,76,0.8)',
           textAlign: 'center',
-          whiteSpace: 'nowrap',
           margin: '0 0 20px',
           position: 'relative',
         }}

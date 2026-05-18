@@ -242,6 +242,10 @@ class QueryEngine:
             user_id=request.user_id,
             input_text=request.input_text,
             search_type=intent.search_type,
+            suggested_title=result.get("title"),
+            source_query=result.get("source_query"),
+            row_count=result["data"]["totalRowCount"],
+            columns=result["data"]["columns"],
         )
 
         return {"status": "COMPLETED", "result": result}
@@ -306,8 +310,26 @@ class QueryEngine:
             )
 
         if context:
-            context_lines = [f"- {e['input_text']} ({e['search_type']})" for e in context]
-            system_content += "\n\n## 이전 질의 맥락\n" + "\n".join(context_lines)
+            context_lines: list[str] = []
+            for i, e in enumerate(context, 1):
+                title = e.get("suggested_title") or ""
+                cols = ", ".join(e["columns"]) if e.get("columns") else ""
+                row_count = e.get("row_count")
+                parts = [f'{i}.']
+                if title:
+                    parts.append(f"[{title}]")
+                parts.append(f'"{e["input_text"]}"')
+                if cols:
+                    parts.append(f"→ {cols}")
+                if row_count is not None:
+                    parts.append(f"{row_count}건")
+                parts.append(f"({e['search_type']})")
+                context_lines.append(" ".join(parts))
+            system_content += (
+                "\n\n## 이전 질의 맥락\n"
+                "사용자가 이전 위젯을 참조할 수 있습니다. 동일 테이블/컬럼을 기반으로 조건만 변경하세요.\n"
+                + "\n".join(context_lines)
+            )
 
         if request.action == "ADD" and request.existing_widgets:
             widgets_text = json.dumps(request.existing_widgets, ensure_ascii=False)
@@ -449,11 +471,33 @@ class QueryEngine:
     def _build_source_query(self, intent: IntentResult, tenant_id: int) -> str | None:
         if intent.query_spec:
             try:
-                sql, _ = build_query(intent.query_spec, tenant_id=tenant_id)
-                return sql
+                sql, params = build_query(intent.query_spec, tenant_id=tenant_id)
+                return _resolve_params(sql, params)
             except QueryBuildError:
                 return None
         return None
+
+
+_SOURCE_QUERY_PARAM = re.compile(r":p(\d+)\b")
+
+
+def _resolve_params(sql: str, params: dict[str, object]) -> str:
+    """파라미터 플레이스홀더를 리터럴로 치환. tenant_id(:p1)만 :tenantId로 유지."""
+
+    def _replace(m: re.Match) -> str:
+        key = f"p{m.group(1)}"
+        if key == "p1":
+            return ":tenantId"
+        val = params.get(key)
+        if val is None:
+            return "NULL"
+        if isinstance(val, str):
+            return "'" + val.replace("'", "''") + "'"
+        if isinstance(val, (datetime, date)):
+            return "'" + val.isoformat() + "'"
+        return str(val)
+
+    return _SOURCE_QUERY_PARAM.sub(_replace, sql)
 
 
 def _normalize_rows(rows: list[dict]) -> list[dict]:
