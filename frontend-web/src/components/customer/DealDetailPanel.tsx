@@ -127,6 +127,18 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
     });
   }, [deal.dealId]);
 
+  // 캘린더 등 다른 화면에서 활동 삭제 시 즉시 카드/요약 제거
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const aid = (e as CustomEvent<{ activityId: number }>).detail?.activityId;
+      if (!aid) return;
+      setActivities((prev) => prev.filter((a) => a.activityId !== aid));
+      setExpandedMeetingId((prev) => (prev === aid ? null : prev));
+    };
+    window.addEventListener('activity:deleted', handler);
+    return () => window.removeEventListener('activity:deleted', handler);
+  }, []);
+
   const d = detail;
   const stageIdx = pipelineIndex(d?.currentPipelineStage ?? null);
 
