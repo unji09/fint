@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import PipelineProgress from './PipelineProgress';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import { useConfirm, usePrompt } from '@/components/common/ConfirmDialog';
@@ -43,9 +44,12 @@ interface Activity {
 
 // summary key → 한글 라벨
 const SUMMARY_LABELS: Record<string, string> = {
+  keyDiscussion: '핵심 논의',
+  customerNeeds: '고객 니즈',
+  agreements: '합의 사항',
+  actionItems: '실행 항목',
   highlights: '주요 내용',
   decisions: '결정 사항',
-  actionItems: '실행 항목',
   nextSteps: '다음 단계',
   risks: '리스크',
   notes: '비고',
@@ -77,6 +81,7 @@ interface Props {
 }
 
 export default function DealDetailPanel({ deal, onDealChanged }: Props) {
+  const router = useRouter();
   const confirm = useConfirm();
   const prompt = usePrompt();
   const bp = useBreakpoint();
@@ -124,6 +129,18 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
       setLoading(false);
     });
   }, [deal.dealId]);
+
+  // 캘린더 등 다른 화면에서 활동 삭제 시 즉시 카드/요약 제거
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const aid = (e as CustomEvent<{ activityId: number }>).detail?.activityId;
+      if (!aid) return;
+      setActivities((prev) => prev.filter((a) => a.activityId !== aid));
+      setExpandedMeetingId((prev) => (prev === aid ? null : prev));
+    };
+    window.addEventListener('activity:deleted', handler);
+    return () => window.removeEventListener('activity:deleted', handler);
+  }, []);
 
   const d = detail;
   const stageIdx = pipelineIndex(d?.currentPipelineStage ?? null);
@@ -310,6 +327,31 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
                             AI 요약이 아직 없습니다. 녹음 후 자동 생성됩니다.
                           </p>
                         )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const q = new URLSearchParams({
+                                activityId: String(a.activityId),
+                                date: a.startAt,
+                              });
+                              router.push(`/calendar?${q.toString()}`);
+                            }}
+                            style={{
+                              fontFamily: 'Pretendard,sans-serif',
+                              fontSize: 12,
+                              fontWeight: 500,
+                              color: '#0686d4',
+                              background: 'transparent',
+                              border: 'none',
+                              padding: '4px 6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            전체 보기 →
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

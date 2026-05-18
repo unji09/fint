@@ -87,10 +87,12 @@ function mapApiSignal(s: ApiSignal): Signal {
 
 function mapApiDeal(d: ApiDeal & Record<string, unknown>): Deal {
   // 백엔드 DealDetailResponse: currentPipelineStage (한글 stage 이름)
-  // DealListResponse: currentPipeline 또는 동일 키
+  // DealListResponse: currentPipeline
+  // AccountDealsResponse.DealItem: stage
   const stage =
     (d.currentPipelineStage as string | undefined) ??
     (d.currentPipeline as string | undefined) ??
+    (d.stage as string | undefined) ??
     null;
   return {
     dealId: d.dealId,
@@ -338,11 +340,12 @@ export function useAccountDetail(accountId: string | number | null) {
     };
 
     try {
-      // 1) signals + contacts + mood history 병렬
-      const [sigRes, conRes, moodRes] = await Promise.allSettled([
+      // signals + contacts + mood + deals 병렬 (전용 엔드포인트 사용)
+      const [sigRes, conRes, moodRes, dealsRes] = await Promise.allSettled([
         fetchWithAuth(`/accounts/${accountId}/signals`).then((r) => r.json()),
         fetchWithAuth(`/accounts/${accountId}/contacts`).then((r) => r.json()),
         fetchWithAuth(`/accounts/${accountId}/mood`).then((r) => r.json()),
+        fetchWithAuth(`/accounts/${accountId}/deals`).then((r) => r.json()),
       ]);
 
       if (sigRes.status === 'fulfilled') {
@@ -362,67 +365,19 @@ export function useAccountDetail(accountId: string | number | null) {
         setMood(snapMood);
       }
 
-      let accountContacts: ContactInfo[] = [];
       if (conRes.status === 'fulfilled') {
         const cons = extractList<ApiContact>(conRes.value);
-        accountContacts = cons.map(mapApiContact);
+        const accountContacts = cons.map(mapApiContact);
         snapContacts = accountContacts;
         setContacts(accountContacts);
       }
 
-      // 2) deals 매칭
-      //    DealListResponse 에 accountId 가 없으므로 deal_contacts 를 통해 매핑한다.
-      //    한 account 의 contactIds 와 각 deal 의 contacts 의 교집합으로 그 account 의 딜 판별.
-      const contactIds = new Set(
-        accountContacts.map((c) => c.contactId).filter((v): v is number => typeof v === 'number'),
-      );
-      if (contactIds.size === 0) {
-        snapDeals = [];
-        setDeals([]);
-        return;
+      if (dealsRes.status === 'fulfilled') {
+        // AccountDealsResponse: { deals: [{ dealId, title, stage, probability, amount }] }
+        const list = extractList<ApiDeal>(dealsRes.value);
+        snapDeals = list.map((d) => mapApiDeal(d as ApiDeal & Record<string, unknown>));
+        setDeals(snapDeals);
       }
-
-      const listRes = await fetchWithAuth('/deals?size=200');
-      if (!listRes.ok) {
-        snapDeals = [];
-        setDeals([]);
-        return;
-      }
-      const listJson = await listRes.json();
-      const list: { dealId: number }[] = Array.isArray(listJson?.data?.data)
-        ? listJson.data.data
-        : [];
-      console.log('[FINT] /deals returned', {
-        accountId,
-        accountContactIds: Array.from(contactIds),
-        totalDeals: list.length,
-        dealIds: list.map((d) => d.dealId),
-      });
-
-      // 각 deal 상세 받아서 contacts 매칭
-      const detailResults = await Promise.allSettled(
-        list.map(async (d) => {
-          const r = await fetchWithAuth(`/deals/${d.dealId}`);
-          if (!r.ok) return null;
-          const dj = await r.json();
-          const detail = dj.data ?? dj;
-          const dealContacts: { contactId: number }[] = detail?.contacts ?? [];
-          const isAccountDeal = dealContacts.some((c) => contactIds.has(c.contactId));
-          if (!isAccountDeal) return null;
-          // 상세 응답으로 stage 정보까지 보강
-          return { ...d, ...detail };
-        }),
-      );
-
-      const filtered = detailResults
-        .filter(
-          (r): r is PromiseFulfilledResult<Record<string, unknown>> =>
-            r.status === 'fulfilled' && r.value !== null,
-        )
-        .map((r) => r.value);
-
-      snapDeals = (filtered as unknown as (ApiDeal & Record<string, unknown>)[]).map(mapApiDeal);
-      setDeals(snapDeals);
     } finally {
       setLoading(false);
       // 새로 받은 데이터로 캐시 갱신
