@@ -26,6 +26,10 @@ public class QueryExecutionService {
             Pattern.CASE_INSENSITIVE
     );
     private static final int MAX_ROWS = 500;
+    private static final Pattern PARAM_PLACEHOLDER = Pattern.compile(":p(\\d+)");
+    private static final Pattern LIMIT_PARAM = Pattern.compile(
+            "LIMIT\\s+:p\\d+", Pattern.CASE_INSENSITIVE
+    );
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -33,9 +37,10 @@ public class QueryExecutionService {
     public List<Map<String, Object>> execute(String sourceQuery, Long tenantId) {
         validate(sourceQuery);
 
+        String resolved = resolveAiParams(sourceQuery);
         MapSqlParameterSource params = new MapSqlParameterSource("tenantId", tenantId);
 
-        String limited = applyRowLimit(sourceQuery);
+        String limited = applyRowLimit(resolved);
 
         try {
             return jdbcTemplate.queryForList(limited, params);
@@ -43,6 +48,19 @@ public class QueryExecutionService {
             log.warn("source_query 실행 실패: tenantId={}, error={}", tenantId, e.getMessage());
             throw new BusinessException(DashboardErrorCode.QUERY_EXECUTION_FAILED);
         }
+    }
+
+    /**
+     * AI가 생성한 파라미터 플레이스홀더(:p1, :p2, ...)를 실행 가능한 형태로 변환.
+     * :p1은 항상 tenant_id → :tenantId로 치환.
+     * LIMIT :pN → 제거 (applyRowLimit이 대체).
+     * 나머지 :pN → 제거하여 실행 오류 방지.
+     */
+    String resolveAiParams(String query) {
+        String result = LIMIT_PARAM.matcher(query).replaceAll("");
+        result = result.replace(":p1", ":tenantId");
+        result = PARAM_PLACEHOLDER.matcher(result).replaceAll("NULL");
+        return result;
     }
 
     private void validate(String sourceQuery) {

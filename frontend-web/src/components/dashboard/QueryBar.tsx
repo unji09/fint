@@ -1,3 +1,7 @@
+'use client';
+
+import useBreakpoint from '@/hooks/useBreakpoint';
+
 interface Props {
   value: string;
   onChange: (v: string) => void;
@@ -6,8 +10,9 @@ interface Props {
 }
 
 export default function QueryBar({ value, onChange, onSubmit, loading }: Props) {
+  const isMobile = useBreakpoint() === 'mobile';
   return (
-    <div style={{ position: 'relative', width: 390 }}>
+    <div style={{ position: 'relative', width: isMobile ? '100%' : 390 }}>
       <div
         style={{
           position: 'absolute',

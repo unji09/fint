@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import useBreakpoint from '@/hooks/useBreakpoint';
 import { useConfirm, useAlert } from '@/components/common/ConfirmDialog';
 import {
   useDashboardList,
@@ -104,6 +105,10 @@ export default function DashboardPage() {
     [deleteDashboard, deleting, refetchList],
   );
 
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
+  const isTablet = bp === 'tablet';
+
   return (
     <>
       {/* 베이스 — 원래 컨셉 라벤더 */}
@@ -134,10 +139,6 @@ export default function DashboardPage() {
           bottom: 0,
           display: 'flex',
           flexDirection: 'column',
-          // 컨텐츠 합이 뷰포트보다 크면 세로만 스크롤 허용.
-          // overflow-y 만 지정하면 overflow-x 가 자동(auto)으로 promote 되어
-          // 좁은 해상도에서 의도치 않은 가로 스크롤이 생긴다. 명시적으로 차단.
-          overflowX: 'hidden',
           overflowY: 'auto',
         }}
       >
@@ -145,8 +146,9 @@ export default function DashboardPage() {
           style={{
             maxWidth: 1440,
             width: '100%',
+            boxSizing: 'border-box',
             margin: '0 auto',
-            padding: '28px 40px 24px',
+            padding: isMobile ? '20px 16px 16px' : isTablet ? '24px 24px 20px' : '28px 40px 24px',
             display: 'flex',
             flexDirection: 'column',
             gap: 20,
@@ -163,7 +165,7 @@ export default function DashboardPage() {
               display: 'flex',
               flexDirection: 'column',
               flexShrink: 0,
-              minHeight: 320,
+              minHeight: isMobile ? 0 : 320,
             }}
           >
             <TemplateCardGrid
