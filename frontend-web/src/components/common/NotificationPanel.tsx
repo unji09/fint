@@ -694,7 +694,8 @@ function NotificationCard({ n, expanded, onClick, draggable, onDragStart: onDrag
         >
           <span style={{ fontSize: 11, fontWeight: 600, color: '#737880' }}>근거 데이터</span>
           {activeTypes.flatMap((type) => {
-            const items = n.sources![type];
+            // type 별 최대 3개까지만 노출 (DART / NEWS / CRM 각각).
+            const items = n.sources![type].slice(0, 3);
             const style = SOURCE_BADGE_STYLE[type] ?? { label: type, bg: '#F0F0EE', color: '#737880' };
             return items.map((item, i) => (
               <a
