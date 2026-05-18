@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 export type Breakpoint = 'mobile' | 'tablet' | 'desktop';
 
 const MOBILE_MAX = 640;
-const TABLET_MAX = 1024;
+export const TABLET_MAX = 1024;
 
 function getBreakpoint(w: number): Breakpoint {
   if (w < MOBILE_MAX) return 'mobile';
