@@ -9,6 +9,7 @@ from app.clients.gpu_stt import GpuSttClient
 from app.core.security import get_tenant_id
 from app.main import create_app
 from app.routers.stt import get_gpu_stt_client
+from app.routers.stt_stream import _clean_text
 
 # Spring JwtTokenProvider와 동일: base64url-encoded 시크릿 사용
 _RAW_TEST_KEY = b"test-secret-key-12345678901234"
@@ -24,24 +25,55 @@ def _make_token(tenant_id: int = 1) -> str:
 
 
 class FakeGpuStt:
-    async def transcribe_chunk(self, audio_bytes: bytes, language: str = "ko") -> dict:
+    async def transcribe_chunk(
+        self,
+        audio_bytes: bytes,
+        language: str = "ko",
+        session_id: str = "",
+        prev_text: str = "",
+        beam_size: int = 5,
+    ) -> dict:
         return {
             "text": "안녕하세요",
             "start_ms": 0,
             "end_ms": 1000,
             "speaker_id": "SPEAKER_00",
+            "no_speech_prob": 0.05,
         }
+
+    async def clear_session(self, session_id: str) -> None:
+        pass
 
 
 class FakeGpuSttEmpty:
-    async def transcribe_chunk(self, audio_bytes: bytes, language: str = "ko") -> dict:
-        return {"text": "", "start_ms": 0, "end_ms": 0, "speaker_id": "SPEAKER_00"}
+    async def transcribe_chunk(
+        self,
+        audio_bytes: bytes,
+        language: str = "ko",
+        session_id: str = "",
+        prev_text: str = "",
+        beam_size: int = 5,
+    ) -> dict:
+        return {"text": "", "start_ms": 0, "end_ms": 0, "speaker_id": "SPEAKER_00", "no_speech_prob": 1.0}
+
+    async def clear_session(self, session_id: str) -> None:
+        pass
 
 
 class FakeGpuSttFailing:
-    async def transcribe_chunk(self, audio_bytes: bytes, language: str = "ko") -> dict:
+    async def transcribe_chunk(
+        self,
+        audio_bytes: bytes,
+        language: str = "ko",
+        session_id: str = "",
+        prev_text: str = "",
+        beam_size: int = 5,
+    ) -> dict:
         from app.core.errors import BusinessException, CommonErrorCode
         raise BusinessException(CommonErrorCode.EXTERNAL_API_FAILED, "GPU 다운")
+
+    async def clear_session(self, session_id: str) -> None:
+        pass
 
 
 def _make_app(fake_gpu: GpuSttClient | None = None) -> TestClient:
@@ -131,3 +163,74 @@ def test_stream_gpu_error_sends_error_message(mock_settings):
 
     assert msg["type"] == "error"
     assert msg["message"] is not None
+
+
+@patch("app.core.security.get_settings")
+def test_stream_eos_flushes_remaining_buffer(mock_settings):
+    """EOS 신호(0-byte) 수신 시 남은 버퍼를 플러시하고 stream_ended를 전송해야 한다."""
+    mock_settings.return_value.JWT_SECRET = JWT_SECRET
+    client = _make_app(fake_gpu=FakeGpuStt())  # type: ignore[arg-type]
+    token = _make_token()
+
+    with client.websocket_connect(f"{WS_URL}?token={token}") as ws:
+        # fast 버퍼 미달(1개)로 전송 — 일반적으로는 GPU 호출 없음
+        ws.send_bytes(_FAKE_AUDIO_CHUNK)
+        # EOS 신호 — 남은 버퍼를 강제 플러시해야 함
+        ws.send_bytes(b"")
+        # 전사 결과
+        msg1 = ws.receive_json()
+        # 완료 신호
+        msg2 = ws.receive_json()
+
+    assert msg1["type"] == "transcript"
+    assert msg2["type"] == "stream_ended"
+
+
+@patch("app.core.security.get_settings")
+def test_stream_eos_empty_buffer_sends_stream_ended(mock_settings):
+    """버퍼가 비어있을 때 EOS 신호를 받으면 즉시 stream_ended를 전송해야 한다."""
+    mock_settings.return_value.JWT_SECRET = JWT_SECRET
+    client = _make_app(fake_gpu=FakeGpuStt())  # type: ignore[arg-type]
+    token = _make_token()
+
+    with client.websocket_connect(f"{WS_URL}?token={token}") as ws:
+        # 오디오 없이 바로 EOS
+        ws.send_bytes(b"")
+        msg = ws.receive_json()
+
+    assert msg["type"] == "stream_ended"
+
+
+# ── _clean_text 단위 테스트 ─────────────────────────────────────────────────────
+
+def test_clean_text_passes_normal():
+    assert _clean_text("안녕하세요 반갑습니다", 0.0) == "안녕하세요 반갑습니다"
+
+
+def test_clean_text_blocks_high_no_speech():
+    assert _clean_text("안녕하세요 반갑습니다", 0.9) == ""
+
+
+def test_clean_text_strips_pure_hallucination():
+    assert _clean_text("미팅 내용을 전사합니다.", 0.0) == ""
+
+
+def test_clean_text_strips_hallucination_suffix():
+    """실제 발화 + 환각 suffix → 실제 발화만 반환."""
+    result = _clean_text("이걸로 1등을 맞출 것 같다. 미팅 내용을 전사합니다.", 0.0)
+    assert "미팅 내용을 전사합니다" not in result
+    assert "1등을 맞출 것 같다" in result
+
+
+def test_clean_text_discards_short_prefix():
+    """환각 제거 후 남은 텍스트가 너무 짧으면 버린다."""
+    assert _clean_text("짠. 미팅 내용을 전사합니다.", 0.0) == ""
+
+
+def test_clean_text_strips_variant_without_yeongop():
+    """'영업' 없이 '미팅 내용을 전사합니다'만 있는 변형도 잡는다."""
+    assert _clean_text("미팅 내용을 전사합니다", 0.0) == ""
+
+
+def test_clean_text_strips_youtube_pattern():
+    assert _clean_text("구독과 좋아요 눌러주세요", 0.0) == ""

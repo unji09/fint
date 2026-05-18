@@ -509,6 +509,7 @@ const MAX_BUFFER_WALL_MS = 2000;
 export function useTranscriptStream() {
   const wsRef = useRef<WebSocket | null>(null);
   const onSegmentRef = useRef<((line: SttLine) => void) | null>(null);
+  const onStreamEndedRef = useRef<(() => void) | null>(null);
   const bufferRef = useRef<SegmentBuffer | null>(null);
 
   const flushBuffer = useCallback(() => {
@@ -529,9 +530,14 @@ export function useTranscriptStream() {
     onSegmentRef.current?.(merged);
   }, []);
 
-  const connect = useCallback((activityId: number, onSegment: (line: SttLine) => void) => {
+  const connect = useCallback((
+    activityId: number,
+    onSegment: (line: SttLine) => void,
+    onStreamEnded?: () => void,
+  ) => {
     wsRef.current?.close();
     onSegmentRef.current = onSegment;
+    onStreamEndedRef.current = onStreamEnded ?? null;
     // 이전 연결의 버퍼 정리
     if (bufferRef.current?.maxTimer) clearTimeout(bufferRef.current.maxTimer);
     bufferRef.current = null;
@@ -559,7 +565,17 @@ export function useTranscriptStream() {
           return;
         }
 
-        // FastAPI: { type, segment: { text, speaker_id, start_ms, end_ms } }
+        // ── 스트림 종료 신호 — 녹음 종료 후 FastAPI가 모든 버퍼를 처리했음 ──
+        if (data.type === 'stream_ended') {
+          flushBuffer();
+          onStreamEndedRef.current?.();
+          return;
+        }
+
+        // ── 전사 결과 ──────────────────────────────────────────────────────
+        // FastAPI: { type: "transcript", segment: { text, speaker_id, start_ms, end_ms } }
+        if (data.type !== 'transcript') return;
+
         const seg = (data.segment && typeof data.segment === 'object'
           ? data.segment
           : data) as Record<string, unknown>;
@@ -618,13 +634,23 @@ export function useTranscriptStream() {
     }
   }, []);
 
+  /** 녹음 종료 시 0-byte 프레임을 전송해 FastAPI에 EOS(End-of-Stream)를 알린다.
+   *  FastAPI는 남은 버퍼를 플러시하고 stream_ended 메시지를 돌려준다. */
+  const sendEOS = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(new Blob([]));
+    }
+  }, []);
+
   const disconnect = useCallback(() => {
     flushBuffer();
+    onSegmentRef.current = null;
+    onStreamEndedRef.current = null;
     wsRef.current?.close();
     wsRef.current = null;
   }, [flushBuffer]);
 
-  return { connect, sendChunk, disconnect };
+  return { connect, sendChunk, sendEOS, disconnect };
 }
 
 // ─── 녹음 목록 조회 ──────────────────────────────────────────────────────────
