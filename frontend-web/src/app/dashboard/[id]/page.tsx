@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { Dashboard, DashboardWidget, ChatMessage } from '@/types/dashboard';
-import GridBg from '@/components/dashboard/GridBg';
 import CanvasWidgetCard from '@/components/dashboard/CanvasWidgetCard';
 import FintChatPanel from '@/components/dashboard/FintChatPanel';
 import type { CanvasWidget, Step } from '@/types/dashboard';
 import QueryBar from '@/components/dashboard/QueryBar';
 import { BarChartSvg } from '@/components/dashboard/ChartWidgets';
+import useBreakpoint from '@/hooks/useBreakpoint';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import {
   useDeleteDashboard,
@@ -35,6 +35,8 @@ export default function DashboardDetailPage() {
   const searchParams = useSearchParams();
   const confirm = useConfirm();
   const alert = useAlert();
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
 
   // SSR/hydration mismatch 방지: 초기값은 항상 [], 마운트 후 useEffect에서 캐시 복원
   const [allDashboards, setAllDashboards] = useState<Dashboard[]>([]);
@@ -243,15 +245,16 @@ export default function DashboardDetailPage() {
           });
           // assistant message
           const isError = q.status === 'ERROR' || q.status === 'FAILED';
+          const resultObj = (q.result ?? {}) as Record<string, unknown>;
           msgs.push({
             id: `assistant-${q.queryId ?? Date.now()}-${msgs.length}`,
             role: 'assistant',
             content: q.result?.insightText ?? (isError ? '' : ''),
             widget: isError ? null : {
-              widgetType: q.widgetType ?? 'BAR_CHART',
-              title: q.title ?? '',
+              widgetType: q.widgetType ?? (resultObj.widget_type as string) ?? 'BAR_CHART',
+              title: q.title ?? (resultObj.title as string) ?? '',
               data: q.result?.data ?? {},
-              config: q.config ?? {},
+              config: q.config ?? (resultObj.config as Record<string, unknown>) ?? {},
             },
             timestamp: ts,
             status: isError ? 'error' : 'done',
@@ -387,9 +390,35 @@ export default function DashboardDetailPage() {
       setGhostPos({ x: e.clientX, y: e.clientY });
       setDragging(true);
 
-      const onMove = (ev: MouseEvent) => setGhostPos({ x: ev.clientX, y: ev.clientY });
+      const EDGE_ZONE = 40;
+      const SCROLL_SPEED = 12;
+      let autoScrollId: number | null = null;
+      let lastMouse = { x: e.clientX, y: e.clientY };
+
+      const doAutoScroll = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = lastMouse.x;
+        const my = lastMouse.y;
+        let dx = 0;
+        let dy = 0;
+        if (mx < rect.left + EDGE_ZONE && mx >= rect.left) dx = -SCROLL_SPEED;
+        else if (mx > rect.right - EDGE_ZONE && mx <= rect.right) dx = SCROLL_SPEED;
+        if (my < rect.top + EDGE_ZONE && my >= rect.top) dy = -SCROLL_SPEED;
+        else if (my > rect.bottom - EDGE_ZONE && my <= rect.bottom) dy = SCROLL_SPEED;
+        if (dx || dy) canvas.scrollBy(dx, dy);
+        autoScrollId = requestAnimationFrame(doAutoScroll);
+      };
+      autoScrollId = requestAnimationFrame(doAutoScroll);
+
+      const onMove = (ev: MouseEvent) => {
+        lastMouse = { x: ev.clientX, y: ev.clientY };
+        setGhostPos({ x: ev.clientX, y: ev.clientY });
+      };
       const onUp = (ev: MouseEvent) => {
         setDragging(false);
+        if (autoScrollId !== null) cancelAnimationFrame(autoScrollId);
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         const canvas = canvasRef.current;
@@ -513,7 +542,11 @@ export default function DashboardDetailPage() {
                   queryId: data.queryId ?? null,
                   inputText: text,
                   result: data.result ?? { data: {}, insightText: '' },
-                  data: null,
+                  data: Array.isArray(data.result?.data)
+                    ? data.result.data
+                    : Array.isArray(data.result?.data?.rows)
+                      ? data.result.data.rows
+                      : null,
                   px: 0,
                   py: 0,
                   pw: 400,
@@ -643,11 +676,12 @@ export default function DashboardDetailPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            padding: '4px 16px',
+            padding: isMobile ? '4px 8px' : '4px 16px',
             height: 36,
             background: 'rgba(255,255,255,0.88)',
             backdropFilter: 'blur(8px)',
             borderBottom: '1px solid #e2e8f0',
+            overflowX: 'auto',
           }}
         >
           {/* 대시보드 목록·템플릿 화면으로 돌아가기 — 아이콘 단독 */}
@@ -694,6 +728,9 @@ export default function DashboardDetailPage() {
               padding: '3px 4px',
               border: '1px solid #f1f3ff',
               boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              overflowX: 'auto',
+              flex: '0 1 auto',
+              scrollbarWidth: 'none',
             }}
           >
             {allDashboards.length === 0 ? (
@@ -742,7 +779,7 @@ export default function DashboardDetailPage() {
                       <button
                         onClick={() => { if (!active) router.push(`/dashboard/${d.dashboardId}`); }}
                         onDoubleClick={(e) => { e.stopPropagation(); beginRename(d.dashboardId, d.title); }}
-                        title="더블클릭하면 이름을 바꿀 수 있어요"
+                        title={d.title}
                         style={{
                           padding: '2px 2px',
                           border: 'none',
@@ -753,9 +790,10 @@ export default function DashboardDetailPage() {
                           fontSize: 13,
                           color: active ? 'white' : '#6d797d',
                           transition: 'color 0.15s',
+                          whiteSpace: 'nowrap',
                         }}
                       >
-                        {d.title}
+                        {d.title.length > 6 ? d.title.slice(0, 6) + '..' : d.title}
                       </button>
                     )}
                     <button
@@ -831,9 +869,19 @@ export default function DashboardDetailPage() {
         </div>
 
         {/* 캔버스 */}
-        <div ref={canvasRef} style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-          <GridBg />
-          <div style={{ position: 'relative', minWidth: '100%', minHeight: '100%' }}>
+        <div
+          ref={canvasRef}
+          style={{
+            flex: 1,
+            position: 'relative',
+            overflow: 'auto',
+            backgroundImage:
+              'linear-gradient(rgba(99,118,183,0.10) 1px, transparent 1px),' +
+              'linear-gradient(90deg, rgba(99,118,183,0.10) 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+          }}
+        >
+          <div style={{ position: 'relative', minWidth: 3000, minHeight: 3000 }}>
             {canvasWidgets.map((w) => (
               <CanvasWidgetCard
                 key={w.widgetId}
@@ -841,6 +889,7 @@ export default function DashboardDetailPage() {
                 onUpdate={updateWidget}
                 onTitleChange={updateTitle}
                 onRemove={removeWidget}
+                canvasRef={canvasRef}
               />
             ))}
           </div>
@@ -853,11 +902,21 @@ export default function DashboardDetailPage() {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-start',
-              bottom: 20,
-              left: 20,
+              bottom: isMobile ? 8 : 20,
+              left: isMobile ? 8 : 20,
+              right: isMobile ? 8 : undefined,
             }}
           >
-            {chatOpen && (
+            <div
+              style={{
+                transition: 'opacity 0.25s ease, transform 0.25s ease',
+                opacity: chatOpen ? 1 : 0,
+                transform: chatOpen ? 'translateY(0)' : 'translateY(12px)',
+                pointerEvents: chatOpen ? 'auto' : 'none',
+                maxHeight: chatOpen ? 'none' : 0,
+                overflow: chatOpen ? 'visible' : 'hidden',
+              }}
+            >
               <FintChatPanel
                 steps={steps}
                 query={userQuery}
@@ -867,11 +926,42 @@ export default function DashboardDetailPage() {
                 widgetTitle={widgetTitle}
                 widgetType={pendingType}
                 result={pendingWidget?.result}
+                config={pendingWidget?.config ?? {}}
+                data={pendingWidget?.data ?? null}
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}
                 chatHistory={chatHistory}
               />
+            </div>
+            {!chatOpen && chatHistory.length > 0 && (
+              <button
+                onClick={() => setChatOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  marginBottom: 8,
+                  background: 'rgba(255,255,255,0.9)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(6,182,212,0.3)',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'Pretendard,sans-serif',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: '#1d1a24',
+                  boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
+                  transition: 'opacity 0.2s ease',
+                }}
+              >
+                <span style={{ color: '#06b6d4', fontSize: 14 }}>✦</span>
+                FINT 대화 열기
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 2 }}>
+                  <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
             )}
             <QueryBar
               value={queryInput}

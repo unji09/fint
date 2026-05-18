@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import type { Step, WidgetResult, ChatMessage } from '@/types/dashboard';
-import { BarChartSvg, LineChartSvg, SegmentChart, KpiCard, TableWidget } from './ChartWidgets';
+import WidgetRenderer from './WidgetRenderer';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface Props {
   steps: Step[];
@@ -13,6 +14,8 @@ interface Props {
   widgetTitle: string;
   widgetType: string;
   result?: WidgetResult | null;
+  config?: Record<string, unknown>;
+  data?: Record<string, unknown>[] | null;
   onTitleChange: (v: string) => void;
   onCollapse: () => void;
   onDragStart: (e: React.MouseEvent) => void;
@@ -30,30 +33,111 @@ export default function FintChatPanel({
   widgetTitle,
   widgetType,
   result,
+  config: widgetConfig = {},
+  data: widgetData = null,
   onTitleChange,
   onCollapse,
   onDragStart,
   chatHistory = [],
 }: Props) {
-  const data = (result?.data as Record<string, unknown> | undefined) ?? {};
-  const labels = Array.isArray(data.labels) ? (data.labels as string[]) : undefined;
-  const values = Array.isArray(data.values) ? (data.values as number[]) : undefined;
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
   const insightText = result?.insightText && result.insightText.trim().length > 0
     ? result.insightText
     : FALLBACK_INSIGHT;
   const [editTitle, setEditTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(widgetTitle);
+
+  /* 리사이즈 */
+  const [panelSize, setPanelSize] = useState({ w: isMobile ? 0 : 390, h: isMobile ? 320 : 420 });
+  const resizing = useRef(false);
+  const resizeStart = useRef({ x: 0, y: 0, w: 390, h: 420 });
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizing.current = true;
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: panelSize.w, h: panelSize.h };
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return;
+      const dw = ev.clientX - resizeStart.current.x;
+      const dh = resizeStart.current.y - ev.clientY;
+      setPanelSize({
+        w: Math.max(320, Math.min(700, resizeStart.current.w + dw)),
+        h: Math.max(250, Math.min(700, resizeStart.current.h + dh)),
+      });
+    };
+    const onUp = () => {
+      resizing.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
   useEffect(() => {
     setTitleVal(widgetTitle);
   }, [widgetTitle]);
 
   /* 자동 스크롤 */
-  const scrollEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollToBottom = (instant?: boolean) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    if (instant) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  };
   useEffect(() => {
-    scrollEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory.length, isLoading, isDone]);
+    scrollToBottom();
+  }, [chatHistory.length, isLoading]);
+  useEffect(() => {
+    if (isDone) scrollToBottom(true);
+  }, [isDone]);
 
   return (
+    <div style={{ position: 'relative', width: isMobile ? '100%' : panelSize.w, marginBottom: 10 }}>
+      {/* 리사이즈 핸들 — 패널 바깥 레이어, 투명 영역은 클릭 통과 */}
+      <div
+        style={{
+          position: 'absolute',
+          top: -3,
+          right: -3,
+          width: 40,
+          height: 40,
+          zIndex: 10,
+          pointerEvents: 'none',
+          filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.15))',
+        }}
+      >
+        <svg width="40" height="40" viewBox="0 0 40 40" style={{ display: 'block' }}>
+          <path
+            d="M38 40 L38 20 Q38 2 20 2 L0 2"
+            stroke="transparent"
+            strokeWidth="12"
+            fill="none"
+            style={{ pointerEvents: 'stroke', cursor: 'ne-resize' }}
+            onMouseDown={handleResizeStart}
+          />
+          <path
+            d="M38 40 L38 20 Q38 2 20 2 L0 2"
+            stroke="white"
+            strokeWidth="5"
+            fill="none"
+            pointerEvents="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M38 40 L38 20 Q38 2 20 2 L0 2"
+            stroke="#06b6d4"
+            strokeWidth="2.5"
+            fill="none"
+            pointerEvents="none"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
     <div
       style={{
         background:
@@ -68,11 +152,12 @@ export default function FintChatPanel({
           '0 12px 32px rgba(15,23,42,0.10), ' +
           '0 24px 48px -12px rgba(6,182,212,0.12)',
         borderRadius: 20,
-        width: 390,
-        marginBottom: 10,
+        width: '100%',
         overflow: 'hidden',
+        position: 'relative' as const,
       }}
     >
+
       {/* 헤더 */}
       <div
         style={{
@@ -116,21 +201,20 @@ export default function FintChatPanel({
       </div>
 
       <div
+        ref={scrollContainerRef}
         style={{
           padding: '12px 16px',
           display: 'flex',
           flexDirection: 'column',
           gap: 10,
-          maxHeight: 420,
+          maxHeight: panelSize.h,
           overflowY: 'auto',
         }}
       >
-        {/* 이전 대화 내역 — 현재 드래그 가능한 위젯은 아래 별도 블록에서 렌더링하므로 마지막 assistant 메시지 제외 */}
+        {/* 이전 대화 내역 — isDone 상태에서 마지막 assistant 메시지는 아래 별도 블록에서 렌더링 */}
         {chatHistory.filter((msg, idx) => {
-          // isDone 상태에서 마지막 assistant 메시지는 아래 드래그 가능 위젯 블록에서 표시
-          if (!isDone || errorMessage) return true;
+          if (!isDone) return true;
           if (msg.role !== 'assistant') return true;
-          // 마지막 assistant 메시지인지 확인
           const lastAssistantIdx = chatHistory.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1);
           return idx !== lastAssistantIdx;
         }).map((msg) => {
@@ -182,13 +266,16 @@ export default function FintChatPanel({
             );
           }
           // done assistant message with optional widget preview
-          const msgData = (msg.widget?.data as Record<string, unknown> | undefined) ?? {};
-          const msgLabels = Array.isArray(msgData.labels) ? (msgData.labels as string[]) : undefined;
-          const msgValues = Array.isArray(msgData.values) ? (msgData.values as number[]) : undefined;
           const msgInsight = msg.content && msg.content.trim().length > 0
             ? msg.content
             : FALLBACK_INSIGHT;
           const msgWidgetType = msg.widget?.widgetType ?? 'BAR_CHART';
+          const msgWidgetData = Array.isArray(msg.widget?.data)
+            ? (msg.widget.data as Record<string, unknown>[])
+            : null;
+          const msgWidgetResult = !msgWidgetData && msg.widget?.data
+            ? { data: msg.widget.data, insightText: '' }
+            : null;
           return (
             <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <p
@@ -231,18 +318,13 @@ export default function FintChatPanel({
                       {msg.widget.title}
                     </span>
                   </div>
-                  <div style={{ padding: '4px 10px 6px' }}>
-                    {msgWidgetType === 'LINE_CHART' ? (
-                      <LineChartSvg size="mini" values={msgValues} labels={msgLabels} />
-                    ) : msgWidgetType === 'PIE' || msgWidgetType === 'SEGMENT' ? (
-                      <SegmentChart labels={msgLabels} values={msgValues} />
-                    ) : msgWidgetType === 'KPI' ? (
-                      <KpiCard value={msgValues?.[0] ?? (typeof msgData.value === 'number' ? msgData.value : undefined)} label={msgLabels?.[0]} />
-                    ) : msgWidgetType === 'TABLE' ? (
-                      <TableWidget data={msgData} />
-                    ) : (
-                      <BarChartSvg size="mini" values={msgValues} labels={msgLabels} />
-                    )}
+                  <div style={{ padding: '4px 10px 6px', height: 120 }}>
+                    <WidgetRenderer
+                      widgetType={msgWidgetType}
+                      config={msg.widget.config ?? {}}
+                      data={msgWidgetData}
+                      result={msgWidgetResult}
+                    />
                   </div>
                 </div>
               )}
@@ -378,117 +460,114 @@ export default function FintChatPanel({
           </div>
         )}
 
-        {/* 완료: 미니 위젯 + 드래그 (현재 진행 중인 쿼리의 결과만 — 항상 드래그 가능) */}
+        {/* 완료: 인사이트 텍스트 (스크롤 영역 내) */}
         {isDone && !errorMessage && (
-          <>
-            <p
-              style={{
-                fontFamily: 'Pretendard,sans-serif',
-                fontSize: 13,
-                color: '#475569',
-                margin: 0,
-                lineHeight: 1.6,
-              }}
-            >
-              {insightText}
-            </p>
-            <div
-              onMouseDown={(e) => { e.stopPropagation(); onDragStart(e); }}
-              style={{
-                background: 'rgba(255,255,255,0.85)',
-                border: '1.5px solid rgba(6,182,212,0.4)',
-                borderRadius: 10,
-                overflow: 'hidden',
-                cursor: 'grab',
-                userSelect: 'none',
-              }}
-              title="캔버스로 드래그하세요"
-            >
-              <div
+          <p
+            style={{
+              fontFamily: 'Pretendard,sans-serif',
+              fontSize: 13,
+              color: '#475569',
+              margin: 0,
+              lineHeight: 1.6,
+            }}
+          >
+            {insightText}
+          </p>
+        )}
+      </div>
+
+      {/* 완료: 드래그 위젯 (스크롤 영역 밖 — 항상 하단 고정) */}
+      {isDone && !errorMessage && (
+        <div
+          onMouseDown={(e) => { e.stopPropagation(); onDragStart(e); }}
+          style={{
+            margin: '0 12px 10px',
+            background: 'rgba(255,255,255,0.85)',
+            border: '1.5px solid rgba(6,182,212,0.4)',
+            borderRadius: 10,
+            overflow: 'hidden',
+            cursor: 'grab',
+            userSelect: 'none',
+          }}
+          title="캔버스로 드래그하세요"
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '9px 14px 8px',
+              borderBottom: '1px solid rgba(241,245,249,0.8)',
+            }}
+          >
+            {editTitle ? (
+              <input
+                autoFocus
+                value={titleVal}
+                onChange={(e) => setTitleVal(e.target.value)}
+                onBlur={() => {
+                  setEditTitle(false);
+                  onTitleChange(titleVal);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setEditTitle(false);
+                    onTitleChange(titleVal);
+                  }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '9px 14px 8px',
-                  borderBottom: '1px solid rgba(241,245,249,0.8)',
+                  fontFamily: 'Pretendard,sans-serif',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  border: 'none',
+                  outline: '1px solid #06b6d4',
+                  borderRadius: 3,
+                  padding: '0 4px',
+                  width: '80%',
+                }}
+              />
+            ) : (
+              <span
+                style={{
+                  fontFamily: 'Pretendard,sans-serif',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  color: '#171d1e',
+                  cursor: 'text',
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditTitle(true);
                 }}
               >
-                {editTitle ? (
-                  <input
-                    autoFocus
-                    value={titleVal}
-                    onChange={(e) => setTitleVal(e.target.value)}
-                    onBlur={() => {
-                      setEditTitle(false);
-                      onTitleChange(titleVal);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setEditTitle(false);
-                        onTitleChange(titleVal);
-                      }
-                    }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    style={{
-                      fontFamily: 'Pretendard,sans-serif',
-                      fontWeight: 500,
-                      fontSize: 13,
-                      border: 'none',
-                      outline: '1px solid #06b6d4',
-                      borderRadius: 3,
-                      padding: '0 4px',
-                      width: '80%',
-                    }}
-                  />
-                ) : (
-                  <span
-                    style={{
-                      fontFamily: 'Pretendard,sans-serif',
-                      fontWeight: 500,
-                      fontSize: 13,
-                      color: '#171d1e',
-                      cursor: 'text',
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      setEditTitle(true);
-                    }}
-                  >
-                    {titleVal}
-                  </span>
-                )}
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: '#06b6d4',
-                    fontFamily: 'Pretendard,sans-serif',
-                    fontWeight: 500,
-                  }}
-                >
-                  드래그 ↗
-                </span>
-              </div>
-              <div style={{ padding: '6px 12px 8px' }}>
-                {widgetType === 'LINE_CHART' ? (
-                  <LineChartSvg size="mini" values={values} labels={labels} />
-                ) : widgetType === 'PIE' || widgetType === 'SEGMENT' ? (
-                  <SegmentChart labels={labels} values={values} />
-                ) : widgetType === 'KPI' ? (
-                  <KpiCard value={values?.[0] ?? (typeof data.value === 'number' ? data.value : undefined)} label={labels?.[0]} />
-                ) : widgetType === 'TABLE' ? (
-                  <TableWidget data={data} />
-                ) : (
-                  <BarChartSvg size="mini" values={values} labels={labels} />
-                )}
-              </div>
-            </div>
-          </>
-        )}
+                {titleVal}
+              </span>
+            )}
+            <span
+              style={{
+                fontSize: 11,
+                color: '#06b6d4',
+                fontFamily: 'Pretendard,sans-serif',
+                fontWeight: 500,
+              }}
+            >
+              드래그 ↗
+            </span>
+          </div>
+          <div style={{ padding: '6px 12px 8px', height: 140 }}>
+            <WidgetRenderer
+              widgetType={widgetType}
+              config={widgetConfig}
+              data={widgetData}
+              result={result ?? null}
+            />
+          </div>
+        </div>
+      )}
 
-        {/* 자동 스크롤 앵커 */}
-        <div ref={scrollEndRef} />
-      </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
     </div>
   );
 }
