@@ -318,6 +318,9 @@ private val TOKEN_SYNC_JS: String = """
       window.Android.saveAuthToken(access, refresh || '');
     } else {
       dlog('no token found in storages. cookieKeys=' + document.cookie.split(';').map(function(c){return c.trim().split('=')[0];}).join(','));
+      if (typeof window.Android.notifyLoggedOut === 'function') {
+        window.Android.notifyLoggedOut();
+      }
     }
   } catch (e) {
     dlog('token sync failed: ' + (e && e.message));
