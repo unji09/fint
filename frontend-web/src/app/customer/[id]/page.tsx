@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
 import DealCard from '@/components/customer/DealCard';
@@ -15,6 +15,7 @@ import { useCreateDeal } from '@/hooks/useDeal';
 import { useConfirm } from '@/components/common/ConfirmDialog';
 import { useNextActions, fetchNextActionDetail } from '@/hooks/useNextActions';
 import { fetchWithAuth } from '@/hooks/useAuth';
+import useBreakpoint from '@/hooks/useBreakpoint';
 import type { Deal, StrategyCard } from '@/types/customer';
 
 const SA = ['#06b6d4', '#cbd5e1', '#fb923c'];
@@ -41,8 +42,10 @@ function Av({ name, color, size = 30 }: { name: string; color: string; size?: nu
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const bp = useBreakpoint();
+  const isCompact = bp !== 'desktop';
   const scrollRef = useRef<HTMLDivElement>(null);
-  // accounts 목록은 layout 의 사이드바가 관리한다. page 에서는 acc 정보가 필요할 때만 같은 hook 호출 (모듈 캐시로 즉시 반환됨)
   const { accounts } = useAccountList();
   const { signals, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
@@ -116,8 +119,17 @@ export default function CustomerDetailPage() {
 
   return (
     <>
-      <main ref={scrollRef} style={{ flex: 1, height: '100%', overflowX: 'hidden', overflowY: 'auto', padding: '24px 40px 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 브레드크럼 — 큰 날씨 표시는 아래 WeatherPanel 로 이동 */}
+      <main ref={scrollRef} style={{ flex: 1, height: '100%', overflowX: 'hidden', overflowY: 'auto', padding: isCompact ? '16px 16px 32px' : '24px 40px 48px', display: 'flex', flexDirection: 'column', gap: isCompact ? 12 : 16 }}>
+          {/* 모바일 뒤로가기 */}
+          {isCompact && (
+            <button
+              onClick={() => router.push('/customer')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: F, fontSize: 14, color: '#06b6d4', fontWeight: 500 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              목록
+            </button>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {crumbs.map((c, i) => {
               const last = i === crumbs.length - 1;
@@ -139,7 +151,7 @@ export default function CustomerDetailPage() {
 
           {/* 메인 카드 — height 자동. 카드 수에 따라 박스 세로가 자라/줄어 빈 공간을 없앤다.
               일반 모드(row): 양 패널 중 큰 쪽에 맞춰 stretch. 전체 보기(column): 콘텐츠 그대로. */}
-          <div style={{ background: '#fff', border: '1px solid #e2eaf0', borderRadius: 10, display: 'flex', flexDirection: allDeals ? 'column' : 'row', flexShrink: 0, overflow: 'hidden' }}>
+          <div style={{ background: '#fff', border: '1px solid #e2eaf0', borderRadius: 10, display: 'flex', flexDirection: (allDeals || isCompact) ? 'column' : 'row', flexShrink: 0, overflow: 'hidden' }}>
             {allDeals ? (
               <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -151,7 +163,7 @@ export default function CustomerDetailPage() {
                   // space-evenly: 양옆 / 카드 사이 빈 공간 균등 분배.
                   <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-evenly', alignItems: 'center', gap: 16 }}>
                     {visDeal.map(d => (
-                      <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} />
+                      <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} isCompact={isCompact} />
                     ))}
                   </div>
                 ) : (
@@ -163,7 +175,7 @@ export default function CustomerDetailPage() {
             ) : (
               <>
                 {/* 왼쪽 */}
-                <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, borderRight: '1px solid #e2eaf0', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+                <div style={{ flex: isCompact ? '0 0 auto' : '1 1 0', minWidth: 0, minHeight: isCompact ? undefined : 0, borderRight: isCompact ? 'none' : '1px solid #e2eaf0', borderBottom: isCompact ? '1px solid #e2eaf0' : 'none', padding: isCompact ? '16px' : '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: isCompact ? undefined : 'auto' }}>
                   {selContact ? (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -227,7 +239,7 @@ export default function CustomerDetailPage() {
                 </div>
 
                 {/* 오른쪽: 최근 딜 */}
-                <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+                <div style={{ flex: isCompact ? '0 0 auto' : '1 1 0', minWidth: 0, minHeight: isCompact ? undefined : 0, padding: isCompact ? '16px' : '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: isCompact ? undefined : 'auto' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontFamily: F, fontWeight: 600, fontSize: 14, color: '#1e293b' }}>{selContact ? `${selContact.name} 딜` : '최근 딜'}</span>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -255,7 +267,7 @@ export default function CustomerDetailPage() {
                     // 전체 보기와 동일 패턴: flex + space-evenly + 세로 가운데
                     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-evenly', alignItems: 'center', alignContent: 'center', gap: 16 }}>
                       {visDeal.slice(0, 2).map(d => (
-                        <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} />
+                        <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} isCompact={isCompact} />
                       ))}
                     </div>
                   ) : (
