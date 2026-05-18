@@ -623,7 +623,8 @@ export default function WeekGrid({
             style={{
               display: 'flex',
               borderBottom: `1px solid ${BORDER}`,
-              height: 44,
+              height: isCompact ? 'auto' : 44,
+              minHeight: isCompact ? 28 : 44,
             }}
           >
             <div style={{ width: timeColW, flexShrink: 0, borderRight: `1px solid ${BORDER}` }} />
@@ -638,9 +639,9 @@ export default function WeekGrid({
                     flex: 1,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: isCompact ? 'center' : 'flex-start',
-                    gap: isCompact ? 4 : 8,
-                    padding: isCompact ? '0 4px' : '0 16px',
+                    justifyContent: 'center',
+                    gap: isCompact ? 3 : 8,
+                    padding: isCompact ? '3px 2px' : '0 16px',
                     boxShadow: dividerShadow(i),
                     overflow: 'hidden',
                     minWidth: 0,
@@ -653,29 +654,30 @@ export default function WeekGrid({
                 >
                   <span
                     style={{
-                      width: 8,
-                      height: 8,
+                      width: isCompact ? 6 : 8,
+                      height: isCompact ? 6 : 8,
                       borderRadius: '50%',
                       backgroundColor: s.dot,
                       flexShrink: 0,
                     }}
                   />
+                  <span
+                    style={{
+                      fontSize: isCompact ? 10 : 13,
+                      fontWeight: active ? 700 : 500,
+                      color: active ? s.cTxt : '#1F2126',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      textAlign: 'center',
+                      lineHeight: '1.2',
+                      ...(isCompact
+                        ? { whiteSpace: 'normal' as const, wordBreak: 'keep-all' as const }
+                        : { whiteSpace: 'nowrap' as const, flex: 1, textAlign: 'left' as const }),
+                    }}
+                  >
+                    {s.label}
+                  </span>
                   {!isCompact && (
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: active ? 700 : 500,
-                        color: active ? s.cTxt : '#1F2126',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        flex: 1,
-                        textAlign: 'left',
-                      }}
-                    >
-                      {s.label}
-                    </span>
-                  )}
                   <span
                     style={{
                       fontSize: 11,
@@ -689,6 +691,7 @@ export default function WeekGrid({
                   >
                     {s.count}
                   </span>
+                  )}
                 </button>
               );
             })}
@@ -712,17 +715,18 @@ export default function WeekGrid({
                 style={{
                   flex: 1,
                   display: 'flex',
+                  flexDirection: isCompact ? 'column' : 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '6px 8px 7px',
+                  padding: isCompact ? '4px 2px' : '6px 8px 7px',
                   boxShadow: dividerShadow(i),
-                  gap: 5,
+                  gap: isCompact ? 1 : 5,
                   minWidth: 0,
                 }}
               >
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: isCompact ? 11 : 11,
                     fontWeight: 600,
                     color: DAY_COLOR(i),
                     letterSpacing: '0.02em',
@@ -732,22 +736,22 @@ export default function WeekGrid({
                 </span>
                 <span
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: isCompact ? 22 : 24,
+                    height: isCompact ? 22 : 24,
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: today ? '#06B6D4' : 'transparent',
-                    color: today ? '#fff' : i === 0 || i === 6 ? RED : '#1F2126',
+                    color: today ? '#fff' : (i === 0 || i === 6 ? RED : '#1F2126'),
                     fontSize: 13,
-                    fontWeight: 700,
+                    fontWeight: isCompact ? 600 : 700,
                     flexShrink: 0,
                   }}
                 >
                   {day.getDate()}
                 </span>
-                {cnt > 0 && (
+                {!isCompact && cnt > 0 && (
                   <span
                     style={{
                       fontSize: 9,

@@ -29,7 +29,7 @@ import {
 } from '@/components/calendar/utils';
 
 // ── 피그마 수치 상수 ─────────────────────────────────────────
-const BG = '#F8F8F5'; // 페이지 배경 (linear-gradient 근사)
+const BG = '#F8F8FA'; // 페이지 배경 (neutral gray)
 const WHITE = '#FFFFFF';
 const BORDER = '#E5E6DE'; // Figma: var(--color/yellow/89, #e5e6de)
 
@@ -56,8 +56,8 @@ const PIPELINE_STYLES = [
   { label: '수주',        code: '수주',        dot: '#268C66', cBg: '#DEEEE8', cTxt: '#268C66' },
 ];
 
-// ── 미니 주간 (월~일) ─────────────────────────────────────────
-const WK = ['월', '화', '수', '목', '금', '토', '일'];
+// ── 미니 주간 (일~토) ─────────────────────────────────────────
+const WK = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS_KO = [
   '1월',
   '2월',
@@ -73,15 +73,6 @@ const MONTHS_KO = [
   '12월',
 ];
 
-function getMondayWeek(d: Date): Date[] {
-  const b = new Date(d);
-  b.setDate(b.getDate() + (b.getDay() === 0 ? -6 : 1 - b.getDay()));
-  return Array.from({ length: 7 }, (_, i) => {
-    const n = new Date(b);
-    n.setDate(n.getDate() + i);
-    return n;
-  });
-}
 
 // ── Aside 이벤트 카드 (Figma 719:7431)
 // bg-[#f6f7f9] border-[catBg] rounded-[10px] px-[14px] py-[12px] gap-[8px]
@@ -407,7 +398,7 @@ function DayTimeView({
   const dragTop = drag ? Math.min(drag.startY, drag.currentY) : 0;
   const dragH = drag ? Math.abs(drag.currentY - drag.startY) : 0;
   return (
-    <div style={{ flex: 1, overflowY: 'auto' }}>
+    <div style={{ flex: 1, overflowY: 'auto', backgroundColor: WHITE }}>
       <div
         ref={colRef}
         onMouseDown={handleMouseDown}
@@ -769,7 +760,14 @@ export default function CalendarPage() {
   const isMobile = bp === 'mobile';
   const isTablet = bp === 'tablet';
   const isCompact = isMobile || isTablet;
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [viewMode, setViewModeRaw] = useState<ViewMode>('month');
+  const setViewMode = (m: ViewMode) => {
+    if (m === 'day' && !isCompact) return;
+    setViewModeRaw(m);
+  };
+  useEffect(() => {
+    if (!isCompact && viewMode === 'day') setViewModeRaw('week');
+  }, [isCompact, viewMode]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -875,7 +873,7 @@ export default function CalendarPage() {
     // 응답 도착 시 여전히 같은 이벤트를 보고 있는지 확인 (race condition 방지)
     if (detail && clickedIdRef.current === ev.eventId) setSelectedEvent(detail);
   };
-  const miniWk = getMondayWeek(selectedDate);
+  const miniWk = getWeekDays(selectedDate);
 
   // ── 알림 드롭 → 일정 추가 prefill ──
   const [dropPrefill, setDropPrefill] = useState<{
@@ -1041,15 +1039,14 @@ export default function CalendarPage() {
                         padding: 0,
                       }}
                     >
-                      <span style={{ fontSize: 11, color: TXT2, fontFamily: F_PRETENDARD }}>
+                      <span style={{ fontSize: 11, color: i === 0 || i === 6 ? RED : TXT2, fontFamily: F_PRETENDARD }}>
                         {WK[i]}
                       </span>
-                      {/* 선택일: teal원 / 오늘: teal텍스트 / 나머지: 기본 */}
                       <span
                         style={{
                           fontSize: 13,
-                          fontWeight: selected ? 700 : 400,
-                          color: selected ? WHITE : today ? TEAL : TXT1,
+                          fontWeight: selected ? 700 : 600,
+                          color: selected ? WHITE : today ? TEAL : (i === 0 || i === 6 ? RED : TXT1),
                           backgroundColor: selected ? TEAL : 'transparent',
                           borderRadius: 14,
                           padding: selected ? '5px 8px' : '5px 4px',
@@ -1193,7 +1190,7 @@ export default function CalendarPage() {
                 [
                   { t: '월', m: 'month' },
                   { t: '주', m: 'week' },
-                  { t: '일', m: 'day' },
+                  ...(isCompact ? [{ t: '일', m: 'day' as ViewMode }] : []),
                 ] as { t: string; m: ViewMode }[]
               ).map(({ t, m }) => (
                 <button
@@ -1259,7 +1256,8 @@ export default function CalendarPage() {
                 gridTemplateColumns: 'repeat(7, 1fr)',
                 alignItems: 'stretch',
                 overflow: 'hidden',
-                height: isCompact ? 36 : 44,
+                height: isCompact ? 'auto' : 44,
+                minHeight: isCompact ? 28 : 44,
               }}
             >
               {pipeline.map((s, i) => {
@@ -1272,9 +1270,9 @@ export default function CalendarPage() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: isCompact ? 'center' : 'flex-start',
-                      gap: isCompact ? 4 : 8,
-                      padding: isCompact ? '0 4px' : '0 16px',
+                      justifyContent: 'center',
+                      gap: isCompact ? 3 : 8,
+                      padding: isCompact ? '3px 2px' : '0 16px',
                       borderRight: i < 6 ? '1px solid #D6D6D6' : 'none',
                       borderTop: 'none',
                       borderBottom: 'none',
@@ -1289,29 +1287,30 @@ export default function CalendarPage() {
                   >
                     <span
                       style={{
-                        width: 8,
-                        height: 8,
+                        width: isCompact ? 6 : 8,
+                        height: isCompact ? 6 : 8,
                         borderRadius: '50%',
                         backgroundColor: s.dot,
                         flexShrink: 0,
                       }}
                     />
+                    <span
+                      style={{
+                        fontSize: isCompact ? 10 : 13,
+                        fontWeight: active ? 700 : 500,
+                        color: active ? s.cTxt : TXT1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        textAlign: 'center',
+                        lineHeight: '1.2',
+                        ...(isCompact
+                          ? { whiteSpace: 'normal' as const, wordBreak: 'keep-all' as const }
+                          : { whiteSpace: 'nowrap' as const, flex: 1, textAlign: 'left' as const }),
+                      }}
+                    >
+                      {s.label}
+                    </span>
                     {!isCompact && (
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: active ? 700 : 500,
-                          color: active ? s.cTxt : TXT1,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          flex: 1,
-                          textAlign: 'left',
-                        }}
-                      >
-                        {s.label}
-                      </span>
-                    )}
                     <span
                       style={{
                         fontSize: 11,
@@ -1326,6 +1325,7 @@ export default function CalendarPage() {
                     >
                       {s.count}
                     </span>
+                    )}
                   </button>
                 );
               })}
@@ -1335,18 +1335,125 @@ export default function CalendarPage() {
           {/* ── 달력 그리드 ── */}
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             {viewMode === 'day' ? (
-              <DayTimeView
-                events={events}
-                selectedDate={selectedDate}
-                onEventClick={(ev) => {
-                  setSelectedDate(new Date(ev.startAt));
-                  handleEventClick(ev);
-                }}
-                onTimeClick={onTimeClick}
-                onTimeRangeSelect={onTimeRangeSelect}
-                onResized={() => refetch()}
-                onNotificationDrop={handleNotificationDrop}
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                {/* 날짜 헤더 + 미니 주간 (사이드바와 동일 구조) */}
+                <div
+                  style={{
+                    borderBottom: `1px solid ${BORDER}`,
+                    padding: '14px 14px 11px',
+                    flexShrink: 0,
+                    backgroundColor: WHITE,
+                  }}
+                >
+                  {!isCompact && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0 20px 8px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 700,
+                        color: TXT1,
+                        whiteSpace: 'nowrap',
+                        fontFamily: F_PRETENDARD,
+                      }}
+                    >
+                      {selectedDate.toLocaleDateString('ko-KR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        weekday: 'short',
+                      })}
+                    </span>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      {['◀', '▶'].map((ch, idx) => (
+                        <button
+                          key={ch}
+                          onClick={() =>
+                            setSelectedDate((d) => {
+                              const n = new Date(d);
+                              n.setDate(n.getDate() + (idx === 0 ? -7 : 7));
+                              return n;
+                            })
+                          }
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            color: TXT2,
+                            fontSize: 14,
+                            padding: 0,
+                            fontFamily: F_PRETENDARD,
+                          }}
+                        >
+                          {ch}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 12px' }}>
+                    {miniWk.map((day, idx) => {
+                      const sel = isSameDay(day, selectedDate);
+                      const tod = isToday(day);
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedDate(day)}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 1,
+                            flex: 1,
+                            border: 'none',
+                            backgroundColor: 'transparent',
+                            cursor: 'pointer',
+                            padding: '4px 2px',
+                          }}
+                        >
+                          <span style={{ fontSize: 11, fontWeight: 600, color: idx === 0 || idx === 6 ? RED : '#737880', letterSpacing: '0.02em' }}>
+                            {WK[idx]}
+                          </span>
+                          <span
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 13,
+                              fontWeight: sel ? 700 : 600,
+                              color: sel ? WHITE : tod ? TEAL : (idx === 0 || idx === 6 ? RED : TXT1),
+                              backgroundColor: sel ? TEAL : tod ? 'transparent' : 'transparent',
+                            }}
+                          >
+                            {day.getDate()}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <DayTimeView
+                  events={dayEvs}
+                  selectedDate={selectedDate}
+                  onEventClick={(ev) => {
+                    setSelectedDate(new Date(ev.startAt));
+                    handleEventClick(ev);
+                  }}
+                  onTimeClick={onTimeClick}
+                  onTimeRangeSelect={onTimeRangeSelect}
+                  onResized={() => refetch()}
+                  onNotificationDrop={handleNotificationDrop}
+                />
+              </div>
             ) : viewMode === 'month' ? (
               <MonthGrid
                 currentDate={currentDate}
