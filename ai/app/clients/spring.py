@@ -14,7 +14,7 @@ class SpringClient:
     async def send_mood_callback(
         self,
         activity_id: int,
-        account_id: int,
+        account_id: int | None,
         tenant_id: int,
         mood_score: int,
         reason: str,
@@ -25,7 +25,7 @@ class SpringClient:
             resp = await self._client.post(
                 f"/api/v1/internal/activities/{activity_id}/ai/mood/callback",
                 json={
-                    "accountId": account_id,
+                    "accountId": account_id,  # None 이면 JSON null 로 직렬화됨
                     "moodScore": mood_score,
                     "reason": reason,
                     "keySignals": key_signals,
