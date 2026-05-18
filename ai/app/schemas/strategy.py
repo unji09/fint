@@ -27,8 +27,16 @@ class NextActionResponse(BaseModel):
     reason: str
     category: str
     related_type: str
-    importance_score: float
+    importance_score: int = Field(ge=0, le=5)
     success_probability: int
     sources: dict
     recommended_script: str
     pipeline_stage_id: int
+
+
+class FeedbackRequest(BaseModel):
+    action_id: str
+    action_name: str
+    label: str = Field(pattern=r"^(good|bad|neutral)$")
+    label_reason: str | None = None
+    session_id: str | None = None

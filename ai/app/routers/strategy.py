@@ -9,14 +9,24 @@ from app.clients.llm import LLMClient
 from app.core.db import get_db
 from app.core.errors import BusinessException, CommonErrorCode
 from app.core.security import get_tenant_id
-from app.schemas.strategy import NextActionRequest, NextActionResponse, TriggerType
+from app.schemas.strategy import (
+    FeedbackRequest,
+    NextActionRequest,
+    NextActionResponse,
+)
 from app.strategy.context_builder import (
     build_context,
     load_pipeline_stages,
     map_category_to_stage_id,
 )
 from app.strategy.engine import recommend
-from app.strategy.feature_extractor import extract_features, extract_features_dummy
+from app.strategy.feature_extractor import (
+    extract_features,
+    extract_features_dummy,
+    extract_features_mock,
+)
+from app.strategy.gap_check import check_gaps
+from app.strategy.urgency import evaluate_urgency
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +60,25 @@ async def generate_next_actions(
         )
 
     # ===== 더미 모드 (테스트용, OPENAI_API_KEY 토큰 절약) =====
-    features = extract_features_dummy(context_data.context_text)
+    # features = extract_features_dummy(context_data.context_text)
 
-    # ===== 실제 LLM 호출 모드 (운영용) =====
-    # features = await extract_features(context_data.context_text, llm)
+    # ===== Mock 모드 (API 호출 없이 regex 기반 추출) =====
+    # features = extract_features_mock(context_data.context_text)
+
+    # ===== 실제 LLM 호출 모드 (운영용, OpenAI function calling) =====
+    features = await extract_features(context_data.context_text, llm)
 
     if not features:
         raise BusinessException(
             CommonErrorCode.EXTERNAL_API_FAILED,
             "피처 추출에 실패했습니다",
+        )
+
+    gaps = check_gaps(features)
+    if not gaps["ok_to_recommend"]:
+        logger.warning(
+            "Hard-required features missing: %s (proceeding with degraded quality)",
+            gaps["missing_hard"],
         )
 
     recommendations = recommend(features, top_n=TOP_N, min_score=0.0)
@@ -74,13 +94,14 @@ async def generate_next_actions(
 
     responses: list[NextActionResponse] = []
     for action, score, reason in recommendations:
+        urgency_data = evaluate_urgency(features, action)
         responses.append(
             NextActionResponse(
                 action=action["name"],
                 reason=reason,
                 category=action.get("category", "GENERAL"),
                 related_type=related_type,
-                importance_score=round(min(score * 100, 100.0), 1),
+                importance_score=urgency_data["n_stars"],
                 success_probability=min(int(score * 100), 99),
                 sources=sources,
                 recommended_script=_derive_script(action, features),
@@ -97,7 +118,26 @@ async def generate_next_actions(
     return responses
 
 
-def _resolve_related_type(trigger_type: TriggerType, meeting_id: int | None) -> str:
+@router.post("/next-actions/feedback")
+async def submit_feedback(
+    body: FeedbackRequest,
+    tenant_id: int = Depends(get_tenant_id),
+    x_tenant_id: str | None = Header(None, include_in_schema=True),
+) -> dict:
+    from app.strategy.feedback import save_feedback
+
+    save_feedback(
+        features={},
+        recommendation={"id": body.action_id, "name": body.action_name},
+        label=body.label,
+        label_reason=body.label_reason,
+        session_id=body.session_id,
+    )
+    return {"status": "ok"}
+
+
+def _resolve_related_type(trigger_type, meeting_id: int | None) -> str:
+    from app.schemas.strategy import TriggerType
     if trigger_type == TriggerType.MEETING_CREATED or meeting_id is not None:
         return "MEETING"
     return "ACCOUNT"
@@ -110,7 +150,7 @@ def _derive_script(action: dict, features: dict) -> str:
     persona_str = ", ".join(persona[:2]) if persona else "담당자"
 
     return (
-        f"{persona_str}에게 연락하여 {name}을(를) 진행하세요. "
+        f"{persona_str}에게 연락하여 {name}을(를) 진행하세요.\n"
         f"기대 결과: {outcome}"
     )
 
@@ -119,7 +159,16 @@ _DART_BASE_URL = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo="
 
 
 def _build_sources(ctx) -> dict:
-    news = [{"title": n.get("title", "")} for n in ctx.news_items]
+    news = []
+    for n in ctx.news_items:
+        item: dict[str, str] = {
+            "title": n.get("title", ""),
+            "summary": n.get("content_summary") or "",
+        }
+        link = n.get("link")
+        if link:
+            item["url"] = link
+        news.append(item)
 
     dart = []
     for d in ctx.dart_items:
