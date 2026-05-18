@@ -86,6 +86,48 @@ def deduplicate_articles(
     return results
 
 
+def deduplicate_against_existing(
+    articles: list[CollectedArticleData],
+    existing_embeddings: np.ndarray,
+) -> list[CollectedArticleData]:
+    """DB 기존 기사 임베딩과 비교하여 중복을 필터링한다.
+
+    existing_embeddings: (N, dim) shape의 L2-정규화된 title 임베딩 배열.
+    """
+    if not articles or existing_embeddings.size == 0:
+        return articles
+
+    if any(len(a.title_embedding) == 0 for a in articles):
+        logger.warning("DB dedup skipped: some articles have empty embeddings")
+        return articles
+
+    new_matrix = np.array(
+        [a.title_embedding for a in articles], dtype=np.float32,
+    )
+    sim_matrix = new_matrix @ existing_embeddings.T
+    max_sims = sim_matrix.max(axis=1)
+
+    results: list[CollectedArticleData] = []
+    removed = 0
+    for i, article in enumerate(articles):
+        if max_sims[i] < SIMILARITY_THRESHOLD:
+            results.append(article)
+        else:
+            removed += 1
+            logger.info(
+                "DB dedup: filtered '%s' (max_similarity=%.3f)",
+                article.item.title, float(max_sims[i]),
+            )
+
+    if removed > 0:
+        logger.info(
+            "DB dedup: %d articles → %d unique (removed %d DB duplicates)",
+            len(articles), len(results), removed,
+        )
+
+    return results
+
+
 def _pick_representative(cluster: list[CollectedArticleData]) -> CollectedArticleData:
     return max(cluster, key=lambda a: (
         len(a.item.description),
