@@ -21,7 +21,7 @@ public class SignalCollectScheduler {
     private final NextActionTriggerService nextActionTriggerService;
     private final AtomicBoolean enabled = new AtomicBoolean(true);
 
-    @Scheduled(fixedRate = 600_000) // 1시간 = 3_600_000, 6분 = 360_000, 10분 = 600_000
+    @Scheduled(fixedRate = 3_600_000) // 1시간 = 3_600_000, 6분 = 360_000, 10분 = 600_000
     public void collectSignals() {
         if (!enabled.get()) {
             log.debug("[SignalScheduler] skipped (disabled)");
