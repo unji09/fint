@@ -55,8 +55,8 @@ const PIPELINE_STYLES = [
   { label: '수주',        code: '수주',        dot: '#268C66', cBg: '#DEEEE8', cTxt: '#268C66' },
 ];
 
-// ── 미니 주간 (월~일) ─────────────────────────────────────────
-const WK = ['월', '화', '수', '목', '금', '토', '일'];
+// ── 미니 주간 (일~토, 월간/주간 뷰와 동일) ─────────────────────
+const WK = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS_KO = [
   '1월',
   '2월',
@@ -71,16 +71,6 @@ const MONTHS_KO = [
   '11월',
   '12월',
 ];
-
-function getMondayWeek(d: Date): Date[] {
-  const b = new Date(d);
-  b.setDate(b.getDate() + (b.getDay() === 0 ? -6 : 1 - b.getDay()));
-  return Array.from({ length: 7 }, (_, i) => {
-    const n = new Date(b);
-    n.setDate(n.getDate() + i);
-    return n;
-  });
-}
 
 // ── Aside 이벤트 카드 (Figma 719:7431)
 // bg-[#f6f7f9] border-[catBg] rounded-[10px] px-[14px] py-[12px] gap-[8px]
@@ -868,7 +858,7 @@ export default function CalendarPage() {
     // 응답 도착 시 여전히 같은 이벤트를 보고 있는지 확인 (race condition 방지)
     if (detail && clickedIdRef.current === ev.eventId) setSelectedEvent(detail);
   };
-  const miniWk = getMondayWeek(selectedDate);
+  const miniWk = getWeekDays(selectedDate);
 
   // ── 알림 드롭 → 일정 추가 prefill ──
   const [dropPrefill, setDropPrefill] = useState<{
