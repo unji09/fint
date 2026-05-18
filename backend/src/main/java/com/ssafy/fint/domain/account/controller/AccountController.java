@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.account.controller;
 
 import com.ssafy.fint.domain.account.dto.AccountDealsResponse;
 import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
+import com.ssafy.fint.domain.account.dto.AccountEnrichResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
@@ -111,5 +112,11 @@ public class AccountController implements AccountSwagger {
             @PathVariable Long accountId
     ) {
         return ApiResponse.ok(accountService.findMoodHistory(accountId));
+    }
+
+    @Override
+    @PostMapping("/{accountId}/enrich")
+    public ApiResponse<AccountEnrichResponse> enrich(@PathVariable Long accountId) {
+        return ApiResponse.ok(accountService.enrich(accountId));
     }
 }

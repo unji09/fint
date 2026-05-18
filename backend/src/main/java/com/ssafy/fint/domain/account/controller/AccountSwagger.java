@@ -2,6 +2,7 @@ package com.ssafy.fint.domain.account.controller;
 
 import com.ssafy.fint.domain.account.dto.AccountDealsResponse;
 import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
+import com.ssafy.fint.domain.account.dto.AccountEnrichResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
@@ -58,4 +59,9 @@ public interface AccountSwagger {
     @Operation(summary = "고객 날씨 추이 조회",
             description = "mood 변화 이력 created_at 내림차순. enum: RAINBOW/SUNNY/CLOUDY/RAINY/THUNDER.")
     ApiResponse<List<AccountMoodResponse>> findMoodHistory(Long accountId);
+
+    @Operation(summary = "고객사 정보 보강 (DART)",
+            description = "DART에서 고객사명으로 사업자번호·업종 자동 조회. "
+                    + "1건 매칭 시 자동 반영, 다수 후보 시 candidates 반환.")
+    ApiResponse<AccountEnrichResponse> enrich(Long accountId);
 }
