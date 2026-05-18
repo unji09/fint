@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import PipelineProgress from './PipelineProgress';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import { useConfirm, usePrompt } from '@/components/common/ConfirmDialog';
+import useBreakpoint from '@/hooks/useBreakpoint';
 import type { Deal } from '@/types/customer';
 
 // 백엔드 DealDetailResponse 와 1:1 매칭
@@ -78,6 +79,8 @@ interface Props {
 export default function DealDetailPanel({ deal, onDealChanged }: Props) {
   const confirm = useConfirm();
   const prompt = usePrompt();
+  const bp = useBreakpoint();
+  const isCompact = bp !== 'desktop';
   const [detail, setDetail] = useState<DealDetail | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,9 +137,9 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
   }
 
   return (
-    <div style={{ background: 'white', border: '1px solid #e2eaf0', borderRadius: 12, boxShadow: '0 2px 4px rgba(0,0,0,0.05)', padding: 24, display: 'flex', gap: 24 }}>
+    <div style={{ background: 'white', border: '1px solid #e2eaf0', borderRadius: 12, boxShadow: '0 2px 4px rgba(0,0,0,0.05)', padding: isCompact ? 16 : 24, display: 'flex', flexDirection: isCompact ? 'column' : 'row', gap: isCompact ? 16 : 24 }}>
       {/* 왼쪽: 딜 기본 정보 */}
-      <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ width: isCompact ? '100%' : 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div>
           {d?.currentPipelineStage && (
             <span style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 100, padding: '4px 10px', fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 11, color: '#2563eb' }}>
