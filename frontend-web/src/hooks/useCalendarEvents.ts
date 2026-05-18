@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { CalendarEvent, EventCategory, EventSource } from '@/components/calendar/types';
+import type { CalendarEvent, EventCategory, EventSource, ViewMode } from '@/components/calendar/types';
 import { fetchWithAuth } from '@/hooks/useAuth';
 
 function getMonthRange(date: Date) {
@@ -48,7 +48,7 @@ function toCalendarEvent(raw: any): CalendarEvent {
 
 interface UseCalendarEventsOptions {
   currentDate: Date;
-  viewMode: 'month' | 'week';
+  viewMode: ViewMode;
 }
 
 export interface UseCalendarEventsReturn {
