@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface ActivityRepository
@@ -58,4 +59,39 @@ public interface ActivityRepository
             limit 1
             """)
     Optional<Activity> findLatestPipelineActivityByDealId(@Param("dealId") Long dealId);
+
+    /**
+     * 브리핑 스케줄러 전용 — 전 테넌트 대상으로 실행하는 시스템 배치 쿼리.
+     * tenant_id 필터 미적용은 의도적이며, tenantId는 각 Activity에서 추출해 FastAPI 호출 시 사용한다.
+     */
+    @Query("""
+            SELECT a FROM Activity a
+            JOIN FETCH a.user u
+            JOIN FETCH u.tenant
+            JOIN FETCH a.deal d
+            JOIN FETCH d.account
+            WHERE a.type = :type
+              AND a.startAt BETWEEN :from AND :to
+              AND a.briefing IS NULL
+            """)
+    List<Activity> findUpcomingMeetingsWithoutBriefing(
+            @Param("type") ActivityType type,
+            @Param("from") OffsetDateTime from,
+            @Param("to") OffsetDateTime to
+    );
+
+    @Query("""
+            SELECT a FROM Activity a
+            WHERE a.deal.account.accountId = :accountId
+              AND a.user.tenant.tenantId = :tenantId
+              AND a.type = com.ssafy.fint.domain.activity.entity.ActivityType.MEETING
+              AND a.startAt < :before
+            ORDER BY a.startAt DESC
+            LIMIT 1
+            """)
+    List<Activity> findRecentMeetingsByAccountId(
+            @Param("accountId") Long accountId,
+            @Param("tenantId") Long tenantId,
+            @Param("before") OffsetDateTime before
+    );
 }
