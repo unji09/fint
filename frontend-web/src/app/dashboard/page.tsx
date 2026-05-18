@@ -134,7 +134,11 @@ export default function DashboardPage() {
           bottom: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflowY: 'auto' /* 컨텐츠 합이 뷰포트보다 크면 페이지 스크롤 허용 */,
+          // 컨텐츠 합이 뷰포트보다 크면 세로만 스크롤 허용.
+          // overflow-y 만 지정하면 overflow-x 가 자동(auto)으로 promote 되어
+          // 좁은 해상도에서 의도치 않은 가로 스크롤이 생긴다. 명시적으로 차단.
+          overflowX: 'hidden',
+          overflowY: 'auto',
         }}
       >
         <div
