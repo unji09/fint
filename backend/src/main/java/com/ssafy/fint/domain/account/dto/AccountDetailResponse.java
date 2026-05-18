@@ -14,6 +14,7 @@ public record AccountDetailResponse(
         Long accountId,
         String name,
         String industry,
+        String bizNo,
         List<AssignedUser> assignedUsers,
         Mood latestMood,
         Integer meetingCount,

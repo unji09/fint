@@ -1,7 +1,10 @@
 package com.ssafy.fint.domain.account.service;
 
+import com.ssafy.fint.domain.account.client.CompanyEnrichApiResponse;
+import com.ssafy.fint.domain.account.client.CompanyEnrichClient;
 import com.ssafy.fint.domain.account.dto.AccountDealsResponse;
 import com.ssafy.fint.domain.account.dto.AccountDetailResponse;
+import com.ssafy.fint.domain.account.dto.AccountEnrichResponse;
 import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
@@ -69,6 +72,7 @@ public class AccountService {
     private final ContactRepository contactRepository;
     private final DealRepository dealRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final CompanyEnrichClient companyEnrichClient;
 
     @Transactional
     public AccountRegisterResponse register(AccountRegisterRequest request) {
@@ -139,6 +143,33 @@ public class AccountService {
         if (request.bizNo() != null) account.changeBizNo(request.bizNo());
 
         log.info("[AccountUpdate] accountId={} userId={} tenantId={}", accountId, userId, tenantId);
+    }
+
+    @Transactional
+    public AccountEnrichResponse enrich(Long accountId) {
+        Long userId = currentUserId();
+        Long tenantId = currentTenantId();
+
+        Account account = accountRepository
+                .findByIdAndAssignedUserIdAndTenantId(accountId, userId, tenantId)
+                .orElseThrow(() -> new BusinessException(CommonErrorCode.NOT_FOUND));
+
+        CompanyEnrichApiResponse.Data result =
+                companyEnrichClient.enrich(tenantId, account.getName());
+
+        if (result.matched() && result.company() != null) {
+            CompanyEnrichApiResponse.CompanyInfo company = result.company();
+            if (company.bizNo() != null) {
+                account.changeBizNo(company.bizNo());
+            }
+            if (company.industryCode() != null) {
+                account.changeIndustry(company.industryCode());
+            }
+            log.info("[AccountEnrich] accountId={} bizNo={} industry={}",
+                    accountId, company.bizNo(), company.industryCode());
+        }
+
+        return AccountEnrichResponse.from(result);
     }
 
     @Transactional
@@ -314,6 +345,7 @@ public class AccountService {
 
         return new AccountDetailResponse(
                 account.getAccountId(), account.getName(), account.getIndustry(),
+                account.getBizNo(),
                 assignedUsers, latestMood,
                 meetingCount, lastContactAt,
                 contacts

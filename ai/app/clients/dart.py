@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 _CORP_CODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml"
 _LIST_URL = "https://opendart.fss.or.kr/api/list.json"
 _DOC_URL = "https://opendart.fss.or.kr/api/document.xml"
+_COMPANY_URL = "https://opendart.fss.or.kr/api/company.json"
 _MAX_CONTENT_LEN = 50_000
 
 
@@ -54,6 +55,48 @@ class CorpInfo:
     corp_code: str
     corp_name: str
     stock_code: str
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyInfo:
+    corp_code: str
+    corp_name: str
+    ceo_nm: str
+    bizr_no: str
+    induty_code: str
+    adres: str
+    phn_no: str
+    est_dt: str
+
+
+_EN_KO_MAP: dict[str, str] = {
+    "SDS": "에스디에스",
+    "CNS": "씨엔에스",
+    "SK": "에스케이",
+    "LG": "엘지",
+    "KT": "케이티",
+    "GS": "지에스",
+    "CJ": "씨제이",
+    "HD": "에이치디",
+    "LS": "엘에스",
+    "DL": "디엘",
+    "OCI": "오씨아이",
+}
+
+_CORP_SUFFIXES = re.compile(
+    r"[\(（]주[\)）]|주식회사|[\(（]유[\)）]|유한회사|[\(（]합[\)）]",
+)
+
+
+def _normalize_corp_name(name: str) -> str:
+    return _CORP_SUFFIXES.sub("", name).strip()
+
+
+def _transliterate_english(name: str) -> str:
+    result = name
+    for en, ko in sorted(_EN_KO_MAP.items(), key=lambda x: -len(x[0])):
+        result = re.sub(re.escape(en), ko, result, flags=re.IGNORECASE)
+    return result.replace(" ", "")
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +167,91 @@ class DartClient:
 
         listed = [m for m in matches if m.stock_code]
         return listed[0] if listed else matches[0]
+
+    def find_corp_fuzzy(self, company_name: str) -> list[CorpInfo]:
+        if self._corp_map is None:
+            return []
+
+        # 1. exact
+        exact = self.find_corp(company_name)
+        if exact:
+            return [exact]
+
+        # 2. normalize
+        normalized = _normalize_corp_name(company_name)
+        if normalized != company_name:
+            exact = self.find_corp(normalized)
+            if exact:
+                return [exact]
+
+        # 3. transliterate
+        transliterated = _transliterate_english(normalized)
+        if transliterated != normalized:
+            exact = self.find_corp(transliterated)
+            if exact:
+                return [exact]
+            norm_trans = _normalize_corp_name(transliterated)
+            if norm_trans != transliterated:
+                exact = self.find_corp(norm_trans)
+                if exact:
+                    return [exact]
+
+        # 4. corp_map scan fallback
+        query = transliterated if transliterated != normalized else normalized
+        if len(query) < 2:
+            return []
+
+        # 4a. DART 이름도 음역해서 exact 매칭 시도 (LG씨엔에스 → 엘지씨엔에스)
+        for dart_name, infos in self._corp_map.items():
+            dart_trans = _transliterate_english(_normalize_corp_name(dart_name))
+            if dart_trans == query:
+                listed = [i for i in infos if i.stock_code]
+                return [listed[0] if listed else infos[0]]
+
+        # 4b. contains scan
+        _MAX_CANDIDATES = 5
+        candidates: list[CorpInfo] = []
+        for dart_name, infos in self._corp_map.items():
+            dart_norm = _normalize_corp_name(dart_name)
+            dart_trans = _transliterate_english(dart_norm)
+            shorter, longer = (query, dart_trans) if len(query) <= len(dart_trans) else (dart_trans, query)
+            if shorter not in longer:
+                continue
+            if len(shorter) / len(longer) < 0.6:
+                continue
+            listed = [i for i in infos if i.stock_code]
+            candidates.append(listed[0] if listed else infos[0])
+            if len(candidates) >= _MAX_CANDIDATES:
+                break
+
+        return candidates
+
+    async def get_company_info(self, corp_code: str) -> CompanyInfo | None:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    _COMPANY_URL,
+                    params={"crtfc_key": self._api_key, "corp_code": corp_code},
+                )
+                resp.raise_for_status()
+
+            data = resp.json()
+            if data.get("status") != "000":
+                return None
+
+            return CompanyInfo(
+                corp_code=_clean(data.get("corp_code")),
+                corp_name=_clean(data.get("corp_name")),
+                ceo_nm=_clean(data.get("ceo_nm")),
+                bizr_no=_clean(data.get("bizr_no")),
+                induty_code=_clean(data.get("induty_code")),
+                adres=_clean(data.get("adres")),
+                phn_no=_clean(data.get("phn_no")),
+                est_dt=_clean(data.get("est_dt")),
+            )
+        except Exception:
+            logger.warning("Failed to fetch company info for corp_code=%s", corp_code, exc_info=True)
+            return None
 
     async def fetch_document(self, rcept_no: str) -> str | None:
         """rcept_no로 공시 원문 ZIP을 다운로드하고 텍스트를 추출한다."""
