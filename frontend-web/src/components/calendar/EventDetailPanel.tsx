@@ -230,6 +230,10 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     try {
       const res = await fetch(`${API_BASE}/activities/${activityId}`, { method: 'DELETE', headers: authHeader() });
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      // 다른 화면(딜 상세 미팅 내역 등)에서 즉시 반영하도록 전역 이벤트 발행
+      window.dispatchEvent(
+        new CustomEvent('activity:deleted', { detail: { activityId: Number(activityId) } }),
+      );
       onDeleted?.(); onClose();
     } catch (e) { console.error('[EDP] 삭제 실패', e); }
     finally { setDeleting(false); }
@@ -583,8 +587,9 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               </>
             )}
 
-            {/* AI 미팅 요약 — mood analysis 완료 시 독립 섹션으로 표시 */}
-            {(rightView === 'memo' || rightView === 'stt') && activitySummary && Object.keys(activitySummary).length > 0 && (
+            {/* AI 미팅 요약 — mood analysis 완료 시 독립 섹션으로 표시.
+                녹음이 모두 삭제되면 그 요약은 의미가 없으므로 함께 숨긴다. */}
+            {(rightView === 'memo' || rightView === 'stt') && recordings.length > 0 && activitySummary && Object.keys(activitySummary).length > 0 && (
               <div
                 style={{
                   border: '1px solid #E5E6DE',

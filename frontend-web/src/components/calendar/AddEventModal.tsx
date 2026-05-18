@@ -216,10 +216,10 @@ export default function AddEventModal({
       setSelectedAccount(acct);
       setSelectedDealId(ev.dealId ?? null);
       setSelectedContactId(null);
-      // 해당 고객사의 딜+담당자 로드
+      // 해당 고객사의 딜+담당자 로드 (딜 목록은 별도 엔드포인트)
       const headers = authHeader();
       Promise.allSettled([
-        fetch(`${API_BASE}/accounts/${ev.accountId}`, { headers }).then(r => r.json()),
+        fetch(`${API_BASE}/accounts/${ev.accountId}/deals`, { headers }).then(r => r.json()),
         fetch(`${API_BASE}/accounts/${ev.accountId}/contacts`, { headers }).then(r => r.json()),
       ]).then(([detailRes, contactsRes]) => {
         if (detailRes.status === 'fulfilled') {
@@ -249,7 +249,7 @@ export default function AddEventModal({
       setSelectedContactId(null);
       const headers = authHeader();
       Promise.allSettled([
-        fetch(`${API_BASE}/accounts/${prefill.accountId}`, { headers }).then(r => r.json()),
+        fetch(`${API_BASE}/accounts/${prefill.accountId}/deals`, { headers }).then(r => r.json()),
         fetch(`${API_BASE}/accounts/${prefill.accountId}/contacts`, { headers }).then(r => r.json()),
       ]).then(([detailRes, contactsRes]) => {
         if (detailRes.status === 'fulfilled') {
@@ -305,11 +305,11 @@ export default function AddEventModal({
     return () => clearTimeout(t);
   }, [accountQuery]);
 
-  // ── 고객사 선택 시 딜+담당자 자동 로드 ──
+  // ── 고객사 선택 시 딜+담당자 자동 로드 (딜 목록은 별도 엔드포인트) ──
   const loadAccountData = useCallback(async (accountId: number) => {
     const headers = authHeader();
     const [detailRes, contactsRes] = await Promise.allSettled([
-      fetch(`${API_BASE}/accounts/${accountId}`, { headers }).then(r => r.json()),
+      fetch(`${API_BASE}/accounts/${accountId}/deals`, { headers }).then(r => r.json()),
       fetch(`${API_BASE}/accounts/${accountId}/contacts`, { headers }).then(r => r.json()),
     ]);
     if (detailRes.status === 'fulfilled') {
