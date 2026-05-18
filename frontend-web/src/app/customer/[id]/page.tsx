@@ -116,7 +116,7 @@ export default function CustomerDetailPage() {
 
   return (
     <>
-      <main ref={scrollRef} style={{ flex: 1, height: '100%', overflowY: 'auto', padding: '24px 40px 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <main ref={scrollRef} style={{ flex: 1, height: '100%', overflowX: 'hidden', overflowY: 'auto', padding: '24px 40px 48px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* 브레드크럼 — 큰 날씨 표시는 아래 WeatherPanel 로 이동 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {crumbs.map((c, i) => {
