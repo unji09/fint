@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface PipelineStageRepository extends JpaRepository<PipelineStage, Long> {
 
     Optional<PipelineStage> findByPipelineStageIdAndTenant_TenantId(Long pipelineStageId, Long tenantId);
+
+    Optional<PipelineStage> findFirstByTenant_TenantIdOrderBySortOrderAsc(Long tenantId);
 }
