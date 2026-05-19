@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchWithAuth } from '@/hooks/useAuth';
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
@@ -42,6 +42,65 @@ export interface DealUpdateRequest {
   expectedClose?: string;
   amount?: number;
   stage?: string;
+}
+
+export interface DealSearchItem {
+  dealId: number;
+  title: string;
+  amount: number | null;
+  expectedClose: string | null; // "YYYY-MM-DD"
+}
+
+// ─── 딜 목록 검색 (GET /deals) ───────────────────────────────────────────────
+
+export function useDealSearch() {
+  const [deals, setDeals] = useState<DealSearchItem[]>([]);
+  const [hasNext, setHasNext] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const search = useCallback((params: {
+    keyword?: string;
+    accountId?: number;
+    size?: number;
+  }) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams();
+        if (params.keyword?.trim()) qs.set('keyword', params.keyword.trim());
+        if (params.accountId) qs.set('accountId', String(params.accountId));
+        qs.set('size', String(params.size ?? 10));
+
+        const res = await fetchWithAuth(`/deals?${qs.toString()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const listResponse = json.data ?? {};
+        setDeals(
+          (listResponse.data ?? []).map((d: {
+            dealId: number; title: string;
+            amount?: number | null; expectedClose?: string | null;
+          }) => ({
+            dealId: d.dealId,
+            title: d.title,
+            amount: d.amount ?? null,
+            expectedClose: d.expectedClose ?? null,
+          }))
+        );
+        setHasNext(listResponse.hasNext ?? false);
+      } catch {
+        setError('딜 목록을 불러오지 못했습니다.');
+        setDeals([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+  }, []);
+
+  return { deals, hasNext, loading, error, search };
 }
 
 // ─── 딜 상세 조회 ────────────────────────────────────────────────────────────
