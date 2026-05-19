@@ -109,7 +109,9 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     //  키까지 지워버려 부작용 위험이 있어 fint 프리픽스만 선별 삭제)
     clearAuthAndCache();
     onClose();
-    window.location.reload();
+    // reload() 는 현재 경로(/calendar 등)에 그대로 머물러 보호 라우트가 깜빡인 뒤
+    // refresh 실패로만 로그인으로 튕긴다. 명시적으로 /login 으로 이동.
+    window.location.href = '/login';
   };
 
   return (
