@@ -51,11 +51,10 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
             join aua.user u
             where u.userId = :userId
               and u.isDeleted = false
-              and s.isRead = false
               and s.importanceScore >= 4.0
             order by s.createdAt desc
             """)
-    List<AiSuggestion> findUnreadByUserId(
+    List<AiSuggestion> findUrgentByUserId(
             @Param("userId") Long userId,
             Pageable pageable
     );
