@@ -1,4 +1,5 @@
 """POST /api/v1/ai/next-actions — AI 전략 추천 엔드포인트."""
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Header
@@ -183,7 +184,17 @@ def _build_sources(ctx) -> dict:
 
     crm: list[dict] = []
     for m in ctx.meetings:
-        summary = m.get("summary") or m.get("memo") or m.get("title", "")
-        crm.append({"summary": summary})
+        summary_text = ""
+        raw = m.get("summary")
+        if raw:
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                summary_text = parsed.get("text", "") if isinstance(parsed, dict) else ""
+            except (json.JSONDecodeError, TypeError):
+                summary_text = ""
+        crm.append({
+            "title": m.get("title", ""),
+            "summary": summary_text,
+        })
 
     return {"news": news, "dart": dart, "crm": crm}
