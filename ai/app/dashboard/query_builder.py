@@ -222,11 +222,12 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
         coerced = _coerce_filter_value(f.value, f_tbl, f_col)
         if f.operator in (FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL):
             sql_parts.append(f"AND {col_ref} {f.operator.value}")
-        elif f.operator == FilterOperator.IN:
+        elif f.operator in (FilterOperator.IN, FilterOperator.NOT_IN):
             if not isinstance(coerced, list) or not coerced:
-                raise QueryBuildError("IN 연산자에는 비어있지 않은 리스트가 필요합니다")
+                raise QueryBuildError("IN/NOT IN 연산자에는 비어있지 않은 리스트가 필요합니다")
             placeholders = ", ".join(_next_param(v) for v in coerced)
-            sql_parts.append(f"AND {col_ref} IN ({placeholders})")
+            keyword = "IN" if f.operator == FilterOperator.IN else "NOT IN"
+            sql_parts.append(f"AND {col_ref} {keyword} ({placeholders})")
         elif f.operator == FilterOperator.BETWEEN:
             if not isinstance(coerced, list) or len(coerced) != 2:
                 raise QueryBuildError("BETWEEN 연산자에는 2개 값의 리스트가 필요합니다")
@@ -260,6 +261,26 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
     if spec.group_by:
         group_cols = ", ".join(_qualify_ref(c) for c in spec.group_by)
         sql_parts.append(f"GROUP BY {group_cols}")
+
+    # HAVING (aggregate filter — must follow GROUP BY)
+    if spec.having_conditions:
+        having_clauses: list[str] = []
+        for h in spec.having_conditions:
+            agg_match = _AGG_PATTERN.match(h.column)
+            if not agg_match:
+                raise QueryBuildError(f"HAVING 조건은 집계 함수만 허용됩니다: {h.column}")
+            agg_ref = _qualify_ref(h.column)
+            if h.operator in (FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL):
+                having_clauses.append(f"{agg_ref} {h.operator.value}")
+            elif h.operator == FilterOperator.BETWEEN:
+                if not isinstance(h.value, list) or len(h.value) != 2:
+                    raise QueryBuildError("HAVING BETWEEN에는 2개 값의 리스트가 필요합니다")
+                p1, p2 = _next_param(h.value[0]), _next_param(h.value[1])
+                having_clauses.append(f"{agg_ref} BETWEEN {p1} AND {p2}")
+            else:
+                ph = _next_param(h.value)
+                having_clauses.append(f"{agg_ref} {h.operator.value} {ph}")
+        sql_parts.append(f"HAVING {' AND '.join(having_clauses)}")
 
     # ORDER BY
     if spec.order_by:
@@ -339,3 +360,11 @@ def _validate_spec(spec: QuerySpec) -> None:
                 _resolve_column(dt_match.group(2), spec)
             else:
                 _resolve_column(col, spec)
+
+    for h in spec.having_conditions:
+        agg_match = _AGG_PATTERN.match(h.column)
+        if not agg_match:
+            raise QueryBuildError(f"HAVING 조건은 집계 함수(COUNT/SUM/AVG/MIN/MAX)만 허용됩니다: {h.column}")
+        func = agg_match.group(1).upper()
+        if func not in ALLOWED_AGGREGATES:
+            raise QueryBuildError(f"HAVING에 허용되지 않은 집계 함수: {func}")
