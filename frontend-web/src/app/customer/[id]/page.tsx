@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
 import DealCard from '@/components/customer/DealCard';
@@ -43,6 +43,8 @@ function Av({ name, color, size = 30 }: { name: string; color: string; size?: nu
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const dealParam = searchParams.get('deal');
   const bp = useBreakpoint();
   const isCompact = bp !== 'desktop';
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -101,6 +103,17 @@ export default function CustomerDetailPage() {
     setCDealIds(ids);
   }, [deals]);
   useEffect(() => { if (selContact?.contactId && deals.length > 0) loadCD(selContact.contactId); else setCDealIds(null); }, [selContact, deals, loadCD]);
+
+  // ?deal={dealId} URL 파라미터로 진입 시 해당 딜 자동 선택
+  useEffect(() => {
+    if (!dealParam || deals.length === 0) return;
+    const found = deals.find(d => String(d.dealId) === dealParam);
+    if (found) {
+      setSelDeal(found);
+      setAllDeals(true);
+      router.replace(`/customer/${id}`);
+    }
+  }, [deals, dealParam, id, router]);
 
   const visDeal = cDealIds ? deals.filter(d => cDealIds.has(d.dealId)) : deals;
   const acc = accounts.find(a => String(a.accountId) === String(id)) ?? accounts[0];
