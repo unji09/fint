@@ -134,7 +134,7 @@ export default function ConfirmDialogProvider({ children }: { children: ReactNod
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1100,
+            zIndex: 1300,
             animation: 'dlgFadeIn 200ms ease-out',
           }}
           onClick={() => close(false)}

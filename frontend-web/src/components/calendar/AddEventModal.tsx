@@ -2,6 +2,7 @@
 // src/components/calendar/AddEventModal.tsx
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { DealSearchItem } from '@/hooks/useDeal';
 import type { CalendarEvent } from './types';
 
@@ -453,6 +454,7 @@ export default function AddEventModal({
   }, []);
 
   if (!open && !visible) return null;
+  if (typeof document === 'undefined') return null;
 
   const close = () => {
     setVisible(false);
@@ -526,8 +528,8 @@ export default function AddEventModal({
   };
 
   // ── 렌더링 ──
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, fontFamily: "'Pretendard',-apple-system,sans-serif", WebkitFontSmoothing: 'antialiased', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1200, fontFamily: "'Pretendard',-apple-system,sans-serif", WebkitFontSmoothing: 'antialiased', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', opacity: visible ? 1 : 0, transition: 'opacity 0.2s' }} />
       <div style={{ position: 'relative', backgroundColor: '#fff', borderRadius: 16, width: '90%', maxWidth: 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', transform: visible ? 'scale(1)' : 'scale(0.96)', opacity: visible ? 1 : 0, transition: 'transform 0.2s, opacity 0.2s' }}>
         {/* 헤더 */}
@@ -778,6 +780,7 @@ export default function AddEventModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
