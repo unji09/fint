@@ -141,7 +141,7 @@ export default function CustomerDetailPage() {
           {/* 모바일 뒤로가기 */}
           {isCompact && (
             <button
-              onClick={() => router.push('/customer')}
+              onClick={() => { setSelContact(null); router.push('/customer'); }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: F, fontSize: 14, color: '#06b6d4', fontWeight: 500 }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
