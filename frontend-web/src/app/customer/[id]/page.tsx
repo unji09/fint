@@ -5,6 +5,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
 import AllSignalsModal from '@/components/customer/AllSignalsModal';
+import EventDetailPanel from '@/components/calendar/EventDetailPanel';
+import type { CalendarEvent, EventCategory } from '@/components/calendar/types';
 import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
 import WeatherPanel from '@/components/customer/WeatherPanel';
@@ -101,6 +103,8 @@ export default function CustomerDetailPage() {
   // 딜 추가
   const [showAddDeal, setShowAddDeal] = useState(false);
   const [showAllSignals, setShowAllSignals] = useState(false);
+  // NextAction 의 CRM 근거 항목 클릭으로 띄우는 미팅 상세 — 캘린더의 EventDetailPanel 그대로 재사용.
+  const [selectedMeetingEvent, setSelectedMeetingEvent] = useState<CalendarEvent | null>(null);
   // 삭제 등 mutation 후 사용자 피드백 메시지 (2.5초 뒤 자동 사라짐)
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
@@ -415,7 +419,28 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* 딜 상세 */}
-          {selDeal && <DealDetailPanel deal={selDeal} onDealChanged={() => refDetail()} />}
+          {selDeal && (
+            <DealDetailPanel
+              deal={selDeal}
+              onDealChanged={() => refDetail()}
+              onMeetingDetail={(a) => {
+                // 미팅 활동 객체를 CalendarEvent 로 변환해 EventDetailPanel 모달 마운트.
+                // 캘린더 페이지로 navigation 하지 않는다.
+                const typeMap: Record<string, EventCategory> = { MEETING: '미팅', CALL: '전화', EMAIL: '이메일', MEMO: '업무' };
+                setSelectedMeetingEvent({
+                  eventId: `act-${a.activityId}`,
+                  source: 'FINT',
+                  title: a.title ?? '',
+                  startAt: a.startAt ?? '',
+                  endAt: a.startAt ?? '', // list 응답엔 endAt 없음 — EventDetailPanel 내부 fetch 가 실제 endAt 으로 덮어씀
+                  category: typeMap[a.type] ?? '미팅',
+                  accountName: acc?.name,
+                  accountId: id ? Number(id) : undefined,
+                  memo: a.memo ?? undefined,
+                });
+              }}
+            />
+          )}
 
           {/* AI 추천 전략 — 데이터 있을 때만 */}
           {!selDeal && strats.length > 0 && (
@@ -432,6 +457,54 @@ export default function CustomerDetailPage() {
                   onAddToCalendar={(c) => {
                     setAddEventDefaults({ title: c.title, category: mapNextActionCategory(c.category) });
                     setAddEventOpen(true);
+                  }}
+                  onCrmClick={async (summary) => {
+                    // BE 응답에 activity_id 가 없어서 summary 텍스트로 그 고객사 미팅을 매칭.
+                    // 같은 제목 미팅이 여럿이면 첫 매칭만 잡으므로 100% 정확하진 않다 (사용자 합의).
+                    if (!id) return;
+                    try {
+                      const res = await fetchWithAuth(`/activities?accountId=${id}&type=MEETING&size=50`);
+                      if (!res.ok) { setToast('미팅 정보를 불러오지 못했습니다.'); return; }
+                      const json = await res.json();
+                      const data = json?.data;
+                      const list: unknown[] = Array.isArray(data) ? data
+                        : (data && typeof data === 'object')
+                          ? (['items', 'content', 'activities', 'results']
+                              .map((k) => (data as Record<string, unknown>)[k])
+                              .find((v) => Array.isArray(v)) as unknown[] | undefined) ?? []
+                          : [];
+                      const trimmed = summary.trim();
+                      const match = list.find((a) => {
+                        if (!a || typeof a !== 'object') return false;
+                        const obj = a as Record<string, unknown>;
+                        const t = typeof obj.title === 'string' ? obj.title.trim() : '';
+                        const m = typeof obj.memo === 'string' ? obj.memo.trim() : '';
+                        return t === trimmed || m === trimmed;
+                      }) as Record<string, unknown> | undefined;
+                      if (!match) { setToast('연결된 미팅을 찾지 못했습니다.'); return; }
+                      const rawId = match.activityId ?? match.activity_id;
+                      const aid = typeof rawId === 'number' ? rawId
+                        : (typeof rawId === 'string' && /^\d+$/.test(rawId)) ? Number(rawId)
+                        : null;
+                      if (!aid) { setToast('미팅을 식별할 수 없습니다.'); return; }
+                      const typeMap: Record<string, EventCategory> = { MEETING: '미팅', CALL: '전화', EMAIL: '이메일', MEMO: '업무' };
+                      const rawType = typeof match.type === 'string' ? match.type : '';
+                      // 캘린더 EventDetailPanel 이 사용하는 CalendarEvent 형태로 변환.
+                      // 자체적으로 GET /activities/{id} 를 호출해 메모/요약/녹음까지 풍부하게 표시한다.
+                      setSelectedMeetingEvent({
+                        eventId: `act-${aid}`,
+                        source: 'FINT',
+                        title: typeof match.title === 'string' ? match.title : '',
+                        startAt: typeof match.startAt === 'string' ? match.startAt : '',
+                        endAt: typeof match.endAt === 'string' ? match.endAt : '',
+                        category: typeMap[rawType] ?? '미팅',
+                        accountName: acc?.name,
+                        accountId: id ? Number(id) : undefined,
+                        memo: typeof match.memo === 'string' ? match.memo : undefined,
+                      });
+                    } catch {
+                      setToast('미팅 정보를 불러오지 못했습니다.');
+                    }
                   }}
                 />
               ))}
@@ -457,6 +530,13 @@ export default function CustomerDetailPage() {
         onClose={() => setShowAllSignals(false)}
         signals={signals}
         accountName={acc?.name}
+      />
+
+      {/* NextAction CRM 근거 항목 클릭 시 그 미팅 상세 (캘린더 일정 화면 그대로 재사용) */}
+      <EventDetailPanel
+        event={selectedMeetingEvent}
+        onClose={() => setSelectedMeetingEvent(null)}
+        onDeleted={() => setSelectedMeetingEvent(null)}
       />
 
       {/* 삭제/수정 후 사용자 피드백 토스트 (자동 2.5초 후 사라짐) */}
