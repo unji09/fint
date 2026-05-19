@@ -197,7 +197,7 @@ export default function GNB() {
       `}</style>
       <header className="gnb-header" style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: isMobile ? '0 12px' : '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
         {/* 로고 */}
-        <div className="gnb-logo" onClick={() => router.push('/calendar')} style={{ width: isMobile ? 'auto' : 300, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', height: '100%', padding: isMobile ? '0 8px' : 0 }}>
+        <div className="gnb-logo" onClick={() => router.push('/calendar')} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', cursor: 'pointer', height: '100%', padding: isMobile ? '0 8px' : '0 20px' }}>
           <img src="/logo.png" alt="F!NT" style={{ maxHeight: isMobile ? 32 : 44, maxWidth: isMobile ? 80 : 200, objectFit: 'contain' }} />
         </div>
 

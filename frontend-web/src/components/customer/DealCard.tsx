@@ -4,17 +4,18 @@ interface DealCardProps {
   deal: Deal;
   selected?: boolean;
   onClick?: () => void;
+  isCompact?: boolean;
 }
 
-export default function DealCard({ deal, selected, onClick }: DealCardProps) {
+export default function DealCard({ deal, selected, onClick, isCompact }: DealCardProps) {
   return (
     <div
       onClick={onClick}
       style={{
         background: 'white',
         borderRadius: 10,
-        width: 200,
-        minWidth: 200,
+        width: isCompact ? '100%' : 200,
+        minWidth: isCompact ? 0 : 200,
         height: 140,
         border: selected ? '2px solid #06b6d4' : '1px solid #e2e8f0',
         borderLeft: selected ? '3px solid #06b6d4' : '3px solid #7c3aed',

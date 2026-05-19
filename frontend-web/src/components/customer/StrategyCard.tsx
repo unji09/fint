@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import useBreakpoint from '@/hooks/useBreakpoint';
 import type { StrategyCard } from '@/types/customer';
 
 const TAG_STYLES: Record<string, { bg: string; color: string }> = {
@@ -78,6 +79,8 @@ interface StrategyCardProps {
 
 export default function StrategyCardComponent({ card, index, onExpand, onAddToCalendar }: StrategyCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const bp = useBreakpoint();
+  const isCompact = bp !== 'desktop';
 
   const handleToggle = () => {
     if (onExpand) {
@@ -112,33 +115,35 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 20px',
+          padding: isCompact ? '0 12px' : '0 20px',
           flex: '0 0 auto',
           minHeight: 60,
+          gap: isCompact ? 8 : 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? 8 : 14, flex: 1, minWidth: 0 }}>
           <span
             style={{
               fontFamily: 'Manrope,sans-serif',
               fontWeight: 400,
-              fontSize: expanded ? 38 : 26,
+              fontSize: isCompact ? (expanded ? 28 : 20) : (expanded ? 38 : 26),
               color: expanded ? '#2bbad1' : 'rgba(0,104,119,0.2)',
               lineHeight: 1,
-              minWidth: 36,
+              minWidth: isCompact ? 28 : 36,
               transition: 'all 0.2s',
             }}
           >
             {String(index + 1).padStart(2, '0')}
           </span>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontFamily: 'Pretendard,sans-serif',
                 fontWeight: expanded ? 400 : 500,
-                fontSize: expanded ? 20 : 15,
+                fontSize: isCompact ? (expanded ? 16 : 13) : (expanded ? 20 : 15),
                 color: '#0d1c2e',
                 lineHeight: '1.4',
+                wordBreak: 'break-word',
               }}
             >
               {card.title}
@@ -147,7 +152,7 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
               style={{
                 fontFamily: 'Inter,sans-serif',
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: isCompact ? 10 : 12,
                 color: '#0e7490',
                 textTransform: 'uppercase',
                 letterSpacing: '0.02em',
@@ -162,18 +167,18 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
             <CircularGauge pct={card.successRate} />
           </div>
         ) : (
-          <div style={{ textAlign: 'right' }}>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
             <div
               style={{
                 fontFamily: 'Inter,sans-serif',
                 fontWeight: 600,
-                fontSize: 18,
+                fontSize: isCompact ? 15 : 18,
                 color: '#0e7490',
               }}
             >
               {card.successRate}%
             </div>
-            <div style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 11, color: '#3d494c' }}>
+            <div style={{ fontFamily: 'Pretendard,sans-serif', fontSize: isCompact ? 10 : 11, color: '#3d494c', whiteSpace: 'nowrap' }}>
               성공 가능성
             </div>
           </div>
@@ -183,7 +188,7 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
       {/* 펼쳐진 본문 */}
       {expanded && card.basisData && (
         <div
-          style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}
+          style={{ padding: isCompact ? '0 12px 16px' : '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}
           onClick={(e) => e.stopPropagation()}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
