@@ -21,6 +21,7 @@ import com.ssafy.fint.global.exception.BusinessException;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -89,7 +90,7 @@ public class AiSuggestionService {
         return results;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void createNextActionBySystem(Long tenantId, NextActionCreateRequest request) {
         Long accountId = request.accountId();
 
