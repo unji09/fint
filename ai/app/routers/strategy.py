@@ -183,7 +183,9 @@ def _build_sources(ctx) -> dict:
 
     crm: list[dict] = []
     for m in ctx.meetings:
-        summary = m.get("summary") or m.get("memo") or m.get("title", "")
-        crm.append({"summary": summary})
+        crm.append({
+            "title": m.get("title", ""),
+            "summary": m.get("summary") or m.get("memo") or "",
+        })
 
     return {"news": news, "dart": dart, "crm": crm}
