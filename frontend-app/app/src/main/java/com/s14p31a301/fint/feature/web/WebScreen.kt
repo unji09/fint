@@ -2,6 +2,7 @@ package com.s14p31a301.fint.feature.web
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,7 +48,7 @@ fun WebScreen(
         )
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().systemBarsPadding()) {
         FintWebView(
             url = WebViewRoute.dashboard(),
             bridge = bridge,
