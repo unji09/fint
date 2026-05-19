@@ -38,7 +38,7 @@ spring:
       port: ${REDIS_PORT:6379}
 
 internal:
-  secret: your-secret-key-here
+  secret: ${INTERNAL_SECRET:your-secret-key-here}
 
 # Swagger
 springdoc:
