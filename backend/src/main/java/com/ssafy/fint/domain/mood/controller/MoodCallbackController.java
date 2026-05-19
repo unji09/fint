@@ -1,6 +1,7 @@
 package com.ssafy.fint.domain.mood.controller;
 
 import com.ssafy.fint.domain.mood.dto.MoodCallbackRequest;
+import com.ssafy.fint.domain.mood.dto.MoodFailureRequest;
 import com.ssafy.fint.domain.mood.service.MoodAnalysisService;
 import com.ssafy.fint.global.exception.AuthErrorCode;
 import com.ssafy.fint.global.exception.BusinessException;
@@ -33,5 +34,20 @@ public class MoodCallbackController {
         }
         log.info("[MoodCallback] received activityId={} accountId={} tenantId={}", activityId, request.accountId(), tenantId);
         moodAnalysisService.processCallback(activityId, request, tenantId);
+    }
+
+    @PostMapping("/{activityId}/ai/mood/failure")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void failure(
+        @PathVariable Long activityId,
+        @RequestBody(required = false) MoodFailureRequest request,
+        @RequestHeader(value = "X-Internal-Secret", required = false) String secret,
+        @RequestHeader(value = "X-Tenant-Id", required = false) Long tenantId) {
+        if (!internalSecret.equals(secret)) {
+            throw new BusinessException(AuthErrorCode.INVALID_TOKEN);
+        }
+        String reason = request != null ? request.reason() : null;
+        log.warn("[MoodCallback] failure received activityId={} tenantId={} reason={}", activityId, tenantId, reason);
+        moodAnalysisService.markFailed(activityId, reason);
     }
 }
