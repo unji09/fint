@@ -29,8 +29,8 @@ public class SignalCollectService {
     }
 
     @Transactional
-    public SignalCollectResult collectAndSave(Long tenantId) {
-        SignalCollectResponse response = signalCollectClient.collect(tenantId, "all", true);
+    public SignalCollectResult collectAndSave(Long tenantId, List<Long> accountIds) {
+        SignalCollectResponse response = signalCollectClient.collect(tenantId, "all", true, accountIds);
 
         Map<Long, List<Long>> newNewsPerAccount = new HashMap<>();
         Map<Long, List<Long>> mappedNewsPerAccount = new HashMap<>();

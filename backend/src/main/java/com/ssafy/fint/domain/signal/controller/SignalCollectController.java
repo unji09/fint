@@ -32,7 +32,7 @@ public class SignalCollectController {
     public ApiResponse<SignalCollectResult> collect(
             @RequestParam(defaultValue = "1") Long tenantId
     ) {
-        SignalCollectResult result = signalCollectService.collectAndSave(tenantId);
+        SignalCollectResult result = signalCollectService.collectAndSave(tenantId, null);
         nextActionTriggerService.triggerFromCollectResult(tenantId, result);
         return ApiResponse.ok(result);
     }

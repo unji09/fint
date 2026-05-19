@@ -1,15 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+// 디자인 시스템 컬러 토큰. 페이지 내부 한정 상수로 보유.
+// (CLAUDE.md 컬러표는 가이드 이미지와 일부 값이 어긋나 있으니, 시스템 가이드 기준)
+const BRAND_MAIN = '#06B6D4';   // --color-main
+const BRAND_SUB = '#0E7490';    // --color-sub
+const PAGE_BG = '#F5F7FA';      // --color-bg-page
+const BORDER = '#E2EAF0';       // --color-border
+const TEXT_PRIMARY = '#1E293B'; // --color-text-primary
+const TEXT_SECONDARY = '#475569'; // --color-text-secondary
+const TEXT_MUTED = '#64748B';   // --color-text-muted
 
 export default function LoginPage() {
   const router = useRouter();
   const [form, setForm] = useState({ companyCode: '', empNo: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // 이미 인증된 사용자가 /login 으로 진입하면 캘린더로 보낸다.
+  // (로그아웃 직후 재진입·북마크 진입 시 빈 폼이 보이는 UX 결함 방지)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem('accessToken')) {
+      router.replace('/calendar');
+    }
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -43,7 +62,6 @@ export default function LoginPage() {
         return;
       }
 
-      // 토큰 저장
       localStorage.setItem('accessToken', json.data.accessToken);
       localStorage.setItem('refreshToken', json.data.refreshToken);
       localStorage.setItem('user', JSON.stringify(json.data.user));
@@ -60,90 +78,119 @@ export default function LoginPage() {
     <div
       style={{
         minHeight: '100vh',
+        width: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f8fafc',
-        fontFamily: 'Pretendard, -apple-system, sans-serif',
+        // 베이스는 Page BG(#F5F7FA), 좌상단 Brand Cyan + 우하단 Deep Cyan 글로우.
+        background: `
+          radial-gradient(circle at 15% 0%, rgba(6, 182, 212, 0.20) 0%, transparent 50%),
+          radial-gradient(circle at 90% 100%, rgba(14, 116, 144, 0.22) 0%, transparent 55%),
+          ${PAGE_BG}
+        `,
+        fontFamily: "'Pretendard', -apple-system, sans-serif",
+        padding: 24,
+        position: 'relative',
       }}
     >
+      <style>{`
+        .fint-login-input:focus {
+          border-color: ${BRAND_MAIN};
+          box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.18);
+          background: #FFFFFF;
+        }
+        .fint-login-btn:not(:disabled):hover {
+          background: ${BRAND_SUB};
+        }
+        .fint-login-btn:not(:disabled):active {
+          transform: translateY(1px);
+        }
+      `}</style>
+
       <div
         style={{
-          background: 'white',
-          borderRadius: 16,
-          padding: '48px 40px',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-          width: 360,
+          background: '#FFFFFF',
+          borderRadius: 20,
+          padding: '40px 36px 32px',
+          boxShadow: '0 20px 60px rgba(14,116,144,0.18), 0 4px 12px rgba(15,23,42,0.06)',
+          width: 380,
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
-        {/* 로고 */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#06b6d4', letterSpacing: '-1px' }}>
+        {/* 로고 & 브랜드 */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <img
+            src="/logo.png"
+            alt="F!NT"
+            style={{
+              width: 72,
+              height: 72,
+              objectFit: 'contain',
+              display: 'inline-block',
+              marginBottom: 12,
+            }}
+          />
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: TEXT_PRIMARY,
+              letterSpacing: '-0.5px',
+              lineHeight: 1.2,
+            }}
+          >
             F!NT
           </div>
-          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>B2B 영업 CRM</div>
+          <div
+            style={{
+              fontSize: 12,
+              color: TEXT_MUTED,
+              marginTop: 6,
+              lineHeight: 1.5,
+            }}
+          >
+            기록하는 CRM이 아니라,
+            <br />
+            행동을 만들어내는 CRM
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 회사 코드 */}
-          <div>
-            <label
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color: '#374151',
-                display: 'block',
-                marginBottom: 6,
-              }}
-            >
-              회사 코드
-            </label>
+        {/* 구분선 */}
+        <div
+          style={{
+            height: 1,
+            background: `linear-gradient(to right, transparent, ${BORDER}, transparent)`,
+            marginBottom: 24,
+          }}
+        />
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Field label="회사 코드">
             <input
               name="companyCode"
               value={form.companyCode}
               onChange={handleChange}
               placeholder="예) FINT2024"
               autoComplete="organization"
+              className="fint-login-input"
               style={inputStyle}
             />
-          </div>
+          </Field>
 
-          {/* 사번 */}
-          <div>
-            <label
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color: '#374151',
-                display: 'block',
-                marginBottom: 6,
-              }}
-            >
-              사번
-            </label>
+          <Field label="사번">
             <input
               name="empNo"
               value={form.empNo}
               onChange={handleChange}
               placeholder="예) EMP001"
               autoComplete="username"
+              className="fint-login-input"
               style={inputStyle}
             />
-          </div>
+          </Field>
 
-          {/* 비밀번호 */}
-          <div>
-            <label
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color: '#374151',
-                display: 'block',
-                marginBottom: 6,
-              }}
-            >
-              비밀번호
-            </label>
+          <Field label="비밀번호">
             <input
               name="password"
               type="password"
@@ -151,60 +198,102 @@ export default function LoginPage() {
               onChange={handleChange}
               placeholder="비밀번호 입력"
               autoComplete="current-password"
+              className="fint-login-input"
               style={inputStyle}
             />
-          </div>
+          </Field>
 
-          {/* 에러 메시지 */}
           {error && (
             <div
+              role="alert"
               style={{
                 fontSize: 13,
-                color: '#ef4444',
-                background: '#fef2f2',
+                color: '#B91C1C',
+                background: '#FEF2F2',
+                border: '1px solid #FECACA',
                 borderRadius: 8,
-                padding: '10px 14px',
+                padding: '10px 12px',
+                lineHeight: 1.4,
               }}
             >
               {error}
             </div>
           )}
 
-          {/* 로그인 버튼 */}
           <button
             type="submit"
             disabled={loading}
+            className="fint-login-btn"
             style={{
-              marginTop: 4,
+              marginTop: 6,
               padding: '13px',
               borderRadius: 10,
               border: 'none',
-              background: loading ? '#94a3b8' : '#06b6d4',
-              color: 'white',
+              background: loading ? '#94A3B8' : BRAND_MAIN,
+              color: '#FFFFFF',
               fontSize: 15,
-              fontWeight: 600,
+              fontWeight: 700,
+              letterSpacing: '-0.2px',
               cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'background 0.15s',
-              fontFamily: 'Pretendard, sans-serif',
+              transition: 'background 0.15s, transform 0.05s',
+              fontFamily: "'Pretendard', sans-serif",
+              boxShadow: loading ? 'none' : '0 4px 12px rgba(6, 182, 212, 0.28)',
             }}
           >
             {loading ? '로그인 중...' : '로그인'}
           </button>
         </form>
       </div>
+
+      {/* 푸터 */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          fontSize: 12,
+          color: TEXT_SECONDARY,
+        }}
+      >
+        F!NT · B2B 영업 CRM · © {new Date().getFullYear()}
+      </div>
+    </div>
+  );
+}
+
+// 라벨 + children 묶음. 동일 마크업이 3번 반복되어 추출.
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: TEXT_SECONDARY,
+          display: 'block',
+          marginBottom: 6,
+          letterSpacing: '-0.1px',
+        }}
+      >
+        {label}
+      </label>
+      {children}
     </div>
   );
 }
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '11px 14px',
-  borderRadius: 8,
-  border: '1px solid #e2e8f0',
+  padding: '12px 14px',
+  borderRadius: 10,
+  border: `1px solid ${BORDER}`,
   fontSize: 14,
-  color: '#1e293b',
+  color: TEXT_PRIMARY,
   outline: 'none',
   boxSizing: 'border-box',
-  fontFamily: 'Pretendard, sans-serif',
-  transition: 'border-color 0.15s',
+  fontFamily: "'Pretendard', sans-serif",
+  background: '#FAFBFC',
+  transition: 'border-color 0.15s, box-shadow 0.15s, background 0.15s',
 };

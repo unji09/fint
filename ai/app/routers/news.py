@@ -44,6 +44,7 @@ async def collect_signals_endpoint(
         dart_client=dart_client,
         embedder=embedder,
         include_embeddings=body.include_embeddings,
+        account_ids=body.account_ids,
     )
 
     logger.info(
