@@ -1199,6 +1199,9 @@ function RecordingCard({
 
 // ─── AI 요약 섹션 — label + string 또는 string[] 렌더링
 function SummarySection({ label, value, compact }: { label: string; value: string | string[]; compact?: boolean }) {
+  const isEmpty = Array.isArray(value) ? value.length === 0 : !value || !value.trim();
+  if (isEmpty) return null;
+
   const fontSize = compact ? 13 : 14;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
