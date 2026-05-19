@@ -33,6 +33,13 @@ interface Props {
   panelPosX?: number;
   panelPosY?: number;
   onPosChange?: (x: number, y: number) => void;
+  modifyWidget?: {
+    widgetType: string;
+    title: string;
+    config: Record<string, unknown>;
+    data: Record<string, unknown>[] | null;
+    insightText: string;
+  } | null;
 }
 
 const FALLBACK_INSIGHT = '최근 활동 데이터와 DART 공시를 결합하여 분석한 결과입니다.';
@@ -87,6 +94,7 @@ export default function FintChatPanel({
   panelPosX,
   panelPosY,
   onPosChange,
+  modifyWidget = null,
 }: Props) {
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
@@ -120,6 +128,9 @@ export default function FintChatPanel({
       posX: panelPosX ?? 20, posY: panelPosY ?? 28,
     };
     const MIN_W = 280, MAX_W = 700, MIN_H = 180, MAX_H = 700;
+    // 상단 리사이즈 시 헤더 영역(64px)을 침범하지 않도록 높이 상한 계산
+    const HEADER_H = 100; // top nav + tab bar
+    const maxNorthH = Math.max(MIN_H, (typeof window !== 'undefined' ? window.innerHeight : 800) - (panelPosY ?? 28) - HEADER_H);
     const onMove = (ev: MouseEvent) => {
       if (!resizing.current) return;
       const { x: sx, y: sy, w: sw, h: sh, posX: spx, posY: spy } = resizeStart.current;
@@ -136,7 +147,7 @@ export default function FintChatPanel({
         newW = Math.max(MIN_W, rightEdge - newPosX);
       }
       if (dir.includes('n')) {
-        newH = Math.max(MIN_H, Math.min(MAX_H, sh - dy));
+        newH = Math.max(MIN_H, Math.min(maxNorthH, sh - dy));
       }
       if (dir.includes('s')) {
         newH = Math.max(MIN_H, Math.min(MAX_H, sh + dy));
@@ -376,10 +387,25 @@ export default function FintChatPanel({
           {/* 완료 인사이트 */}
           {isDone && !errorMessage && (
             <p style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 13, color: '#475569', margin: 0, lineHeight: 1.6 }}>
-              {insightText}
+              {(modifyWidget?.insightText && modifyWidget.insightText.trim().length > 0) ? modifyWidget.insightText : insightText}
             </p>
           )}
         </div>
+
+        {/* MODIFY 결과 미리보기 — 드래그 없음, 캔버스 위젯 업데이트 확인용 */}
+        {isDone && !errorMessage && modifyWidget !== null && (
+          <div style={{ margin: '0 12px 10px', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.5)', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '7px 14px 6px', borderBottom: '1px solid rgba(241,245,249,0.8)' }}>
+              <span style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 12, color: '#64748b' }}>
+                {modifyWidget.title}
+              </span>
+              <span style={{ marginLeft: 8, fontSize: 10, color: '#06b6d4', fontFamily: 'Pretendard,sans-serif' }}>위젯 업데이트됨</span>
+            </div>
+            <div style={{ padding: '4px 10px 6px', height: 130 }}>
+              <WidgetRenderer widgetType={modifyWidget.widgetType} config={modifyWidget.config} data={modifyWidget.data} result={null} />
+            </div>
+          </div>
+        )}
 
         {/* 드래그 위젯 — MODIFY(선택 위젯 수정)가 아닌 CREATE/ADD일 때만 표시 */}
         {isDone && !errorMessage && widgetData !== null && (

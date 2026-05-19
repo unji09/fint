@@ -7,7 +7,7 @@ import CanvasWidgetCard from '@/components/dashboard/CanvasWidgetCard';
 import FintChatPanel from '@/components/dashboard/FintChatPanel';
 import type { CanvasWidget, Step } from '@/types/dashboard';
 import QueryBar from '@/components/dashboard/QueryBar';
-import { BarChartSvg, COLUMN_KO } from '@/components/dashboard/ChartWidgets';
+import { BarChartSvg } from '@/components/dashboard/ChartWidgets';
 import useBreakpoint from '@/hooks/useBreakpoint';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import {
@@ -27,88 +27,6 @@ const STEP_LABELS = ['사용자 의도 파악', '데이터 조회', '컴포넌�
 function authHeader() {
   const t = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
-// TABLE 위젯의 config + data를 기반으로 buildChartJsConfig 호환 chart config 생성
-// buildChartJsConfig 는 config.chart.type + config.data.labelsField + config.data.datasets 구조 사용
-function buildChartConfigFromWidget(
-  w: CanvasWidget,
-  chartType: string,
-): Record<string, unknown> | null {
-  const data = w.data as Record<string, unknown>[] | null;
-  if (!data || data.length === 0) return null;
-
-  const existingCols = (w.config.columns ?? []) as Array<{ field: string; label: string; format?: string }>;
-  const dataKeys = Object.keys(data[0] ?? {});
-  const cols: Array<{ field: string; label: string; format?: string }> = existingCols.length > 0
-    ? existingCols
-    : dataKeys.map((k) => ({ field: k, label: COLUMN_KO[k] ?? k }));
-
-  // X축: 첫 번째 텍스트(비숫자) 컬럼
-  const xField = (() => {
-    for (const col of cols) {
-      if (col.format !== 'number' && col.format !== 'currency') {
-        const sample = data[0][col.field];
-        if (typeof sample === 'string' || sample == null) return col.field;
-      }
-    }
-    return cols[0]?.field ?? dataKeys[0];
-  })();
-
-  // Y축: 실제 숫자 컬럼만 허용 (텍스트/날짜 컬럼은 Y축 불가)
-  const yCols = cols.filter((col) => {
-    if (col.field === xField) return false;
-    const sample = data[0][col.field];
-    return col.format === 'number' || col.format === 'currency' || typeof sample === 'number';
-  });
-
-  // 숫자 컬럼이 없으면 차트 변환 불가
-  if (yCols.length === 0) return null;
-
-  const datasets = yCols.map((col) => ({
-    label: col.label ?? COLUMN_KO[col.field] ?? col.field,
-    valueField: col.field,
-  }));
-
-  const baseConfig = Object.fromEntries(
-    Object.entries(w.config).filter(([k]) => k !== 'chart' && k !== 'columns' && k !== 'data'),
-  );
-  return {
-    ...baseConfig,
-    chart: { type: chartType },
-    data: { labelsField: xField, datasets },
-  };
-}
-
-// CHART 위젯의 config + data를 기반으로 table config 생성
-function buildTableConfigFromWidget(w: CanvasWidget): Record<string, unknown> | null {
-  const chartDataConf = (w.config.data ?? {}) as {
-    labelsField?: string;
-    datasets?: Array<{ label: string; valueField: string }>;
-  };
-  const widgetData = w.data as Record<string, unknown>[] | null;
-  const labelsField = chartDataConf.labelsField;
-  const datasets = chartDataConf.datasets ?? [];
-
-  const cols: Array<Record<string, unknown>> = [];
-  if (labelsField) cols.push({ field: labelsField, label: COLUMN_KO[labelsField] ?? labelsField });
-  for (const ds of datasets) {
-    const sample = widgetData?.[0]?.[ds.valueField];
-    cols.push({
-      field: ds.valueField,
-      label: ds.label ?? COLUMN_KO[ds.valueField] ?? ds.valueField,
-      ...(typeof sample === 'number' ? { format: 'number' } : {}),
-    });
-  }
-
-  if (cols.length === 0 && widgetData && widgetData.length > 0) {
-    Object.keys(widgetData[0]).forEach((k) => cols.push({ field: k, label: COLUMN_KO[k] ?? k }));
-  }
-
-  const baseConfig = Object.fromEntries(
-    Object.entries(w.config).filter(([k]) => k !== 'chart' && k !== 'columns' && k !== 'data'),
-  );
-  return { ...baseConfig, columns: cols };
 }
 
 export default function DashboardDetailPage() {
@@ -171,6 +89,14 @@ export default function DashboardDetailPage() {
   const [pendingType, setPendingType] = useState('BAR_CHART');
   /* SSE complete 시 받아둔 위젯 데이터 */
   const [pendingWidget, setPendingWidget] = useState<CanvasWidget | null>(null);
+  /* MODIFY 완료 후 채팅 패널에 미리보기로 표시할 위젯 (드래그 없음) */
+  const [modifyResultWidget, setModifyResultWidget] = useState<{
+    widgetType: string;
+    title: string;
+    config: Record<string, unknown>;
+    data: Record<string, unknown>[] | null;
+    insightText: string;
+  } | null>(null);
 
   /* 채팅 내역 */
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -221,6 +147,10 @@ export default function DashboardDetailPage() {
   // 항상 최신 panelPos를 참조 (closure stale 방지)
   const panelPosRef = useRef(panelPos);
   panelPosRef.current = panelPos;
+  // 채팅 패널 DOM 참조 — 드래그 상단 경계 계산에 사용
+  const chatPanelContainerRef = useRef<HTMLDivElement>(null);
+  // 헤더 높이 (상단 nav + 탭바 합계, 채팅 패널이 넘어가지 않을 기준선)
+  const HEADER_HEIGHT = 100; // top nav (~52px) + tab bar (~44px) + margin
 
   const handlePanelHeaderDragStart = useCallback((e: React.MouseEvent) => {
     if (isMobile) return;
@@ -237,8 +167,10 @@ export default function DashboardDetailPage() {
         if (Math.hypot(dx, dy) < 5) return;
         moved = true;
       }
+      const panelH = chatPanelContainerRef.current?.offsetHeight ?? 420;
+      const maxY = Math.max(12, window.innerHeight - HEADER_HEIGHT - panelH);
       const newX = Math.max(12, panelDragRef.current.origX + dx);
-      const newY = Math.max(12, panelDragRef.current.origY - dy);
+      const newY = Math.max(12, Math.min(maxY, panelDragRef.current.origY - dy));
       setPanelPos({ x: newX, y: newY });
     };
     const onUp = () => {
@@ -458,14 +390,21 @@ export default function DashboardDetailPage() {
           // assistant message
           const isError = q.status === 'ERROR' || q.status === 'FAILED';
           const resultObj = (q.result ?? {}) as Record<string, unknown>;
+          // q.result is raw FastAPI JSON: insight_text (snake_case), data: {rows, columns, ...}
+          const rawData = resultObj.data as ({ rows?: unknown[] } & Record<string, unknown>) | unknown[] | null | undefined;
+          const dataRows: Record<string, unknown>[] | null = Array.isArray(rawData)
+            ? (rawData as Record<string, unknown>[])
+            : Array.isArray((rawData as { rows?: unknown[] } | null)?.rows)
+              ? ((rawData as { rows: unknown[] }).rows as Record<string, unknown>[])
+              : null;
           msgs.push({
             id: `assistant-${q.queryId ?? Date.now()}-${msgs.length}`,
             role: 'assistant',
-            content: q.result?.insightText ?? (isError ? '' : ''),
+            content: (resultObj.insight_text as string) ?? (isError ? '' : ''),
             widget: isError ? null : {
               widgetType: q.widgetType ?? (resultObj.widget_type as string) ?? 'BAR_CHART',
               title: q.title ?? (resultObj.title as string) ?? '',
-              data: q.result?.data ?? {},
+              data: dataRows,
               config: q.config ?? (resultObj.config as Record<string, unknown>) ?? {},
             },
             timestamp: ts,
@@ -711,130 +650,19 @@ export default function DashboardDetailPage() {
     [pendingType, widgetTitle, userQuery, pendingWidget, persistWidget, cacheWidgets],
   );
 
-  // 위젯 선택 상태에서 직접 config 패치 가능한 요청 감지
-  // 반환값: { changes, description } → 패치 적용 | { changes: null, description } → 에러 메시지(AI 호출 X) | null → AI로 위임
-  const tryWidgetConfigPatch = useCallback((plainText: string, wid: number): { changes: Partial<CanvasWidget> | null; description: string } | null => {
-    const w = canvasWidgets.find((cw) => cw.widgetId === wid);
-    if (!w) return null;
-
-    const hasChart = !!w.config.chart;
-    const hasData = Array.isArray(w.data) && w.data.length > 0;
-
-    // 차트/그래프 변환 요청 감지 (특정 타입 + 일반 요청 통합)
-    const isChartRequest = /막대|바\s*차트?|bar\s*chart|막대\s*그래프|선\s*차트?|라인|line\s*chart|꺾은\s*선|꺾은선|라인\s*그래프|파이\s*차트?|pie\s*chart|원형\s*차트?|도넛\s*차트?|doughnut|차트로|그래프로|그려|다른\s*(?:차트|그래프)/i.test(plainText);
-
-    if (isChartRequest) {
-      // 특정 차트 타입 감지
-      const chartTypeMap: [RegExp, string, string][] = [
-        [/막대|바\s*차트?|bar\s*chart|막대\s*그래프/i, 'bar', '막대 차트'],
-        [/선\s*차트?|라인|line\s*chart|꺾은\s*선|꺾은선|라인\s*그래프/i, 'line', '선 차트'],
-        [/파이\s*차트?|pie\s*chart|원형\s*차트?/i, 'pie', '파이 차트'],
-        [/도넛\s*차트?|doughnut/i, 'doughnut', '도넛 차트'],
-      ];
-      let targetChartType = 'bar';
-      let targetChartLabel = '막대 차트';
-      for (const [re, t, l] of chartTypeMap) {
-        if (re.test(plainText)) { targetChartType = t; targetChartLabel = l; break; }
-      }
-
-      if (hasChart) {
-        // 기존 차트 → 타입 변경 또는 사이클
-        const chart = w.config.chart as Record<string, unknown>;
-        const cycle = ['bar', 'line', 'pie', 'doughnut'];
-        let nextType = targetChartType;
-        // "다른 그래프로" 등 특정 타입 없으면 사이클
-        if (!/막대|바\s*차트?|bar\s*chart|막대\s*그래프|선\s*차트?|라인|line\s*chart|꺾은\s*선|꺾은선|파이\s*차트?|pie|원형|도넛|doughnut/i.test(plainText)) {
-          const cur = String(chart.type ?? 'bar');
-          nextType = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
-        }
-        const typeLabel = ({ bar: '막대', line: '선', pie: '파이', doughnut: '도넛' } as Record<string, string>)[nextType] ?? nextType;
-        return { changes: { config: { ...w.config, chart: { ...chart, type: nextType } } }, description: `차트를 ${typeLabel} 형태로 변경했어요.` };
-      }
-
-      // TABLE → CHART 변환 시도
-      if (!hasData) {
-        // 데이터가 아예 없는 위젯 → 변환 불가, AI 호출하지 않음
-        return { changes: null, description: '데이터가 없어서 차트로 변환할 수 없어요.\n데이터를 먼저 조회해 보세요.' };
-      }
-      const newConfig = buildChartConfigFromWidget(w, targetChartType);
-      if (newConfig) {
-        return { changes: { config: newConfig }, description: `테이블을 ${targetChartLabel}로 변환했어요.` };
-      }
-      // 숫자 컬럼 없음 → AI 없이 안내
-      return { changes: null, description: '이 데이터에는 숫자 값이 없어서 차트로 표현하기 어려워요.\n제목·날짜 등 텍스트만 있는 경우 차트 변환이 불가합니다.' };
-    }
-
-    // CHART → TABLE 변환
-    if (hasChart && /테이블로|표로|표\s*형태|테이블\s*형태/.test(plainText)) {
-      const newConfig = buildTableConfigFromWidget(w);
-      if (newConfig) {
-        return { changes: { config: newConfig }, description: '차트를 테이블로 변환했어요.' };
-      }
-    }
-
-    // 금액 단위 변경 (만원 / 억원)
-    if (/만\s*원/.test(plainText) || /억\s*원?/.test(plainText)) {
-      const isEok = /억\s*원?/.test(plainText);
-      const unitLabel = isEok ? '억원' : '만원';
-      const cols = (w.config.columns ?? []) as Array<Record<string, unknown>>;
-      const newCols = cols.map((col) =>
-        col.format === 'currency' ? { ...col, koreanUnit: true, unit: unitLabel } : col,
-      );
-      return {
-        changes: { config: { ...w.config, columns: newCols } },
-        description: `금액을 ${unitLabel} 단위로 표시하도록 변경했어요.`,
-      };
-    }
-
-    // 제목 변경 — "제목을 X로 바꿔줘"
-    const titleMatch = plainText.match(/(?:제목|이름|타이틀)(?:을|를)?\s*['"「]?(.+?)['"」]?\s*(?:으로|로)\s*(?:바꿔|변경|수정)/);
-    if (titleMatch) {
-      return { changes: { title: titleMatch[1].trim() }, description: `제목을 '${titleMatch[1].trim()}'으로 변경했어요.` };
-    }
-
-    // 컬럼 숨기기 — "X 컬럼 숨겨줘 / 제거해줘 / 없애줘 / 빼줘"
-    const hideMatch = plainText.match(/([\w가-힯]+)\s*(?:컬럼|열|필드|은|는)?\s*(?:숨겨|제거|삭제|없애|빼|지워)/);
-    if (hideMatch) {
-      const keyword = hideMatch[1];
-      const cols = (w.config.columns ?? []) as Array<Record<string, unknown>>;
-      const newCols = cols.filter((col) => col.field !== keyword && col.label !== keyword);
-      if (newCols.length < cols.length) {
-        return { changes: { config: { ...w.config, columns: newCols } }, description: `'${keyword}' 컬럼을 숨겼어요.` };
-      }
-    }
-
-    return null;
-  }, [canvasWidgets]);
-
   const handleQuery = useCallback(
     async (text: string) => {
       if (!text.trim() || querying) return;
 
-      // 위젯 선택 상태에서 직접 처리 가능한 요청 인터셉트
+      // [widgetId:N] 접두사가 있으면 MODIFY 모드 — widgetId를 백엔드에 전달
       const widgetPrefixMatch = text.match(/^\[widgetId:(\d+)\]\s*/);
       const modifyWid = widgetPrefixMatch ? Number(widgetPrefixMatch[1]) : null;
       modifyWidgetIdRef.current = modifyWid;
       let aiInputText = text;
       if (modifyWid !== null) {
-        const wid = modifyWid;
+        // 접두사 제거 후 위젯 제목 컨텍스트 추가
         const plainText = text.slice(widgetPrefixMatch![0].length);
-        const patch = tryWidgetConfigPatch(plainText, wid);
-        if (patch) {
-          const ts = new Date().toISOString();
-          setChatHistory((prev) => [
-            ...prev,
-            { id: `user-${Date.now()}`, role: 'user', content: text, widget: null, timestamp: ts, status: 'done' },
-            { id: `ai-${Date.now() + 1}`, role: 'assistant', content: patch.description, widget: null, timestamp: ts, status: patch.changes !== null ? 'done' : 'error' },
-          ]);
-          if (patch.changes !== null) {
-            updateWidget(wid, patch.changes);
-          }
-          setChatOpen(true);
-          setQueryInput('');
-          return;
-        }
-        // tryWidgetConfigPatch 불가 → AI로 보낼 때 위젯 제목/타입 컨텍스트 포함
-        const ctxWidget = canvasWidgets.find((cw) => cw.widgetId === wid);
+        const ctxWidget = canvasWidgets.find((cw) => cw.widgetId === modifyWid);
         const widgetContext = ctxWidget ? `[${ctxWidget.title}] ` : '';
         aiInputText = `${widgetContext}${plainText}`;
       }
@@ -846,6 +674,7 @@ export default function DashboardDetailPage() {
       setQueryErrorMsg(null);
       setQueryInput('');
       setPendingWidget(null);
+      setModifyResultWidget(null);
 
       const autoTitle = text.replace(/어때\?*|보여줘|분석해줘|알려줘|\?\?*/g, '').trim() || text;
       setWidgetTitle(autoTitle);
@@ -938,6 +767,14 @@ export default function DashboardDetailPage() {
                     data: newData,
                     queryId: data.queryId ?? null,
                   });
+                  // 채팅 패널에 미리보기 위젯 표시 (드래그 없음)
+                  setModifyResultWidget({
+                    widgetType: data.widgetType ?? 'BAR_CHART',
+                    title: data.title ?? autoTitle,
+                    config: (data.config ?? {}) as Record<string, unknown>,
+                    data: newData,
+                    insightText: data.result?.insightText ?? '',
+                  });
                 } else {
                   setWidgetTitle(data.title ?? autoTitle);
                   setPendingType(data.widgetType ?? 'BAR_CHART');
@@ -998,11 +835,25 @@ export default function DashboardDetailPage() {
         });
       } catch (err) {
         console.error('Query start failed:', err);
+        const errMsg = err instanceof Error ? err.message : '요청을 처리하지 못했어요. 잠시 후 다시 시도해 보세요.';
+        setQueryErrorMsg(errMsg);
         setQuerying(false);
         setChatDone(true);
+        setChatHistory((prev) => [
+          ...prev,
+          {
+            id: `assistant-err-${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            widget: null,
+            timestamp: new Date().toISOString(),
+            status: 'error',
+            errorMessage: errMsg,
+          } as ChatMessage,
+        ]);
       }
     },
-    [querying, id],
+    [querying, id, canvasWidgets],
   );
 
   // 처음 화면(/dashboard) 검색바·칩에서 인계된 질문을 마운트 후 1회 자동 실행.
@@ -1302,6 +1153,7 @@ export default function DashboardDetailPage() {
 
           {/* FINT 채팅 패널 (데스크탑: 드래그 가능, 모바일: 고정) */}
           <div
+            ref={chatPanelContainerRef}
             style={{
               position: 'fixed',
               zIndex: 20,
@@ -1344,6 +1196,7 @@ export default function DashboardDetailPage() {
                 result={pendingWidget?.result}
                 config={pendingWidget?.config ?? {}}
                 data={pendingWidget?.data ?? null}
+                modifyWidget={modifyResultWidget}
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}
