@@ -1,5 +1,12 @@
 import type { ChartData, ChartOptions, ChartType } from 'chart.js';
 
+function formatKoreanNumber(v: number): string {
+  if (Math.abs(v) >= 1_0000_0000) return `${parseFloat((v / 1_0000_0000).toFixed(1))}억`;
+  if (Math.abs(v) >= 1_0000) return `${parseFloat((v / 1_0000).toFixed(1))}만`;
+  if (Number.isInteger(v)) return v.toLocaleString('ko-KR');
+  return parseFloat(v.toFixed(2)).toLocaleString('ko-KR');
+}
+
 interface DatasetConfig {
   label: string;
   valueField: string;
@@ -13,8 +20,16 @@ interface PresetChartConfig {
     yAxis?: { label?: string; unit?: string };
     legend?: boolean;
   };
-  display?: { format?: string; emptyMessage?: string };
+  display?: { format?: string; emptyMessage?: string; koreanUnit?: boolean };
 }
+
+const MOOD_TICK_LABELS: Record<number, string> = {
+  0: '⛈️ 천둥',
+  0.25: '🌧️ 비',
+  0.5: '☁️ 흐림',
+  0.75: '☀️ 맑음',
+  1: '🌈 무지개',
+};
 
 const COLORS = [
   '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',
@@ -24,6 +39,7 @@ const COLORS = [
 export function buildChartJsConfig(
   config: Record<string, unknown>,
   data: Record<string, unknown>[] | null,
+  fontSize = 11,
 ): { type: ChartType; data: ChartData; options: ChartOptions } | null {
   const cfg = config as unknown as PresetChartConfig;
   if (!cfg.chart?.type || !cfg.data?.labelsField || !data || data.length === 0) {
@@ -60,25 +76,47 @@ export function buildChartJsConfig(
     };
   });
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const options: ChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: { bottom: 8, top: 4 },
+    },
     plugins: {
-      legend: { display: cfg.options?.legend ?? !isPie ? true : isPie },
+      legend: {
+        display: cfg.options?.legend ?? !isPie ? true : isPie,
+        labels: { font: { size: fontSize } },
+      },
     },
     ...(isPie ? {} : {
       scales: {
         x: {
           title: cfg.options?.xAxis?.label
-            ? { display: true, text: cfg.options.xAxis.label }
+            ? { display: true, text: cfg.options.xAxis.label, font: { size: fontSize } }
             : undefined,
+          ticks: { maxRotation: 45, font: { size: fontSize } },
         },
-        y: {
-          title: cfg.options?.yAxis?.label
-            ? { display: true, text: `${cfg.options.yAxis.label}${cfg.options.yAxis.unit ? ` (${cfg.options.yAxis.unit})` : ''}` }
-            : undefined,
-          beginAtZero: true,
-        },
+        y: (() => {
+          const yUnit = cfg.options?.yAxis?.unit ?? '';
+          const yLabel = cfg.options?.yAxis?.label ?? '';
+          const isMood = yUnit === 'mood' || /무드|감정|mood/i.test(yLabel) || cfg.display?.format === 'mood';
+          return {
+            title: yLabel
+              ? { display: true, text: `${yLabel}${yUnit && yUnit !== 'mood' ? ` (${yUnit})` : ''}`, font: { size: fontSize } }
+              : undefined,
+            beginAtZero: true,
+            ...(isMood ? { min: 0, max: 1 } : {}),
+            ticks: {
+              ...(isMood ? { stepSize: 0.25 } : {}),
+              callback: (v: any) => {
+                if (isMood) return MOOD_TICK_LABELS[Number(v)] ?? '';
+                return formatKoreanNumber(Number(v));
+              },
+              font: { size: fontSize },
+            },
+          };
+        })(),
       },
     }),
   };

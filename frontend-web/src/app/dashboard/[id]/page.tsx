@@ -7,7 +7,7 @@ import CanvasWidgetCard from '@/components/dashboard/CanvasWidgetCard';
 import FintChatPanel from '@/components/dashboard/FintChatPanel';
 import type { CanvasWidget, Step } from '@/types/dashboard';
 import QueryBar from '@/components/dashboard/QueryBar';
-import { BarChartSvg } from '@/components/dashboard/ChartWidgets';
+import { BarChartSvg, COLUMN_KO } from '@/components/dashboard/ChartWidgets';
 import useBreakpoint from '@/hooks/useBreakpoint';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import {
@@ -27,6 +27,88 @@ const STEP_LABELS = ['사용자 의도 파악', '데이터 조회', '컴포넌�
 function authHeader() {
   const t = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+// TABLE 위젯의 config + data를 기반으로 buildChartJsConfig 호환 chart config 생성
+// buildChartJsConfig 는 config.chart.type + config.data.labelsField + config.data.datasets 구조 사용
+function buildChartConfigFromWidget(
+  w: CanvasWidget,
+  chartType: string,
+): Record<string, unknown> | null {
+  const data = w.data as Record<string, unknown>[] | null;
+  if (!data || data.length === 0) return null;
+
+  const existingCols = (w.config.columns ?? []) as Array<{ field: string; label: string; format?: string }>;
+  const dataKeys = Object.keys(data[0] ?? {});
+  const cols: Array<{ field: string; label: string; format?: string }> = existingCols.length > 0
+    ? existingCols
+    : dataKeys.map((k) => ({ field: k, label: COLUMN_KO[k] ?? k }));
+
+  // X축: 첫 번째 텍스트(비숫자) 컬럼
+  const xField = (() => {
+    for (const col of cols) {
+      if (col.format !== 'number' && col.format !== 'currency') {
+        const sample = data[0][col.field];
+        if (typeof sample === 'string' || sample == null) return col.field;
+      }
+    }
+    return cols[0]?.field ?? dataKeys[0];
+  })();
+
+  // Y축: 실제 숫자 컬럼만 허용 (텍스트/날짜 컬럼은 Y축 불가)
+  const yCols = cols.filter((col) => {
+    if (col.field === xField) return false;
+    const sample = data[0][col.field];
+    return col.format === 'number' || col.format === 'currency' || typeof sample === 'number';
+  });
+
+  // 숫자 컬럼이 없으면 차트 변환 불가
+  if (yCols.length === 0) return null;
+
+  const datasets = yCols.map((col) => ({
+    label: col.label ?? COLUMN_KO[col.field] ?? col.field,
+    valueField: col.field,
+  }));
+
+  const baseConfig = Object.fromEntries(
+    Object.entries(w.config).filter(([k]) => k !== 'chart' && k !== 'columns' && k !== 'data'),
+  );
+  return {
+    ...baseConfig,
+    chart: { type: chartType },
+    data: { labelsField: xField, datasets },
+  };
+}
+
+// CHART 위젯의 config + data를 기반으로 table config 생성
+function buildTableConfigFromWidget(w: CanvasWidget): Record<string, unknown> | null {
+  const chartDataConf = (w.config.data ?? {}) as {
+    labelsField?: string;
+    datasets?: Array<{ label: string; valueField: string }>;
+  };
+  const widgetData = w.data as Record<string, unknown>[] | null;
+  const labelsField = chartDataConf.labelsField;
+  const datasets = chartDataConf.datasets ?? [];
+
+  const cols: Array<Record<string, unknown>> = [];
+  if (labelsField) cols.push({ field: labelsField, label: COLUMN_KO[labelsField] ?? labelsField });
+  for (const ds of datasets) {
+    const sample = widgetData?.[0]?.[ds.valueField];
+    cols.push({
+      field: ds.valueField,
+      label: ds.label ?? COLUMN_KO[ds.valueField] ?? ds.valueField,
+      ...(typeof sample === 'number' ? { format: 'number' } : {}),
+    });
+  }
+
+  if (cols.length === 0 && widgetData && widgetData.length > 0) {
+    Object.keys(widgetData[0]).forEach((k) => cols.push({ field: k, label: COLUMN_KO[k] ?? k }));
+  }
+
+  const baseConfig = Object.fromEntries(
+    Object.entries(w.config).filter(([k]) => k !== 'chart' && k !== 'columns' && k !== 'data'),
+  );
+  return { ...baseConfig, columns: cols };
 }
 
 export default function DashboardDetailPage() {
@@ -98,7 +180,137 @@ export default function DashboardDetailPage() {
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
   const dragOrigin = useRef({ ox: 0, oy: 0 });
 
-  /* 채팅창 위치 — 좌측 하단 고정 (드래그 불가) */
+  /* 모바일 캔버스 핀치 줌 */
+  const [canvasScale, setCanvasScale] = useState(1);
+  const canvasScaleRef = useRef(1);
+  canvasScaleRef.current = canvasScale;
+  const pinchRef = useRef<{ dist: number; scale: number } | null>(null);
+
+  /* 위젯 선택 상태 */
+  const [selectedWidgetId, setSelectedWidgetId] = useState<number | null>(null);
+  const [chatInputFocusTrigger, setChatInputFocusTrigger] = useState(0);
+
+  // 위젯 선택 시 채팅 패널 열기 + 입력창 포커스
+  useEffect(() => {
+    if (selectedWidgetId !== null) {
+      setChatOpen(true);
+      setChatInputFocusTrigger((t) => t + 1);
+    }
+  }, [selectedWidgetId]);
+
+  /* 채팅 패널 너비 동기화 (FintChatPanel ↔ QueryBar) */
+  const [chatPanelWidth, setChatPanelWidth] = useState(() => {
+    if (typeof window === 'undefined') return 390;
+    try {
+      const saved = JSON.parse(localStorage.getItem('fint:chatPanelSize') ?? '{}') as { w?: number };
+      if (saved.w) return Math.max(320, Math.min(700, saved.w));
+    } catch { /* ignore */ }
+    return 390;
+  });
+
+  /* 채팅 패널 위치 (데스크탑 드래그 가능) */
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number }>(() => {
+    if (typeof window === 'undefined') return { x: 20, y: 28 };
+    try {
+      const saved = JSON.parse(localStorage.getItem('fint:chatPanelPos') ?? '{}') as { x?: number; y?: number };
+      if (typeof saved.x === 'number' && typeof saved.y === 'number') return saved;
+    } catch { /* ignore */ }
+    return { x: 20, y: 28 };
+  });
+  const panelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  // 항상 최신 panelPos를 참조 (closure stale 방지)
+  const panelPosRef = useRef(panelPos);
+  panelPosRef.current = panelPos;
+
+  const handlePanelHeaderDragStart = useCallback((e: React.MouseEvent) => {
+    if (isMobile) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const pos = panelPosRef.current;
+    panelDragRef.current = { startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+    let moved = false;
+    const onMove = (ev: MouseEvent) => {
+      if (!panelDragRef.current) return;
+      const dx = ev.clientX - panelDragRef.current.startX;
+      const dy = ev.clientY - panelDragRef.current.startY;
+      if (!moved) {
+        if (Math.hypot(dx, dy) < 5) return;
+        moved = true;
+      }
+      const newX = Math.max(12, panelDragRef.current.origX + dx);
+      const newY = Math.max(12, panelDragRef.current.origY - dy);
+      setPanelPos({ x: newX, y: newY });
+    };
+    const onUp = () => {
+      if (!panelDragRef.current) return;
+      panelDragRef.current = null;
+      setPanelPos((p) => {
+        try { localStorage.setItem('fint:chatPanelPos', JSON.stringify(p)); } catch { /* ignore */ }
+        return p;
+      });
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [isMobile]);
+
+  /* 모바일 핀치 줌 — canvasRef의 비패시브 touchmove로 preventDefault 호출 */
+  useEffect(() => {
+    if (!isMobile || !canvasRef.current) return;
+    const el = canvasRef.current;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        pinchRef.current = {
+          dist: Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
+          scale: canvasScaleRef.current,
+        };
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const ratio = dist / pinchRef.current.dist;
+        const next = Math.min(3, Math.max(0.25, pinchRef.current.scale * ratio));
+        setCanvasScale(next);
+        canvasScaleRef.current = next;
+      }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchRef.current = null;
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [isMobile]);
+
+  /* 탭 숨기기 (삭제 아님) */
+  const [hiddenTabs, setHiddenTabs] = useState<number[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem('fint:hiddenTabs') ?? '[]') as number[]; } catch { return []; }
+  });
+  const hideTab = useCallback((tabId: number) => {
+    setHiddenTabs((prev) => {
+      const next = [...prev, tabId];
+      try { localStorage.setItem('fint:hiddenTabs', JSON.stringify(next)); } catch { /* ignore */ }
+      if (String(tabId) === String(id)) {
+        const visible = allDashboards.filter((d) => !next.includes(d.dashboardId));
+        if (visible.length > 0) router.push(`/dashboard/${visible[0].dashboardId}`);
+        else router.push('/dashboard');
+      }
+      return next;
+    });
+  }, [id, allDashboards, router]);
 
   /* 대시보드 탭 삭제 */
   const { remove: deleteDashboard, loading: deletingDashboard } = useDeleteDashboard();
@@ -351,6 +563,11 @@ export default function DashboardDetailPage() {
       return next;
     });
   }, [schedulePersist, cacheWidgets]);
+  // 항상 최신 updateWidget 참조 (handleQuery 클로저 stale 방지)
+  const updateWidgetRef = useRef(updateWidget);
+  updateWidgetRef.current = updateWidget;
+  // 진행 중인 쿼리가 수정 대상 위젯 ID (null이면 새 위젯 추가)
+  const modifyWidgetIdRef = useRef<number | null>(null);
 
   const updateTitle = useCallback((wid: number, t: string) => {
     setCanvasWidgets((prev) => {
@@ -382,6 +599,31 @@ export default function DashboardDetailPage() {
     }
   }, [canvasWidgets, deleteWidgetApi, id, cacheWidgets, captureAndUpload]);
 
+
+  /* 미들클릭 스크롤 */
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startLeft = canvas.scrollLeft;
+    const startTop = canvas.scrollTop;
+    const onMove = (ev: MouseEvent) => {
+      canvas.scrollLeft = startLeft - (ev.clientX - startX);
+      canvas.scrollTop = startTop - (ev.clientY - startY);
+    };
+    const origCursor = canvas.style.cursor;
+    canvas.style.cursor = 'grabbing';
+    const onUp = () => {
+      canvas.style.cursor = origCursor;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -469,9 +711,134 @@ export default function DashboardDetailPage() {
     [pendingType, widgetTitle, userQuery, pendingWidget, persistWidget, cacheWidgets],
   );
 
+  // 위젯 선택 상태에서 직접 config 패치 가능한 요청 감지
+  // 반환값: { changes, description } → 패치 적용 | { changes: null, description } → 에러 메시지(AI 호출 X) | null → AI로 위임
+  const tryWidgetConfigPatch = useCallback((plainText: string, wid: number): { changes: Partial<CanvasWidget> | null; description: string } | null => {
+    const w = canvasWidgets.find((cw) => cw.widgetId === wid);
+    if (!w) return null;
+
+    const hasChart = !!w.config.chart;
+    const hasData = Array.isArray(w.data) && w.data.length > 0;
+
+    // 차트/그래프 변환 요청 감지 (특정 타입 + 일반 요청 통합)
+    const isChartRequest = /막대|바\s*차트?|bar\s*chart|막대\s*그래프|선\s*차트?|라인|line\s*chart|꺾은\s*선|꺾은선|라인\s*그래프|파이\s*차트?|pie\s*chart|원형\s*차트?|도넛\s*차트?|doughnut|차트로|그래프로|그려|다른\s*(?:차트|그래프)/i.test(plainText);
+
+    if (isChartRequest) {
+      // 특정 차트 타입 감지
+      const chartTypeMap: [RegExp, string, string][] = [
+        [/막대|바\s*차트?|bar\s*chart|막대\s*그래프/i, 'bar', '막대 차트'],
+        [/선\s*차트?|라인|line\s*chart|꺾은\s*선|꺾은선|라인\s*그래프/i, 'line', '선 차트'],
+        [/파이\s*차트?|pie\s*chart|원형\s*차트?/i, 'pie', '파이 차트'],
+        [/도넛\s*차트?|doughnut/i, 'doughnut', '도넛 차트'],
+      ];
+      let targetChartType = 'bar';
+      let targetChartLabel = '막대 차트';
+      for (const [re, t, l] of chartTypeMap) {
+        if (re.test(plainText)) { targetChartType = t; targetChartLabel = l; break; }
+      }
+
+      if (hasChart) {
+        // 기존 차트 → 타입 변경 또는 사이클
+        const chart = w.config.chart as Record<string, unknown>;
+        const cycle = ['bar', 'line', 'pie', 'doughnut'];
+        let nextType = targetChartType;
+        // "다른 그래프로" 등 특정 타입 없으면 사이클
+        if (!/막대|바\s*차트?|bar\s*chart|막대\s*그래프|선\s*차트?|라인|line\s*chart|꺾은\s*선|꺾은선|파이\s*차트?|pie|원형|도넛|doughnut/i.test(plainText)) {
+          const cur = String(chart.type ?? 'bar');
+          nextType = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+        }
+        const typeLabel = ({ bar: '막대', line: '선', pie: '파이', doughnut: '도넛' } as Record<string, string>)[nextType] ?? nextType;
+        return { changes: { config: { ...w.config, chart: { ...chart, type: nextType } } }, description: `차트를 ${typeLabel} 형태로 변경했어요.` };
+      }
+
+      // TABLE → CHART 변환 시도
+      if (!hasData) {
+        // 데이터가 아예 없는 위젯 → 변환 불가, AI 호출하지 않음
+        return { changes: null, description: '데이터가 없어서 차트로 변환할 수 없어요.\n데이터를 먼저 조회해 보세요.' };
+      }
+      const newConfig = buildChartConfigFromWidget(w, targetChartType);
+      if (newConfig) {
+        return { changes: { config: newConfig }, description: `테이블을 ${targetChartLabel}로 변환했어요.` };
+      }
+      // 숫자 컬럼 없음 → AI 없이 안내
+      return { changes: null, description: '이 데이터에는 숫자 값이 없어서 차트로 표현하기 어려워요.\n제목·날짜 등 텍스트만 있는 경우 차트 변환이 불가합니다.' };
+    }
+
+    // CHART → TABLE 변환
+    if (hasChart && /테이블로|표로|표\s*형태|테이블\s*형태/.test(plainText)) {
+      const newConfig = buildTableConfigFromWidget(w);
+      if (newConfig) {
+        return { changes: { config: newConfig }, description: '차트를 테이블로 변환했어요.' };
+      }
+    }
+
+    // 금액 단위 변경 (만원 / 억원)
+    if (/만\s*원/.test(plainText) || /억\s*원?/.test(plainText)) {
+      const isEok = /억\s*원?/.test(plainText);
+      const unitLabel = isEok ? '억원' : '만원';
+      const cols = (w.config.columns ?? []) as Array<Record<string, unknown>>;
+      const newCols = cols.map((col) =>
+        col.format === 'currency' ? { ...col, koreanUnit: true, unit: unitLabel } : col,
+      );
+      return {
+        changes: { config: { ...w.config, columns: newCols } },
+        description: `금액을 ${unitLabel} 단위로 표시하도록 변경했어요.`,
+      };
+    }
+
+    // 제목 변경 — "제목을 X로 바꿔줘"
+    const titleMatch = plainText.match(/(?:제목|이름|타이틀)(?:을|를)?\s*['"「]?(.+?)['"」]?\s*(?:으로|로)\s*(?:바꿔|변경|수정)/);
+    if (titleMatch) {
+      return { changes: { title: titleMatch[1].trim() }, description: `제목을 '${titleMatch[1].trim()}'으로 변경했어요.` };
+    }
+
+    // 컬럼 숨기기 — "X 컬럼 숨겨줘 / 제거해줘 / 없애줘 / 빼줘"
+    const hideMatch = plainText.match(/([\w가-힯]+)\s*(?:컬럼|열|필드|은|는)?\s*(?:숨겨|제거|삭제|없애|빼|지워)/);
+    if (hideMatch) {
+      const keyword = hideMatch[1];
+      const cols = (w.config.columns ?? []) as Array<Record<string, unknown>>;
+      const newCols = cols.filter((col) => col.field !== keyword && col.label !== keyword);
+      if (newCols.length < cols.length) {
+        return { changes: { config: { ...w.config, columns: newCols } }, description: `'${keyword}' 컬럼을 숨겼어요.` };
+      }
+    }
+
+    return null;
+  }, [canvasWidgets]);
+
   const handleQuery = useCallback(
     async (text: string) => {
       if (!text.trim() || querying) return;
+
+      // 위젯 선택 상태에서 직접 처리 가능한 요청 인터셉트
+      const widgetPrefixMatch = text.match(/^\[widgetId:(\d+)\]\s*/);
+      const modifyWid = widgetPrefixMatch ? Number(widgetPrefixMatch[1]) : null;
+      modifyWidgetIdRef.current = modifyWid;
+      let aiInputText = text;
+      if (modifyWid !== null) {
+        const wid = modifyWid;
+        const plainText = text.slice(widgetPrefixMatch![0].length);
+        const patch = tryWidgetConfigPatch(plainText, wid);
+        if (patch) {
+          const ts = new Date().toISOString();
+          setChatHistory((prev) => [
+            ...prev,
+            { id: `user-${Date.now()}`, role: 'user', content: text, widget: null, timestamp: ts, status: 'done' },
+            { id: `ai-${Date.now() + 1}`, role: 'assistant', content: patch.description, widget: null, timestamp: ts, status: patch.changes !== null ? 'done' : 'error' },
+          ]);
+          if (patch.changes !== null) {
+            updateWidget(wid, patch.changes);
+          }
+          setChatOpen(true);
+          setQueryInput('');
+          return;
+        }
+        // tryWidgetConfigPatch 불가 → AI로 보낼 때 위젯 제목/타입 컨텍스트 포함
+        const ctxWidget = canvasWidgets.find((cw) => cw.widgetId === wid);
+        const widgetContext = ctxWidget ? `[${ctxWidget.title}] ` : '';
+        aiInputText = `${widgetContext}${plainText}`;
+      }
+
       setUserQuery(text);
       setQuerying(true);
       setChatOpen(true);
@@ -504,7 +871,10 @@ export default function DashboardDetailPage() {
             'Content-Type': 'application/json',
             ...(authHeader() as Record<string, string>),
           },
-          body: JSON.stringify({ inputText: text }),
+          body: JSON.stringify({
+            inputText: aiInputText,
+            ...(modifyWid !== null ? { widgetId: modifyWid } : {}),
+          }),
         });
         if (!startRes.ok) throw new Error(`HTTP ${startRes.status}`);
         const startJson = await startRes.json();
@@ -531,27 +901,11 @@ export default function DashboardDetailPage() {
                 return;
               }
               if (ev.event === 'complete') {
-                setWidgetTitle(data.title ?? autoTitle);
-                setPendingType(data.widgetType ?? 'BAR_CHART');
-                setPendingWidget({
-                  widgetId: data.widgetId ?? Date.now(),
-                  widgetType: data.widgetType ?? 'BAR_CHART',
-                  title: data.title ?? autoTitle,
-                  config: data.config ?? {},
-                  position: data.position ?? { x: 0, y: 0, w: 6, h: 4 },
-                  queryId: data.queryId ?? null,
-                  inputText: text,
-                  result: data.result ?? { data: {}, insightText: '' },
-                  data: Array.isArray(data.result?.data)
-                    ? data.result.data
-                    : Array.isArray(data.result?.data?.rows)
-                      ? data.result.data.rows
-                      : null,
-                  px: 0,
-                  py: 0,
-                  pw: 400,
-                  ph: 260,
-                });
+                const newData = Array.isArray(data.result?.data)
+                  ? data.result.data
+                  : Array.isArray(data.result?.data?.rows)
+                    ? data.result.data.rows
+                    : null;
                 setSteps(STEP_LABELS.map((l) => ({ label: l, done: true, active: false })));
                 setQuerying(false);
                 setChatDone(true);
@@ -571,6 +925,38 @@ export default function DashboardDetailPage() {
                   status: 'done',
                 };
                 setChatHistory((prev) => [...prev, assistantMsg]);
+
+                const targetModifyWid = modifyWidgetIdRef.current;
+                if (targetModifyWid !== null) {
+                  // 기존 위젯 업데이트 (새 위젯 추가 아님)
+                  modifyWidgetIdRef.current = null;
+                  updateWidgetRef.current(targetModifyWid, {
+                    widgetType: data.widgetType ?? 'BAR_CHART',
+                    title: data.title ?? autoTitle,
+                    config: data.config ?? {},
+                    result: data.result ?? { data: {}, insightText: '' },
+                    data: newData,
+                    queryId: data.queryId ?? null,
+                  });
+                } else {
+                  setWidgetTitle(data.title ?? autoTitle);
+                  setPendingType(data.widgetType ?? 'BAR_CHART');
+                  setPendingWidget({
+                    widgetId: data.widgetId ?? Date.now(),
+                    widgetType: data.widgetType ?? 'BAR_CHART',
+                    title: data.title ?? autoTitle,
+                    config: data.config ?? {},
+                    position: data.position ?? { x: 0, y: 0, w: 6, h: 4 },
+                    queryId: data.queryId ?? null,
+                    inputText: text,
+                    result: data.result ?? { data: {}, insightText: '' },
+                    data: newData,
+                    px: 0,
+                    py: 0,
+                    pw: 400,
+                    ph: 260,
+                  });
+                }
 
                 ctrl.abort();
                 return;
@@ -734,20 +1120,27 @@ export default function DashboardDetailPage() {
             }}
           >
             {allDashboards.length === 0 ? (
-              <div style={{ height: 24, width: 60, background: '#f1f5f9', borderRadius: 4 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '2px 4px 2px 10px', borderRadius: 4, background: '#06b6d4' }}>
+                <span style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 600, fontSize: 13, color: 'white', padding: '2px 2px', whiteSpace: 'nowrap' }}>
+                  로딩 중...
+                </span>
+              </div>
             ) : (
-              allDashboards.map((d) => {
+              allDashboards.filter((d) => !hiddenTabs.includes(d.dashboardId) || String(d.dashboardId) === String(id)).map((d) => {
                 const active = String(d.dashboardId) === String(id);
                 return (
                   <div
                     key={d.dashboardId}
                     onMouseEnter={() => { if (!active) router.prefetch(`/dashboard/${d.dashboardId}`); }}
+                    className="fint-tab"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 2,
                       padding: '2px 4px 2px 10px',
                       borderRadius: 4,
+                      minWidth: 80,
+                      maxWidth: 160,
                       background: active ? '#06b6d4' : 'transparent',
                       transition: 'background-color 0.15s',
                     }}
@@ -796,12 +1189,13 @@ export default function DashboardDetailPage() {
                         {d.title.length > 6 ? d.title.slice(0, 6) + '..' : d.title}
                       </button>
                     )}
+                    {/* X 버튼: 탭에서 숨기기 (삭제 아님) */}
                     <button
                       type="button"
-                      onClick={() => handleDeleteDashboard(d.dashboardId, d.title)}
-                      aria-label={`${d.title} 대시보드 삭제`}
-                      title="이 대시보드 삭제"
-                      disabled={deletingDashboard}
+                      onClick={() => hideTab(d.dashboardId)}
+                      aria-label={`${d.title} 탭 숨기기`}
+                      title="탭에서 숨기기 (대시보드는 유지됩니다)"
+                      className="fint-tab-close"
                       style={{
                         width: 18,
                         height: 18,
@@ -809,20 +1203,23 @@ export default function DashboardDetailPage() {
                         border: 'none',
                         background: 'transparent',
                         color: active ? 'rgba(255,255,255,0.85)' : '#94a3b8',
-                        cursor: deletingDashboard ? 'wait' : 'pointer',
+                        cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         padding: 0,
-                        transition: 'background-color 0.12s, color 0.12s',
+                        opacity: 0,
+                        transition: 'opacity 0.15s, background-color 0.12s, color 0.12s',
                       }}
                       onMouseOver={(e) => {
-                        e.currentTarget.style.background = active ? 'rgba(255,255,255,0.18)' : 'rgba(239,68,68,0.10)';
-                        e.currentTarget.style.color = active ? '#fff' : '#ef4444';
+                        e.currentTarget.style.background = active ? 'rgba(255,255,255,0.18)' : 'rgba(100,116,139,0.12)';
+                        e.currentTarget.style.color = active ? '#fff' : '#475569';
+                        e.currentTarget.style.opacity = '1';
                       }}
                       onMouseOut={(e) => {
                         e.currentTarget.style.background = 'transparent';
                         e.currentTarget.style.color = active ? 'rgba(255,255,255,0.85)' : '#94a3b8';
+                        e.currentTarget.style.opacity = '0';
                       }}
                     >
                       <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
@@ -871,6 +1268,13 @@ export default function DashboardDetailPage() {
         {/* 캔버스 */}
         <div
           ref={canvasRef}
+          onMouseDown={handleCanvasMouseDown}
+          onClick={(e) => {
+            // 캔버스 빈 공간 클릭 시 위젯 선택 해제
+            if ((e.target as HTMLElement).closest('[data-widget-card]') === null) {
+              setSelectedWidgetId(null);
+            }
+          }}
           style={{
             flex: 1,
             position: 'relative',
@@ -881,11 +1285,13 @@ export default function DashboardDetailPage() {
             backgroundSize: '20px 20px',
           }}
         >
-          <div style={{ position: 'relative', minWidth: 3000, minHeight: 3000 }}>
+          <div style={{ position: 'relative', minWidth: 3000, minHeight: 3000, ...(isMobile && canvasScale !== 1 ? { transform: `scale(${canvasScale})`, transformOrigin: '0 0' } : {}) }}>
             {canvasWidgets.map((w) => (
               <CanvasWidgetCard
                 key={w.widgetId}
                 w={w}
+                isSelected={selectedWidgetId === w.widgetId}
+                onSelect={(wid) => setSelectedWidgetId(wid)}
                 onUpdate={updateWidget}
                 onTitleChange={updateTitle}
                 onRemove={removeWidget}
@@ -894,19 +1300,21 @@ export default function DashboardDetailPage() {
             ))}
           </div>
 
-          {/* FINT 채팅 + 검색바 (좌측 하단 고정) */}
+          {/* FINT 채팅 패널 (데스크탑: 드래그 가능, 모바일: 고정) */}
           <div
             style={{
               position: 'fixed',
               zIndex: 20,
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'flex-start',
-              bottom: isMobile ? 8 : 20,
-              left: isMobile ? 8 : 20,
-              right: isMobile ? 8 : undefined,
+              gap: 8,
+              alignItems: (isMobile && chatOpen) ? 'stretch' : 'flex-start',
+              ...(isMobile
+                ? { bottom: 16, left: 8, right: 8 }
+                : { bottom: panelPos.y, left: panelPos.x }),
             }}
           >
+            {/* 채팅 패널 — 닫혀도 DOM 유지(애니메이션용), maxHeight:0으로 공간 차지 않음 */}
             <div
               style={{
                 transition: 'opacity 0.25s ease, transform 0.25s ease',
@@ -915,8 +1323,16 @@ export default function DashboardDetailPage() {
                 pointerEvents: chatOpen ? 'auto' : 'none',
                 maxHeight: chatOpen ? 'none' : 0,
                 overflow: chatOpen ? 'visible' : 'hidden',
+                ...(isMobile ? { width: '100%' } : {}),
               }}
             >
+              {/* 드래그 핸들 오버레이 — 헤더 위에 투명하게 위치, 닫기버튼(우측 44px) 제외 */}
+              {!isMobile && (
+                <div
+                  onMouseDown={handlePanelHeaderDragStart}
+                  style={{ position: 'absolute', top: 0, left: 0, right: 44, height: 44, zIndex: 30, cursor: 'grab', borderRadius: '20px 20px 0 0' }}
+                />
+              )}
               <FintChatPanel
                 steps={steps}
                 query={userQuery}
@@ -931,10 +1347,22 @@ export default function DashboardDetailPage() {
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}
+                onSubmit={handleQuery}
                 chatHistory={chatHistory}
+                selectedWidget={selectedWidgetId != null ? (() => { const sw = canvasWidgets.find(w => w.widgetId === selectedWidgetId); return sw ? { id: sw.widgetId, title: sw.title, type: sw.widgetType } : null; })() : null}
+                onClearSelectedWidget={() => setSelectedWidgetId(null)}
+                onWidthChange={setChatPanelWidth}
+                panelPosX={panelPos.x}
+                panelPosY={panelPos.y}
+                onPosChange={(x, y) => {
+                  setPanelPos({ x, y });
+                  try { localStorage.setItem('fint:chatPanelPos', JSON.stringify({ x, y })); } catch { /* ignore */ }
+                }}
               />
             </div>
-            {!chatOpen && chatHistory.length > 0 && (
+
+            {/* 패널 닫혔을 때 재열기 버튼 */}
+            {!chatOpen && (
               <button
                 onClick={() => setChatOpen(true)}
                 style={{
@@ -942,7 +1370,6 @@ export default function DashboardDetailPage() {
                   alignItems: 'center',
                   gap: 6,
                   padding: '8px 16px',
-                  marginBottom: 8,
                   background: 'rgba(255,255,255,0.9)',
                   backdropFilter: 'blur(12px)',
                   border: '1px solid rgba(6,182,212,0.3)',
@@ -953,7 +1380,6 @@ export default function DashboardDetailPage() {
                   fontWeight: 500,
                   color: '#1d1a24',
                   boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
-                  transition: 'opacity 0.2s ease',
                 }}
               >
                 <span style={{ color: '#06b6d4', fontSize: 14 }}>✦</span>
@@ -963,13 +1389,21 @@ export default function DashboardDetailPage() {
                 </svg>
               </button>
             )}
+
+            {/* QueryBar — 항상 표시 (패널 아래 분리된 입력창) */}
             <QueryBar
               value={queryInput}
               onChange={setQueryInput}
-              onSubmit={handleQuery}
+              onSubmit={(text) => {
+                const prefixed = selectedWidgetId != null
+                  ? `[widgetId:${selectedWidgetId}] ${text}`
+                  : text;
+                handleQuery(prefixed);
+              }}
               loading={querying}
+              focusTrigger={chatInputFocusTrigger}
+              width={isMobile ? undefined : chatPanelWidth}
             />
-
           </div>
         </div>
       </div>
@@ -1008,7 +1442,12 @@ export default function DashboardDetailPage() {
           <BarChartSvg size="mini" />
         </div>
       )}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        * { box-sizing: border-box; }
+        .fint-tab:hover .fint-tab-close { opacity: 1 !important; }
+        .fint-tab:hover { background: rgba(6,182,212,0.08); }
+      `}</style>
     </>
   );
 }

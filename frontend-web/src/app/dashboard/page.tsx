@@ -8,6 +8,7 @@ import {
   useDashboardTemplates,
   useCreateDashboard,
   useDeleteDashboard,
+  useRenameDashboard,
 } from '@/hooks/useDashboard';
 import DashboardHero from '@/components/dashboard/DashboardHero';
 import TemplateCardGrid from '@/components/dashboard/TemplateCardGrid';
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const { groups: templateGroups, loading: templatesLoading } = useDashboardTemplates();
   const { create, loading: creating } = useCreateDashboard();
   const { remove: deleteDashboard, loading: deleting } = useDeleteDashboard();
+  const { rename: renameDashboard } = useRenameDashboard();
   const confirm = useConfirm();
   const alert = useAlert();
 
@@ -83,6 +85,15 @@ export default function DashboardPage() {
   const handleCreateNew = useCallback(async () => {
     await create({ title: '제목없음' });
   }, [create]);
+
+  const handleRename = useCallback(
+    async (dashboardId: number, title: string) => {
+      const ok = await renameDashboard(dashboardId, title);
+      if (ok) await refetchList();
+      return ok;
+    },
+    [renameDashboard, refetchList],
+  );
 
   const handleDelete = useCallback(
     async (dashboardId: number, title: string) => {
@@ -159,13 +170,13 @@ export default function DashboardPage() {
             <DashboardHero onSubmit={handleQuerySubmit} loading={creating} />
           </div>
 
-          {/* 템플릿 카드 — 최소 320px 확보, 카드 미리보기가 짜부라지지 않도록 */}
+          {/* 템플릿 카드 */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
               flexShrink: 0,
-              minHeight: isMobile ? 0 : 320,
+              height: isMobile ? 'auto' : 300,
             }}
           >
             <TemplateCardGrid
@@ -182,6 +193,7 @@ export default function DashboardPage() {
               loading={listLoading}
               onCreateNew={handleCreateNew}
               onDelete={handleDelete}
+              onRename={handleRename}
               deleting={deleting}
             />
           </div>

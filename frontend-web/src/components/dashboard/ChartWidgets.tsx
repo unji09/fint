@@ -1,3 +1,5 @@
+import { formatNumber } from './WidgetRenderer';
+
 type BarChartProps = {
   size?: 'full' | 'mini';
   values?: number[];
@@ -12,16 +14,17 @@ const SEGMENT_COLORS = ['#06b6d4', '#386570', '#6d797d', '#94a3b8', '#3b82f6', '
 
 export function BarChartSvg({ size = 'full', values, labels, xLabel, yLabel }: BarChartProps) {
   const bars = values && values.length > 0 ? values : BAR_FALLBACK_VALUES;
-  const max = Math.max(...bars);
+  const max = Math.max(...bars) || 1;
   const h = size === 'mini' ? 90 : 150;
   const bw = size === 'mini' ? 10 : 18;
   const gap = size === 'mini' ? 3 : 6;
-  const yAxisW = size === 'full' ? 36 : 0;
-  const bottomPad = size === 'full' ? 28 : 14;
+  const yAxisW = size === 'full' ? 40 : 0;
+  const bottomPad = size === 'full' ? 38 : 16;
   const W = 300 + yAxisW;
   const H = h;
   const totalW = bars.length * (bw + gap) - gap;
   const chartLeft = yAxisW + (W - yAxisW - totalW) / 2;
+  const topPad = 8;
 
   const axisLabels = labels && labels.length > 0 ? labels : BAR_FALLBACK_LABELS;
   const axisIndices =
@@ -34,22 +37,22 @@ export function BarChartSvg({ size = 'full', values, labels, xLabel, yLabel }: B
   return (
     <svg viewBox={`0 0 ${W} ${H + bottomPad}`} style={{ width: '100%', height: size === 'mini' ? h : '100%' }}>
       {yTicks.map((tick) => {
-        const y = H - (tick / max) * H + 4;
+        const y = topPad + (H - topPad) - (tick / max) * (H - topPad);
         return (
-          <text key={tick} x={yAxisW - 4} y={y} textAnchor="end" fontSize="8" fill="#94a3b8" fontFamily="Pretendard">
-            {tick.toLocaleString()}
+          <text key={tick} x={yAxisW - 4} y={y + 3} textAnchor="end" fontSize="8" fill="#94a3b8" fontFamily="Pretendard">
+            {formatNumber(tick, true)}
           </text>
         );
       })}
       {bars.map((v, i) => {
-        const bh = (v / max) * H;
+        const bh = (v / max) * (H - topPad);
         const x = chartLeft + i * (bw + gap);
         const isFuture = !values && i >= 15;
         return (
           <rect
             key={i}
             x={x}
-            y={H - bh + 4}
+            y={topPad + (H - topPad) - bh}
             width={bw}
             height={bh}
             rx={2}
@@ -69,7 +72,7 @@ export function BarChartSvg({ size = 'full', values, labels, xLabel, yLabel }: B
             <text
               key={`${l}-${i}`}
               x={chartLeft + idx * (bw + gap) + bw / 2}
-              y={H + 18}
+              y={H + 20}
               textAnchor="middle"
               fontSize="9"
               fill="#94a3b8"
@@ -80,7 +83,7 @@ export function BarChartSvg({ size = 'full', values, labels, xLabel, yLabel }: B
           );
         })}
       {size === 'full' && xLabel && (
-        <text x={W / 2} y={H + bottomPad - 2} textAnchor="middle" fontSize="9" fill="#6b7280" fontFamily="Pretendard">
+        <text x={W / 2} y={H + bottomPad - 4} textAnchor="middle" fontSize="9" fill="#6b7280" fontFamily="Pretendard">
           {xLabel}
         </text>
       )}
@@ -105,15 +108,15 @@ const LINE_FALLBACK_VALUES = [20, 28, 35, 32, 45, 48, 52, 58, 55, 65, 70, 68, 75
 
 export function LineChartSvg({ size = 'full', values, labels, xLabel, yLabel }: LineChartProps) {
   const pts = values && values.length > 0 ? values : LINE_FALLBACK_VALUES;
-  const max = Math.max(...pts);
-  const yAxisW = size === 'full' ? 36 : 0;
-  const bottomPad = size === 'full' ? 28 : 12;
+  const max = Math.max(...pts) || 1;
+  const yAxisW = size === 'full' ? 40 : 0;
+  const bottomPad = size === 'full' ? 34 : 14;
   const W = 300 + yAxisW;
   const H = size === 'mini' ? 80 : 140;
   const chartH = H - bottomPad;
   const pad = 12;
 
-  const xs = pts.map((_, i) => yAxisW + pad + (i / (pts.length - 1)) * (W - yAxisW - pad * 2));
+  const xs = pts.map((_, i) => yAxisW + pad + (i / Math.max(pts.length - 1, 1)) * (W - yAxisW - pad * 2));
   const ys = pts.map((v) => pad + (1 - v / max) * (chartH - pad * 2));
   const line = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
   const area = `${line} L${xs[xs.length - 1].toFixed(1)},${chartH} L${xs[0].toFixed(1)},${chartH} Z`;
@@ -138,7 +141,7 @@ export function LineChartSvg({ size = 'full', values, labels, xLabel, yLabel }: 
         const y = pad + (1 - tick / max) * (chartH - pad * 2);
         return (
           <text key={tick} x={yAxisW - 4} y={y + 3} textAnchor="end" fontSize="8" fill="#94a3b8" fontFamily="Pretendard">
-            {tick.toLocaleString()}
+            {formatNumber(tick, true)}
           </text>
         );
       })}
@@ -194,14 +197,7 @@ export function SegmentChart({ labels, values }: SegmentChartProps) {
       {rows.map((r) => (
         <div key={r.label}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-            <span
-              style={{
-                fontFamily: 'Pretendard,sans-serif',
-                fontSize: 13,
-                fontWeight: 500,
-                color: '#171d1e',
-              }}
-            >
+            <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 13, fontWeight: 500, color: '#171d1e' }}>
               {r.label}
             </span>
             <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 12, color: '#3d494c' }}>
@@ -209,9 +205,7 @@ export function SegmentChart({ labels, values }: SegmentChartProps) {
             </span>
           </div>
           <div style={{ height: 7, background: '#eff4f7', borderRadius: 12, overflow: 'hidden' }}>
-            <div
-              style={{ height: '100%', width: `${r.pct}%`, background: r.color, borderRadius: 12 }}
-            />
+            <div style={{ height: '100%', width: `${r.pct}%`, background: r.color, borderRadius: 12 }} />
           </div>
         </div>
       ))}
@@ -220,10 +214,11 @@ export function SegmentChart({ labels, values }: SegmentChartProps) {
 }
 
 export function KpiCard({ value, label }: { value?: number; label?: string }) {
+  const display = value != null ? formatNumber(value, true) : '-';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8 }}>
       <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 36, fontWeight: 700, color: '#06b6d4' }}>
-        {value?.toLocaleString() ?? '-'}
+        {display}
       </span>
       {label && (
         <span style={{ fontFamily: 'Pretendard,sans-serif', fontSize: 13, color: '#94a3b8' }}>
@@ -234,22 +229,25 @@ export function KpiCard({ value, label }: { value?: number; label?: string }) {
   );
 }
 
-const COLUMN_KO: Record<string, string> = {
+export const COLUMN_KO: Record<string, string> = {
   name: '이름',
   title: '제목',
   amount: '금액',
   industry: '업종',
   current_pipeline: '파이프라인',
+  pipeline_stage: '파이프라인 단계',
+  stage: '단계',
+  status: '상태',
   expected_close: '예상 종료일',
   probability: '성공 확률',
-  created_at: '생성일',
-  updated_at: '수정일',
+  created_at: '생성일시',
+  updated_at: '수정일시',
   type: '유형',
   email: '이메일',
   phone: '전화번호',
   personality: '성향',
   biz_no: '사업자번호',
-  mood: '분위기',
+  mood: '날씨',
   mood_score: '날씨 점수',
   reason: '사유',
   source: '출처',
@@ -259,6 +257,16 @@ const COLUMN_KO: Record<string, string> = {
   won_at: '수주일',
   lost_at: '실주일',
   lost_reason: '실주 사유',
+  account_name: '고객사명',
+  contact_name: '담당자명',
+  deal_title: '딜 제목',
+  activity_type: '활동 유형',
+  start_at: '시작일시',
+  end_at: '종료일시',
+  description: '설명',
+  count: '건수',
+  total: '합계',
+  average: '평균',
   'accounts.name': '고객사명',
   'SUM(amount)': '매출 합계',
   'COUNT(*)': '건수',
@@ -270,32 +278,44 @@ function toKoColumn(col: string): string {
 }
 
 export function TableWidget({ data }: { data: Record<string, unknown> }) {
-  const columns = Array.isArray(data.columns) ? (data.columns as string[]) : [];
+  const rawCols = Array.isArray(data.columns) ? (data.columns as string[]) : [];
+  const columns = rawCols.filter((col, idx) => rawCols.indexOf(col) === idx);
   const rows = Array.isArray(data.rows) ? (data.rows as Record<string, unknown>[]) : [];
   const labels = Array.isArray(data.labels) ? (data.labels as string[]) : [];
   const values = Array.isArray(data.values) ? (data.values as number[]) : [];
 
   if (columns.length > 0 && rows.length > 0) {
     return (
-      <div style={{ overflowX: 'auto', fontSize: 12, fontFamily: 'Pretendard,sans-serif' }}>
+      <div style={{ width: '100%', height: '100%', overflowX: 'auto', overflowY: 'auto', fontSize: 12, fontFamily: 'Pretendard,sans-serif' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col} style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: 500 }}>
+                <th key={col} style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'white' }}>
                   {toKoColumn(col)}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 10).map((row, i) => (
-              <tr key={i}>
-                {columns.map((col) => (
-                  <td key={col} style={{ padding: '5px 8px', borderBottom: '1px solid #f1f5f9', color: '#1d1a24' }}>
-                    {String(row[col] ?? '')}
-                  </td>
-                ))}
+            {rows.slice(0, 50).map((row, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? 'white' : 'rgba(248,250,252,0.8)' }}>
+                {columns.map((col) => {
+                  const v = row[col];
+                  let display = String(v ?? '');
+                  // ISO 날짜 자동 변환
+                  if (display && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(display)) {
+                    const d = new Date(display);
+                    if (!isNaN(d.getTime())) {
+                      display = d.toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                    }
+                  }
+                  return (
+                    <td key={col} style={{ padding: '5px 8px', borderBottom: '1px solid #f1f5f9', color: '#1d1a24', whiteSpace: 'nowrap' }}>
+                      {display}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -309,7 +329,9 @@ export function TableWidget({ data }: { data: Record<string, unknown> }) {
       {labels.slice(0, 6).map((l, i) => (
         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', background: i === 0 ? 'rgba(6,182,212,0.05)' : undefined, borderRadius: 4 }}>
           <span style={{ fontSize: 12, color: '#64748b', fontFamily: 'Pretendard' }}>{l}</span>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1a24', fontFamily: 'Pretendard' }}>{values[i]?.toLocaleString()}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1a24', fontFamily: 'Pretendard' }}>
+            {values[i] != null ? formatNumber(values[i]) : '-'}
+          </span>
         </div>
       ))}
     </div>
