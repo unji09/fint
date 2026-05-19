@@ -22,10 +22,10 @@ public class NotificationController implements NotificationSwagger {
 
     @Override
     @GetMapping
-    public ApiResponse<NotificationListResponse> findUnread(
+    public ApiResponse<NotificationListResponse> findNotifications(
             @AuthenticationPrincipal CustomUserDetails me
     ) {
-        return ApiResponse.ok(notificationService.findUnreadNotifications(me));
+        return ApiResponse.ok(notificationService.findNotifications(me));
     }
 
     @Override

@@ -24,7 +24,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class NotificationService {
 
-    private static final int UNREAD_LIMIT = 10;
+    private static final int NOTIFICATION_LIMIT = 10;
     private static final String WS_DESTINATION = "/queue/notifications";
 
     private final AiSuggestionRepository aiSuggestionRepository;
@@ -51,9 +51,9 @@ public class NotificationService {
                 targetUserIds.size());
     }
 
-    public NotificationListResponse findUnreadNotifications(CustomUserDetails me) {
+    public NotificationListResponse findNotifications(CustomUserDetails me) {
         List<NotificationItemResponse> items = aiSuggestionRepository
-            .findUnreadByUserId(me.getUserId(), PageRequest.of(0, UNREAD_LIMIT))
+            .findUrgentByUserId(me.getUserId(), PageRequest.of(0, NOTIFICATION_LIMIT))
             .stream()
             .map(NotificationItemResponse::from)
             .toList();
