@@ -30,7 +30,7 @@ from app.schemas.dashboard import (
 
 logger = logging.getLogger(__name__)
 
-LLM_TIMEOUT_SECONDS: float = 30.0
+LLM_TIMEOUT_SECONDS: float = 60.0
 
 # Function Calling용 시스템 프롬프트
 _BASE_RULES = """## 규칙
@@ -56,11 +56,41 @@ _BASE_RULES = """## 규칙
   - pipeline_stages → deals 직접 JOIN 불가. pipeline_stages는 activities에서만 JOIN 가능.
   - 딜 파이프라인 단계별 집계는 pipeline_stages 테이블 대신 deals.current_pipeline(VARCHAR) 으로 GROUP BY 하세요.
     예: "단계별 딜 현황" → table="deals", columns=["current_pipeline","COUNT(*)"], group_by=["current_pipeline"]
+- 파이프라인 단계 순서 (오름차순): 발굴(1) < 가치 제안(2) < 솔루션 설계(3) < 제안 제출(4) < 협상(5) < 계약 대기(6) < 수주(7)
+  - "협상 이전 단계 보여줘 / 협상 이전만" → 해당 단계만 표시: filters=[{column="current_pipeline", operator="IN", value=["발굴","가치 제안","솔루션 설계","제안 제출"]}]
+  - "협상 이전 단계 보여주지 마 / 협상 이전 제외" → 해당 단계를 제거, 나머지 표시: filters=[{column="current_pipeline", operator="NOT_IN", value=["발굴","가치 제안","솔루션 설계","제안 제출"]}]
+  - "협상 이후 단계" 필터(포함): filters=[{column="current_pipeline", operator="IN", value=["협상","계약 대기","수주"]}]
+  - "협상 이후 단계 제외": filters=[{column="current_pipeline", operator="NOT_IN", value=["협상","계약 대기","수주"]}]
+  - 핵심: "보여주지 마 / 제외 / 빼줘"는 NOT_IN, "보여줘 / 보여줘"는 IN
+- 집계 결과 필터링 (HAVING): GROUP BY와 함께 집계 결과로 행을 필터링할 때는 having_conditions 사용
+  - "딜이 2개 이상인 고객사만" → having_conditions=[{column="COUNT(*)", operator="GTE", value=2}]
+  - "딜이 없는 고객사만" / "딜 개수 1개 미만" → having_conditions=[{column="COUNT(*)", operator="LT", value=1}]
+  - "합계 10억 이상" → having_conditions=[{column="SUM(amount)", operator="GTE", value=1000000000}]
+  ※ WHERE 필터로는 집계 결과 필터링 불가. 집계 조건은 반드시 having_conditions 사용.
 - 오늘 날짜: {today}. "이번 달", "이번 주", "오늘" 등 상대적 기간 표현에 이 날짜를 기반으로 필터 값을 계산하세요.
+  - "이번달" = 해당 월 1일 00:00 ~ 다음 월 1일 00:00 (예: 2026-05-01 ~ 2026-06-01)
+  - "이번주" = 해당 주 월요일 00:00 ~ 다음 주 월요일 00:00
+  - "오늘" = 오늘 00:00 ~ 내일 00:00
+  - MODIFY 시 기간 변경 요청("이번달 전부", "이번달로 바꿔줘"): 반드시 start_at 필터를 이번달 전체 범위로 교체.
 - "[위젯제목]" 접두사 또는 action="MODIFY"이면 기존 위젯을 수정하는 요청입니다. 반드시 query_structured_data를 호출하세요. reject_query는 절대 사용하지 마세요.
 - "## 수정 대상 위젯" 섹션이 있으면 그 source_query/config를 기반으로 쿼리를 생성하세요.
-- "차트로 그려줘", "파이 차트", "선 그래프" 등 시각화 변환 요청 → 동일 데이터를 집계/재구성하여 query_structured_data 호출.
-- 위젯 수정 요청을 절대 reject_query로 거절하지 마세요. 데이터 조회로 해결할 수 없는 경우에만 reject를 사용하세요."""
+- MODIFY 수정 요청 유형별 처리:
+  - "차트로 그려줘 / 막대 차트로 / 파이 차트로" 등 시각화 변환 → 동일 데이터 유지, widget_type/chart_type만 변경하여 query_structured_data 호출
+  - "X 열 없애줘 / X 컬럼 제거해줘" → source_query에서 해당 column 제거 후 재조회
+  - "Y 열 추가해줘 / Y 컬럼 넣어줘" → source_query columns에 해당 field 추가 후 재조회
+  - "필터 바꿔줘 / 기간 변경해줘" → source_query filters 수정 후 재조회
+  - "X 안 보이게 해줘 / X 제외해줘 / X 빼줘" → filters에 적절한 컬럼으로 NEQ 필터 추가. LIKE 절대 사용 금지.
+    - 고객사명 제외: column="accounts.name", operator="NEQ", value="X"
+    - 파이프라인 단계 제외: column="current_pipeline", operator="NEQ", value="X" (예: value="계약 대기")
+    - column에 SQL 별칭 사용 금지: d.current_pipeline(×) → current_pipeline(○), a.name(×) → accounts.name(○)
+  - 위 모든 경우에 query_structured_data를 호출하고, reject_query는 절대 사용하지 마세요.
+- 위젯 수정 요청을 절대 reject_query로 거절하지 마세요. 데이터 조회로 해결할 수 없는 경우에만 reject를 사용하세요.
+- 무드(날씨) 분석은 temperature_history 테이블 사용:
+  - 컬럼: mood (VARCHAR: RAINBOW/SUNNY/CLOUDY/RAINY/THUNDER, 텍스트 열거형), mood_score (INTEGER 0-100, 수치)
+  - mood 컬럼은 텍스트이므로 차트 value_field로 절대 사용 금지. 반드시 mood_score(숫자)를 집계(AVG/MAX)하여 사용.
+  - JOIN: temperature_history → accounts (account_id)
+  - 고객사별 최신 무드: accounts JOIN temperature_history WHERE account_id GROUP BY accounts.name (또는 latest 조건)
+  - mood_score 범위: 10(천둥)~30(비)~50(흐림)~70(맑음)~90(무지개)"""
 
 _FC_EXAMPLES = """## 예시
 질의: "월별 매출 추이"
@@ -84,6 +114,39 @@ _FC_EXAMPLES = """## 예시
 
 질의: "삼성 관련 뉴스"
 → search_news: search_text="삼성", source_filter="NEWS"
+
+질의: "협상 이전 단계 고객사" / "초기 단계 딜 목록"
+→ query_structured_data: table="deals", filters=[{column="current_pipeline", operator="IN", value=["발굴","가치 제안","솔루션 설계","제안 제출"]}]
+  ※ "협상 이전" = 발굴/가치 제안/솔루션 설계/제안 제출만 IN 필터로 지정. 협상/계약 대기/수주 제외.
+
+질의: "협상 이전 단계는 보여주지 마" / "초기 단계 제외해줘" / "협상 이전 빼줘"
+→ query_structured_data: 기존 쿼리에 filters 추가: {column="current_pipeline", operator="NOT_IN", value=["발굴","가치 제안","솔루션 설계","제안 제출"]}
+  ※ "~는 보여주지 마 / ~제외 / ~빼줘" = NOT_IN 사용. "~보여줘 / ~만 표시"와 정반대.
+
+질의: "딜 개수 2개 이상인 고객사만" / "[widgetId:6] 딜 개수 1개 이상인 거 안 보이게 해줘"
+→ query_structured_data: 기존 쿼리에 having_conditions=[{column="COUNT(*)", operator="LT", value=1}] 추가
+  ※ "N개 이상 안 보이게" = COUNT(*) < N → having_conditions LT 사용. WHERE 필터 금지.
+
+질의: "[widgetId:10] 이번달 일정 전부 보이게 해줘" / "[widgetId:10] 이번달로 바꿔줘"
+→ query_structured_data: 기존 쿼리의 start_at 필터를 이번달 전체 범위로 교체
+  filters=[{column="start_at", operator="GTE", value="2026-05-01"}, {column="start_at", operator="LT", value="2026-06-01"}]
+  ※ "이번달 전부" = 월의 1일부터 다음달 1일까지. 이번주 범위로 설정 금지.
+
+질의: "카카오 안 보이게 해줘" / "[widgetId:5] 삼성 제외해줘" / "[widgetId:3] 네이버 빼줘"
+→ query_structured_data: 기존 쿼리에 filters 추가: {column="accounts.name", operator="NEQ", value="카카오"}
+  ※ 제외/숨김/빼줘 요청은 NEQ 필터를 사용한다. LIKE가 아니라 NEQ.
+  ※ 기존 source_query에 없던 조인이 필요하면 joins에 추가한다.
+
+질의: "[widgetId:4] 계약 대기 단계 제외해줘" / "[widgetId:4] 수주 안 보이게"
+→ query_structured_data: 기존 쿼리에 filters 추가: {column="current_pipeline", operator="NEQ", value="계약 대기"}
+  ※ 파이프라인 단계 제외는 column="current_pipeline"으로 NEQ 사용.
+  ※ column에 SQL 별칭 금지: d.current_pipeline(×) → current_pipeline(○)
+
+질의: "고객사별 무드 분석" / "고객사 날씨 현황" / "각 고객사 최근 무드"
+→ query_structured_data: table="temperature_history", columns=["accounts.name", "AVG(mood_score)"],
+  joins=[table="accounts", on_self="account_id", on_other="account_id"],
+  group_by=["accounts.name"], order_by=[column="AVG(mood_score)", direction="DESC"]
+  ※ mood 문자열(RAINBOW/SUNNY...)은 valueField 금지. 반드시 mood_score(숫자) AVG/MAX 사용.
 
 질의: "오늘 날씨"
 → reject_query: reason="날씨 정보는 CRM에서 조회할 수 없습니다."
@@ -116,6 +179,38 @@ _INSTRUCTOR_EXAMPLES = """## 예시
 → search_type: "STRUCTURED", query_spec: table="activities", columns=["type", "COUNT(*)"],
   filters=[{column="start_at", operator="GTE", value="<이번달 1일 ISO>"}, {column="start_at", operator="LT", value="<다음달 1일 ISO>"}],
   group_by=["type"], order_by=[column="COUNT(*)", direction="DESC"], suggested_title="이번달 활동 현황"
+
+질의: "협상 이전 단계 고객사" / "초기 단계 딜"
+→ search_type: "STRUCTURED", query_spec: table="deals", filters=[{column="current_pipeline", operator="IN", value=["발굴","가치 제안","솔루션 설계","제안 제출"]}], suggested_title="협상 이전 단계 고객사"
+  ※ "협상 이전" = 발굴/가치 제안/솔루션 설계/제안 제출만. "협상" 자체도 제외.
+
+질의: "협상 이전 단계는 보여주지 마" / "초기 단계 빼줘" / "협상 이후 단계만 남겨줘"
+→ search_type: "STRUCTURED", query_spec: 기존 쿼리 기반으로 filters에 {column="current_pipeline", operator="NOT_IN", value=["발굴","가치 제안","솔루션 설계","제안 제출"]} 추가, suggested_title="협상 이후 단계 딜 현황"
+  ※ "~보여주지 마 / ~제외 / ~빼줘" = NOT_IN. "~보여줘 / ~만"과 반대. 절대 IN으로 처리하지 말 것.
+
+질의: "[widgetId:6] 딜 개수 1개 이상인거 안 보이게 해줘" / "딜 없는 고객사만"
+→ search_type: "STRUCTURED", query_spec: 기존 쿼리에 having_conditions=[{column="COUNT(*)", operator="LT", value=1}] 추가, suggested_title="딜 없는 고객사 리스트"
+  ※ 집계 결과 필터는 반드시 having_conditions 사용. WHERE에 COUNT 필터 불가.
+
+질의: "[widgetId:10] 이번달 일정 전부 보이게 해줘"
+→ search_type: "STRUCTURED", query_spec: 기존 쿼리의 start_at 필터를 이번달 전체 범위로 교체
+  filters=[{column="start_at", operator="GTE", value="2026-05-01"}, {column="start_at", operator="LT", value="2026-06-01"}]
+  ※ "이번달 전부" = 이번달 1일 ~ 다음달 1일. 이번주(주간) 범위 사용 금지.
+
+질의: "[widgetId:5] 카카오 안 보이게 해줘" / "[widgetId:3] 삼성 제외해줘" / "[widgetId:7] 네이버 빼줘"
+→ search_type: "STRUCTURED", query_spec: 기존 쿼리 기반으로 filters에 {column="accounts.name", operator="NEQ", value="카카오"} 추가
+  ※ 제외/숨김/빼줘 = NEQ 필터. LIKE 사용 금지.
+  ※ joins에 accounts가 없으면 추가: {table="accounts", on_self="account_id", on_other="account_id"}
+
+질의: "[widgetId:4] 계약 대기 안 보이게" / "[widgetId:4] 수주 단계 제외해줘"
+→ search_type: "STRUCTURED", query_spec: 기존 쿼리 기반으로 filters에 {column="current_pipeline", operator="NEQ", value="계약 대기"} 추가
+  ※ 파이프라인 단계 제외는 column="current_pipeline"으로 NEQ 사용. SQL 별칭(d.current_pipeline) 금지.
+
+질의: "고객사별 무드 분석" / "고객사 날씨 현황" / "각 고객사 최근 무드"
+→ search_type: "STRUCTURED", query_spec: table="temperature_history", columns=["accounts.name", "AVG(mood_score)"],
+  joins=[{table="accounts", on_self="account_id", on_other="account_id"}],
+  group_by=["accounts.name"], order_by=[column="AVG(mood_score)", direction="DESC"], suggested_title="고객사별 무드 분석"
+  ※ mood VARCHAR 텍스트를 value_field로 쓰면 0이 됨. 반드시 mood_score(숫자) AVG/MAX 사용.
 """
 
 _SYSTEM_PROMPT_FC = (
@@ -150,6 +245,18 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
   - 왜 이런 결과가 나왔는지 (원인/맥락)
   - 주요 기여 항목 분해 (고객사별, 기간별, 단계별 등)
   - 비즈니스 의미와 시사점
+- 데이터가 0건인 경우:
+  - insight_text에 "해당 조건에 데이터가 없습니다" 또는 "아직 기록된 데이터가 없습니다"로 표현하세요.
+  - **절대 "CRM에 등록되지 않은 고객사"라는 표현 사용 금지.** 데이터 0건 = 해당 테이블에 기록 없음이며, 고객사 미등록과는 다릅니다.
+  - 예: temperature_history 0건 → "아직 무드 기록이 없습니다" (고객사 자체가 없다는 의미가 아님)
+- MODIFY 요청에서 "X 제외/숨김/빼줘" 요청이 있는 경우:
+  - 실제 데이터 행에 X가 없을 때만 "X가 제외됐습니다" 언급 가능
+  - 데이터에 X가 여전히 있으면 "X 단계가 포함된 결과입니다. 필터가 예상대로 적용되지 않았을 수 있습니다."라고 안내하세요. 제외됐다고 거짓 확인 금지.
+- 회사명을 명시한 비교 쿼리("A와 B를 비교해줘" 등 명시적 다중 회사 비교)에서 일부 회사 행만 반환된 경우:
+  - 데이터가 있는 회사만 결과에 표시하고
+  - insight_text에 "X는 이 지표의 데이터가 아직 없어 비교 대상에서 제외되었습니다"라고 명시
+  - "CRM에 등록되지 않은" 표현 사용 금지 — 데이터 부재와 고객사 미등록은 다릅니다
+  - 빈 결과라고 판정하거나 "데이터 없음"으로 거절하지 말 것
 
 ## 필드 작성 가이드
 
@@ -164,6 +271,13 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 ### chart_type
 - CHART일 때 반드시 지정: "bar", "line", "pie", "doughnut" 중 택1
 - CARD/TABLE → null
+- **시각화 변환 요청(MODIFY)**: 사용자가 명시한 차트 타입을 반드시 반영하세요.
+  - "막대 차트로" / "바 차트로" → chart_type="bar", widget_type="CHART"
+  - "선 그래프로" / "라인 차트로" / "꺾은선으로" → chart_type="line", widget_type="CHART"
+  - "파이 차트로" / "원형 차트로" → chart_type="pie", widget_type="CHART"
+  - "도넛 차트로" → chart_type="doughnut", widget_type="CHART"
+  - "테이블로" / "표로" → widget_type="TABLE", chart_type=null
+  - 명시 없이 "다른 그래프로" / "차트로" → suggested_chart_types 첫 번째 값 사용, 없으면 "bar"
 
 ### labels_field / datasets
 - labels_field: X축(카테고리) 컬럼명. **데이터에 있는 key 그대로** 사용하세요.
@@ -177,6 +291,10 @@ _INSIGHT_PROMPT = """당신은 B2B CRM 데이터 분석 전문가입니다.
 
 ### display_format
 - "currency" (금액), "number" (숫자), "percent" (비율), "date" (날짜), "text" (텍스트)
+- 무드/날씨 분석 결과(mood_score, AVG(mood_score) 등): y_label="무드", y_unit="mood" 설정 필수
+  - 이때 y축은 자동으로 무지개🌈/맑음☀️/흐림☁️/비🌧️/천둥⛈️ 이모지 눈금으로 표시됨
+  - datasets value_field는 반드시 숫자 컬럼(mood_score, AVG(mood_score) 등)을 사용할 것
+  - mood VARCHAR 텍스트(RAINBOW/SUNNY...)를 value_field로 사용하면 모두 0이 됨 → 절대 사용 금지
 
 ### suggested_chart_types
 - 현재 chart_type 외에 대안 차트 1~2개. CARD/TABLE은 빈 배열.
@@ -207,6 +325,67 @@ class QueryEngine:
         except GuardrailError as e:
             return {"status": "FAILED", "error": str(e), "error_code": "GUARDRAIL"}
 
+        # MODIFY + 순수 시각화 변환 → 기존 source_query 재사용, LLM 쿼리 생성 건너뜀
+        if (
+            request.action == "MODIFY"
+            and isinstance(request.current_widget, dict)
+            and _VIZ_CHANGE_RE.search(request.input_text)
+        ):
+            source_sql: str | None = request.current_widget.get("source_query")
+            if source_sql:
+                await _notify(QueryStatus.DATA_QUERYING)
+                try:
+                    db_result = await self._db.execute(
+                        text(source_sql), {"tenantId": request.tenant_id}
+                    )
+                    rows = _normalize_rows([dict(r) for r in db_result.mappings().all()])
+                    rows = _zero_fill_activity_type_rows(rows)
+                except Exception:
+                    logger.exception("Viz-change reuse query failed")
+                    return {
+                        "status": "FAILED",
+                        "error": "데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+                        "error_code": "DB_ERROR",
+                    }
+
+                await _notify(QueryStatus.COMPONENT_BUILDING)
+                try:
+                    insight = await asyncio.wait_for(
+                        self._generate_insight(
+                            request.input_text, rows, modify_context=request.current_widget
+                        ),
+                        timeout=LLM_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("LLM insight generation timed out (viz-change)")
+                    return {"status": "FAILED", "error": "인사이트 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.", "error_code": "QUERY_TIMEOUT"}
+                except Exception:
+                    logger.exception("LLM insight generation failed (viz-change)")
+                    return {"status": "FAILED", "error": "인사이트 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error_code": "LLM_ERROR"}
+
+                await _notify(QueryStatus.STYLING)
+
+                result = format_result(
+                    insight,
+                    rows,
+                    source_query=source_sql,
+                    search_type="STRUCTURED",
+                )
+
+                await self._context_store.add_entry(
+                    tenant_id=request.tenant_id,
+                    dashboard_id=request.dashboard_id,
+                    user_id=request.user_id,
+                    input_text=request.input_text,
+                    search_type="STRUCTURED",
+                    suggested_title=result.get("title"),
+                    source_query=result.get("source_query"),
+                    row_count=result["data"]["totalRowCount"],
+                    columns=result["data"]["columns"],
+                )
+
+                return {"status": "COMPLETED", "result": result}
+
         try:
             intent = await asyncio.wait_for(
                 self._classify_intent(request), timeout=LLM_TIMEOUT_SECONDS
@@ -230,12 +409,33 @@ class QueryEngine:
         try:
             rows = await self._execute_query(intent, tenant_id=request.tenant_id)
         except QueryBuildError as e:
-            return {"status": "FAILED", "error": str(e), "error_code": "DB_ERROR"}
+            # MODIFY 모드에서 쿼리 빌드 실패(허용되지 않은 JOIN 등) → 기존 source_query로 fallback
+            if (
+                request.action == "MODIFY"
+                and isinstance(request.current_widget, dict)
+            ):
+                fallback_sql = request.current_widget.get("source_query")
+                if fallback_sql:
+                    logger.info("QueryBuildError in MODIFY mode, falling back to existing source_query: %s", e)
+                    try:
+                        fb_result = await self._db.execute(text(fallback_sql), {"tenantId": request.tenant_id})
+                        rows = [dict(r) for r in fb_result.mappings().all()]
+                    except Exception:
+                        logger.exception("Fallback source_query execution also failed")
+                        return {"status": "FAILED", "error": str(e), "error_code": "DB_ERROR"}
+                else:
+                    return {"status": "FAILED", "error": str(e), "error_code": "DB_ERROR"}
+            else:
+                return {"status": "FAILED", "error": str(e), "error_code": "DB_ERROR"}
         except Exception:
             logger.exception("Database query execution failed")
             return {"status": "FAILED", "error": "데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "error_code": "DB_ERROR"}
 
         rows = _normalize_rows(rows)
+
+        # activities GROUP BY type: 데이터 없는 유형도 0-count로 표시
+        if intent.query_spec:
+            rows = _zero_fill_enum_groups(intent.query_spec, rows)
 
         if (
             len(rows) == 1
@@ -383,16 +583,36 @@ class QueryEngine:
             )
 
         if request.action == "MODIFY" and request.current_widget:
-            widget_text = json.dumps(request.current_widget, ensure_ascii=False)
-            system_content += (
-                "\n\n## 수정 대상 위젯\n"
-                "아래는 사용자가 수정을 요청한 기존 위젯입니다. "
-                "사용자의 수정 의도에 따라 쿼리를 조정하거나, 동일 데이터를 다른 관점으로 재구성하세요.\n"
-                "- 위젯 타입 변경 요청: 기존 데이터를 새 타입에 맞게 컬럼/집계를 재구성하세요.\n"
-                "- 데이터 범위 변경 요청: 필터/정렬/집계 조건을 수정하세요.\n"
-                "- 기존 위젯의 title과 source_query를 참고하여 원래 의도를 파악하세요.\n"
-                f"{widget_text}"
-            )
+            source_sql: str = request.current_widget.get("source_query") or ""
+            widget_title = request.current_widget.get("title", "")
+            widget_type = request.current_widget.get("widget_type", "")
+
+            mod_lines = [
+                "\n\n## 수정 대상 위젯",
+                f"제목: {widget_title} / 타입: {widget_type}",
+            ]
+
+            if source_sql:
+                ctx = _extract_modify_context(source_sql)
+                mod_lines += [
+                    "",
+                    "### 기존 쿼리 구조 — 이 구조를 베이스로 수정하세요",
+                    ctx,
+                    "",
+                    "### 수정 규칙 (반드시 준수)",
+                    "- 사용자가 **명시적으로 요청한 부분만** 변경하세요.",
+                    "- 요청하지 않은 table, joins는 **절대 바꾸지 마세요**.",
+                    "- 열 제거 요청: 해당 컬럼만 columns에서 제거, 나머지 컬럼·joins 유지",
+                    "- 열 추가 요청: 기존 컬럼을 유지하고 새 컬럼을 columns에 추가",
+                    "- 필터 추가 요청: 기존 joins를 유지하면서 filters에 조건만 추가",
+                    "- 정렬 변경 요청: order_by만 교체, 나머지 유지",
+                    "- 집계 변경 요청: columns의 집계 함수만 수정, joins·filters 유지",
+                    "- 기간 변경 요청: filters의 날짜 조건만 수정, joins 유지",
+                ]
+            else:
+                mod_lines.append("(기존 쿼리 없음 — 사용자 요청을 기반으로 새 쿼리 생성)")
+
+            system_content += "\n".join(mod_lines)
 
         return [
             {"role": "system", "content": system_content},
@@ -522,6 +742,95 @@ class QueryEngine:
 
 _SOURCE_QUERY_PARAM = re.compile(r":p(\d+)\b")
 
+_SQL_AS_ALIAS = re.compile(r'\s+AS\s+["\']?\w+["\']?', re.IGNORECASE)
+_SQL_SELECT = re.compile(r'SELECT\s+(.*?)\s+FROM\b', re.IGNORECASE | re.DOTALL)
+_SQL_FROM = re.compile(r'\bFROM\s+(\w+)(?:\s+([a-z]))?\b', re.IGNORECASE)
+_SQL_JOIN = re.compile(r'\b(?:LEFT\s+|RIGHT\s+|INNER\s+)?JOIN\s+(\w+)\s+(?:\w+\s+)?ON\s+([\w.]+\s*=\s*[\w.]+)', re.IGNORECASE)
+_SQL_JOIN_ALIAS = re.compile(r'\bJOIN\s+(\w+)\s+([a-z])\b', re.IGNORECASE)
+_SQL_GROUP = re.compile(r'\bGROUP\s+BY\s+(.*?)(?:\s+HAVING|\s+ORDER|\s+LIMIT|$)', re.IGNORECASE | re.DOTALL)
+_SQL_ORDER = re.compile(r'\bORDER\s+BY\s+(.*?)(?:\s+LIMIT|$)', re.IGNORECASE | re.DOTALL)
+_SQL_LIMIT = re.compile(r'\bLIMIT\s+(\d+)', re.IGNORECASE)
+_SQL_SINGLE_ALIAS_COL = re.compile(r'\b([a-z])\.([\w]+)')
+
+
+def _build_sql_alias_map(source_sql: str) -> tuple[str, dict[str, str]]:
+    """FROM/JOIN 절에서 (메인 테이블명, 별칭→테이블명) 매핑 반환."""
+    main_table = ""
+    alias_map: dict[str, str] = {}
+    m = _SQL_FROM.search(source_sql)
+    if m:
+        main_table = m.group(1).lower()
+        if m.group(2):
+            alias_map[m.group(2).lower()] = main_table
+    for m in _SQL_JOIN_ALIAS.finditer(source_sql):
+        alias_map[m.group(2).lower()] = m.group(1).lower()
+    return main_table, alias_map
+
+
+def _resolve_sql_aliases(expr: str, main_table: str, alias_map: dict[str, str]) -> str:
+    """SQL 표현식에서 단일 문자 별칭을 실제 테이블명으로 교체.
+    메인 테이블 컬럼은 접두사 제거, 조인 테이블 컬럼은 전체 테이블명 접두사 추가."""
+    def replacer(m: re.Match) -> str:
+        alias = m.group(1).lower()
+        col = m.group(2)
+        table = alias_map.get(alias, alias)
+        return col if table == main_table else f"{table}.{col}"
+    return _SQL_SINGLE_ALIAS_COL.sub(replacer, expr)
+
+
+def _extract_modify_context(source_sql: str) -> str:
+    """source_query SQL → MODIFY 프롬프트용 구조화 컨텍스트.
+    SQL 별칭(d.→deals., a.→accounts. 등)을 실제 테이블명으로 교체하여 LLM에 전달한다.
+    메인 테이블 컬럼은 접두사 없이, 조인 테이블 컬럼은 'table.col' 형식으로 표시한다.
+    """
+    main_table, alias_map = _build_sql_alias_map(source_sql)
+
+    def _clean(expr: str) -> str:
+        expr = _SQL_AS_ALIAS.sub('', expr).strip()
+        return _resolve_sql_aliases(expr, main_table, alias_map)
+
+    lines: list[str] = []
+
+    m = _SQL_SELECT.search(source_sql)
+    if m:
+        raw_cols = [c.strip() for c in m.group(1).split(',') if c.strip()]
+        exprs = [_clean(col) for col in raw_cols]
+        lines.append(f"현재 SELECT 컬럼: {', '.join(exprs)}")
+
+    if main_table:
+        lines.append(f"메인 테이블: {main_table}")
+
+    joins = _SQL_JOIN.findall(source_sql)
+    if joins:
+        lines.append(f"JOIN 테이블: {', '.join(f'{t} (ON {on})' for t, on in joins)}")
+
+    m = _SQL_GROUP.search(source_sql)
+    if m:
+        group_exprs = [_clean(c.strip()) for c in m.group(1).split(',') if c.strip()]
+        lines.append(f"GROUP BY: {', '.join(group_exprs)}")
+
+    m = _SQL_ORDER.search(source_sql)
+    if m:
+        lines.append(f"ORDER BY: {m.group(1).strip()}")
+
+    m = _SQL_LIMIT.search(source_sql)
+    if m:
+        lines.append(f"LIMIT: {m.group(1)}")
+
+    return "\n".join(lines)
+
+# 순수 시각화 변환 요청 패턴 (쿼리 재생성 없이 기존 SQL 재사용)
+# 반드시 "X로 바꿔줘/수정/변경" 형태이거나 차트 타입 + 차트/그래프 조합이어야 함
+# "기준으로 그래프를 그려줘" 처럼 데이터 변경 요청은 매칭 안 됨
+_VIZ_CHANGE_RE = re.compile(
+    # 차트 타입 명시 + 차트/그래프 키워드 (파이프라인 오탐 방지: 파이 뒤에 반드시 차트/그래프)
+    r"(?:막대|선|라인|꺾은\s*선|도넛|원형|버블)\s*(?:차트|그래프)"
+    r"|파이\s*(?:차트|그래프)"
+    # "그래프로 바꿔줘", "차트로 변경", "테이블로 수정", "표로 바꿔" 등 명시적 변환 요청
+    r"|(?:그래프|차트|테이블|표)\s*(?:로|으로)\s*(?:바꿔|변경|전환|교체|수정)",
+    re.IGNORECASE,
+)
+
 
 def _resolve_params(sql: str, params: dict[str, object]) -> str:
     """파라미터 플레이스홀더를 리터럴로 치환. tenant_id(:p1)만 :tenantId로 유지."""
@@ -559,6 +868,91 @@ def _normalize_rows(rows: list[dict]) -> list[dict]:
 
 
 _AGG_RE = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\(", re.IGNORECASE)
+
+# activities.type 컬럼의 알려진 열거값
+_KNOWN_ACTIVITY_TYPES: tuple[str, ...] = ("MEETING", "CALL", "TASK", "EMAIL")
+
+
+def _zero_fill_activity_type_rows(rows: list[dict]) -> list[dict]:
+    """활동 유형(type) GROUP BY 결과에 누락된 유형을 0-count로 채운다.
+
+    DB에 레코드가 없는 유형(CALL, EMAIL 등)은 GROUP BY 결과에 나타나지 않으므로,
+    알려진 모든 유형을 순회하며 누락된 항목을 0으로 패딩한다.
+    spec이나 SQL에 의존하지 않고 결과 행 구조만 보고 판단하므로
+    일반 경로와 VIZ 우회 경로(source_query 재실행) 모두에서 동작한다.
+    """
+    if not rows:
+        return rows
+
+    # type 키가 없거나, 값이 알려진 활동 유형이 아니면 적용하지 않음
+    first_type_val = str(rows[0].get("type", "")).upper()
+    if not any(first_type_val == t for t in _KNOWN_ACTIVITY_TYPES):
+        return rows
+
+    # 숫자형 집계 컬럼 이름 탐색 (type 외의 numeric 컬럼)
+    sample = rows[0]
+    numeric_keys = [k for k, v in sample.items() if k != "type" and isinstance(v, (int, float))]
+
+    existing_types = {str(r.get("type", "")).upper() for r in rows if r.get("type") is not None}
+    missing = [t for t in _KNOWN_ACTIVITY_TYPES if t not in existing_types]
+    if not missing:
+        return rows
+
+    filler_rows = []
+    for activity_type in missing:
+        row: dict = {"type": activity_type}
+        for k in numeric_keys:
+            row[k] = 0
+        filler_rows.append(row)
+
+    return rows + filler_rows
+
+
+def _zero_fill_enum_groups(spec: QuerySpec, rows: list[dict]) -> list[dict]:
+    """QuerySpec 기반으로 zero-fill 적용 여부를 판단한다.
+
+    type 필터(EQ/IN)가 있으면 해당 타입만 채운다.
+    NEQ/NOT_IN 필터가 있으면 zero-fill 자체를 건너뛴다 (제외 요청을 존중).
+    """
+    from app.schemas.dashboard import FilterOperator
+
+    if not spec or spec.table != "activities":
+        return rows
+    if not spec.group_by or "type" not in spec.group_by:
+        return rows
+
+    # type 필터 분석: 포함(EQ/IN) vs 제외(NEQ/NOT_IN) vs 미지정
+    allowed_types: tuple[str, ...] = _KNOWN_ACTIVITY_TYPES
+    for f in spec.filters:
+        if f.column != "type":
+            continue
+        if f.operator == FilterOperator.EQ and isinstance(f.value, str):
+            allowed_types = (f.value.upper(),)
+        elif f.operator == FilterOperator.IN and isinstance(f.value, list):
+            allowed_types = tuple(str(v).upper() for v in f.value)
+        elif f.operator in (FilterOperator.NEQ, FilterOperator.NOT_IN):
+            # 제외 요청: zero-fill 안 함 (사용자가 일부 타입을 의도적으로 제거)
+            return rows
+        break
+
+    if not rows:
+        agg_cols = [c for c in spec.columns if _AGG_RE.match(c)]
+        count_key = agg_cols[0] if agg_cols else "COUNT(*)"
+        return [{"type": t, count_key: 0} for t in allowed_types]
+
+    # allowed_types 범위 내에서만 zero-fill
+    if allowed_types is _KNOWN_ACTIVITY_TYPES:
+        return _zero_fill_activity_type_rows(rows)
+
+    sample = rows[0]
+    numeric_keys = [k for k, v in sample.items() if k != "type" and isinstance(v, (int, float))]
+    existing = {str(r.get("type", "")).upper() for r in rows}
+    filler = [
+        {**{"type": t}, **{k: 0 for k in numeric_keys}}
+        for t in allowed_types if t not in existing
+    ]
+    return rows + filler
+
 
 _TABLE_DEFAULT_DETAIL_COLUMNS: dict[str, list[str]] = {
     "deals": ["title", "amount", "current_pipeline"],
