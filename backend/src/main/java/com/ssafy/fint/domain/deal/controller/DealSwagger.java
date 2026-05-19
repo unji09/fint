@@ -31,9 +31,10 @@ public interface DealSwagger {
             + "정렬 기준은 서버 고정 — 클라이언트의 sort 쿼리는 무시된다. "
             + "ADMIN 은 같은 테넌트 전체, MANAGER/MEMBER 는 본인 소속 팀(team_id 일치)의 딜만 반환한다. "
             + "accountId 를 지정하면 해당 고객사의 딜만, contactId 를 지정하면 해당 담당자가 연결된 딜만 필터링한다. "
-            + "두 파라미터는 AND 조건으로 동시에 적용 가능하다."
+            + "keyword 를 지정하면 딜 제목(title)에 대소문자 무시 부분 일치 검색을 적용한다. "
+            + "모든 파라미터는 AND 조건으로 동시에 적용 가능하며, keyword 가 null 이거나 공백이면 전체 반환한다."
     )
-    ApiResponse<DealListResponse> findList(CustomUserDetails me, Long accountId, Long contactId, Pageable pageable);
+    ApiResponse<DealListResponse> findList(CustomUserDetails me, Long accountId, Long contactId, String keyword, Pageable pageable);
 
     @Operation(
         summary = "딜 상세 조회",

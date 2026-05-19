@@ -1,8 +1,8 @@
 package com.ssafy.fint.domain.deal.repository;
 
 import com.ssafy.fint.domain.deal.entity.Deal;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -55,7 +55,7 @@ public interface DealRepository extends JpaRepository<Deal, Long> {
             @Param("mineOnlyUserId") Long mineOnlyUserId,
             Pageable pageable);
 
-    @Query(value = """
+    @Query("""
             select d from Deal d
             where exists (
                 select 1 from AccountUserAssignment aua
@@ -69,28 +69,15 @@ public interface DealRepository extends JpaRepository<Deal, Long> {
                        select 1 from DealContact dc
                        where dc.deal = d and dc.contact.contactId = :contactId
                    ))
-            """,
-            countQuery = """
-            select count(d) from Deal d
-            where exists (
-                select 1 from AccountUserAssignment aua
-                where aua.account = d.account
-                  and aua.user.tenant.tenantId = :tenantId
-                  and aua.user.isDeleted = false
-            )
-              and (:accountId is null or d.account.accountId = :accountId)
-              and (:contactId is null
-                   or exists (
-                       select 1 from DealContact dc
-                       where dc.deal = d and dc.contact.contactId = :contactId
-                   ))
+              and (:keyword is null or lower(d.title) like lower(concat('%', cast(:keyword as string), '%')))
             """)
-    Page<Deal> findAllByTenant(@Param("tenantId") Long tenantId,
-                               @Param("accountId") Long accountId,
-                               @Param("contactId") Long contactId,
-                               Pageable pageable);
+    Slice<Deal> findAllByTenant(@Param("tenantId") Long tenantId,
+                                @Param("accountId") Long accountId,
+                                @Param("contactId") Long contactId,
+                                @Param("keyword") String keyword,
+                                Pageable pageable);
 
-    @Query(value = """
+    @Query("""
             select d from Deal d
             where d.team.teamId = :teamId
               and (:accountId is null or d.account.accountId = :accountId)
@@ -99,19 +86,11 @@ public interface DealRepository extends JpaRepository<Deal, Long> {
                        select 1 from DealContact dc
                        where dc.deal = d and dc.contact.contactId = :contactId
                    ))
-            """,
-            countQuery = """
-            select count(d) from Deal d
-            where d.team.teamId = :teamId
-              and (:accountId is null or d.account.accountId = :accountId)
-              and (:contactId is null
-                   or exists (
-                       select 1 from DealContact dc
-                       where dc.deal = d and dc.contact.contactId = :contactId
-                   ))
+              and (:keyword is null or lower(d.title) like lower(concat('%', cast(:keyword as string), '%')))
             """)
-    Page<Deal> findAllByTeam(@Param("teamId") Long teamId,
-                             @Param("accountId") Long accountId,
-                             @Param("contactId") Long contactId,
-                             Pageable pageable);
+    Slice<Deal> findAllByTeam(@Param("teamId") Long teamId,
+                              @Param("accountId") Long accountId,
+                              @Param("contactId") Long contactId,
+                              @Param("keyword") String keyword,
+                              Pageable pageable);
 }

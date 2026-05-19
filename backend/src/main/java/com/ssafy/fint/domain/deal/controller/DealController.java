@@ -56,11 +56,12 @@ public class DealController implements DealSwagger {
             @AuthenticationPrincipal CustomUserDetails me,
             @RequestParam(required = false) Long accountId,
             @RequestParam(required = false) Long contactId,
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         int cappedSize = Math.min(pageable.getPageSize(), DEAL_LIST_MAX_PAGE_SIZE);
         Pageable sorted = PageRequest.of(pageable.getPageNumber(), cappedSize, DEAL_LIST_SORT);
-        return ApiResponse.ok(dealService.findList(me, accountId, contactId, sorted));
+        return ApiResponse.ok(dealService.findList(me, accountId, contactId, keyword, sorted));
     }
 
     @Override
