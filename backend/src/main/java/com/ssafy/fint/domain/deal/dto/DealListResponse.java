@@ -6,7 +6,7 @@ import java.util.List;
 
 public record DealListResponse(
         List<DealSummary> data,
-        long totalElements
+        boolean hasNext
 ) {
 
     public record DealSummary(
