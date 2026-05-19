@@ -37,7 +37,7 @@ class SignalCollectSchedulerTest {
                 Map.of(10L, List.of(1L)), Map.of(),
                 Map.of(20L, List.of(2L)), Map.of()
         );
-        when(signalCollectService.collectAndSave(SYSTEM_TENANT_ID)).thenReturn(result);
+        when(signalCollectService.collectAndSave(SYSTEM_TENANT_ID, null)).thenReturn(result);
 
         scheduler.collectSignals();
 
@@ -51,14 +51,14 @@ class SignalCollectSchedulerTest {
 
         scheduler.collectSignals();
 
-        verify(signalCollectService, never()).collectAndSave(any());
+        verify(signalCollectService, never()).collectAndSave(any(), any());
         verify(nextActionTriggerService, never()).triggerFromCollectResult(any(), any());
     }
 
     @Test
     @DisplayName("수집 실패 시 트리거가 호출되지 않는다")
     void collectFailureSkipsTrigger() {
-        when(signalCollectService.collectAndSave(SYSTEM_TENANT_ID))
+        when(signalCollectService.collectAndSave(SYSTEM_TENANT_ID, null))
                 .thenThrow(new RuntimeException("FastAPI down"));
 
         scheduler.collectSignals();

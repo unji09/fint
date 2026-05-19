@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -36,7 +37,8 @@ public class SignalCollectClient {
         this.aiServerUrl = aiServerUrl;
     }
 
-    public SignalCollectResponse collect(Long tenantId, String source, boolean includeEmbeddings) {
+    public SignalCollectResponse collect(Long tenantId, String source, boolean includeEmbeddings,
+                                        List<Long> accountIds) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set(TENANT_HEADER, String.valueOf(tenantId));
@@ -44,10 +46,13 @@ public class SignalCollectClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("source", source);
         body.put("include_embeddings", includeEmbeddings);
+        if (accountIds != null && !accountIds.isEmpty()) {
+            body.put("account_ids", accountIds);
+        }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         String url = aiServerUrl + COLLECT_PATH;
-        log.info("[SignalCollect] POST {} tenantId={} source={}", url, tenantId, source);
+        log.info("[SignalCollect] POST {} tenantId={} source={} accountIds={}", url, tenantId, source, accountIds);
 
         try {
             ResponseEntity<Map<String, Object>> response = signalRestTemplate.exchange(

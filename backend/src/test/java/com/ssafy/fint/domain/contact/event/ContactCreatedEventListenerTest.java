@@ -44,12 +44,12 @@ class ContactCreatedEventListenerTest {
         void collectThenTrigger() {
             ContactCreatedEvent event = new ContactCreatedEvent(TENANT_ID, ACCOUNT_ID, CONTACT_ID);
             SignalCollectResult result = emptyResult();
-            given(signalCollectService.collectAndSave(TENANT_ID)).willReturn(result);
+            given(signalCollectService.collectAndSave(TENANT_ID, List.of(ACCOUNT_ID))).willReturn(result);
 
             listener.handle(event);
 
             InOrder order = inOrder(signalCollectService, nextActionTriggerService);
-            order.verify(signalCollectService).collectAndSave(TENANT_ID);
+            order.verify(signalCollectService).collectAndSave(TENANT_ID, List.of(ACCOUNT_ID));
             order.verify(nextActionTriggerService).triggerFromCollectResult(TENANT_ID, result);
         }
     }
@@ -62,7 +62,7 @@ class ContactCreatedEventListenerTest {
         @DisplayName("signal 수집 실패 시 AI trigger 를 호출하지 않고 예외를 삼킨다")
         void collectFailsNoTrigger() {
             ContactCreatedEvent event = new ContactCreatedEvent(TENANT_ID, ACCOUNT_ID, CONTACT_ID);
-            given(signalCollectService.collectAndSave(TENANT_ID))
+            given(signalCollectService.collectAndSave(TENANT_ID, List.of(ACCOUNT_ID)))
                     .willThrow(new RuntimeException("FastAPI down"));
 
             listener.handle(event);
@@ -75,13 +75,13 @@ class ContactCreatedEventListenerTest {
         void triggerFailsNoException() {
             ContactCreatedEvent event = new ContactCreatedEvent(TENANT_ID, ACCOUNT_ID, CONTACT_ID);
             SignalCollectResult result = emptyResult();
-            given(signalCollectService.collectAndSave(TENANT_ID)).willReturn(result);
+            given(signalCollectService.collectAndSave(TENANT_ID, List.of(ACCOUNT_ID))).willReturn(result);
             doThrow(new RuntimeException("AI error"))
                     .when(nextActionTriggerService).triggerFromCollectResult(eq(TENANT_ID), any());
 
             listener.handle(event);
 
-            verify(signalCollectService).collectAndSave(TENANT_ID);
+            verify(signalCollectService).collectAndSave(TENANT_ID, List.of(ACCOUNT_ID));
         }
     }
 
