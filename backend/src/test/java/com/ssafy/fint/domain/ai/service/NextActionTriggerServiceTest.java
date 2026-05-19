@@ -5,6 +5,12 @@ import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
 import com.ssafy.fint.domain.ai.entity.TriggerType;
 import com.ssafy.fint.domain.ai.service.NextActionTriggerService.AccountSignalChange;
+import com.ssafy.fint.domain.signal.entity.AccountDartDisclosure;
+import com.ssafy.fint.domain.signal.entity.AccountNewsArticle;
+import com.ssafy.fint.domain.signal.entity.DartDisclosure;
+import com.ssafy.fint.domain.signal.entity.NewsArticle;
+import com.ssafy.fint.domain.signal.repository.AccountDartDisclosureRepository;
+import com.ssafy.fint.domain.signal.repository.AccountNewsArticleRepository;
 import com.ssafy.fint.domain.signal.service.SignalCollectService.SignalCollectResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,6 +29,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -38,6 +45,8 @@ class NextActionTriggerServiceTest {
 
     @Mock private AiSuggestionService aiSuggestionService;
     @Mock private ActivityRepository activityRepository;
+    @Mock private AccountNewsArticleRepository accountNewsArticleRepository;
+    @Mock private AccountDartDisclosureRepository accountDartDisclosureRepository;
     @InjectMocks private NextActionTriggerService triggerService;
 
     @Nested
@@ -145,6 +154,8 @@ class NextActionTriggerServiceTest {
 
             when(activityRepository.findRecentMeetingsByAccountId(anyLong(), eq(TENANT_ID), any(OffsetDateTime.class)))
                     .thenReturn(List.of());
+            when(accountDartDisclosureRepository.findRecentByAccountId(anyLong(), anyString()))
+                    .thenReturn(List.of());
             doNothing().when(aiSuggestionService).createNextActionBySystem(any(), any());
 
             triggerService.triggerFromCollectResult(TENANT_ID, result);
@@ -192,6 +203,8 @@ class NextActionTriggerServiceTest {
 
             when(activityRepository.findRecentMeetingsByAccountId(anyLong(), eq(TENANT_ID), any(OffsetDateTime.class)))
                     .thenReturn(List.of());
+            when(accountDartDisclosureRepository.findRecentByAccountId(anyLong(), anyString()))
+                    .thenReturn(List.of());
             doThrow(new RuntimeException("AI server down"))
                     .doNothing()
                     .when(aiSuggestionService).createNextActionBySystem(any(), any());
@@ -216,6 +229,8 @@ class NextActionTriggerServiceTest {
             Activity m3 = newActivity(503L);
             when(activityRepository.findRecentMeetingsByAccountId(eq(10L), eq(TENANT_ID), any(OffsetDateTime.class)))
                     .thenReturn(List.of(m1, m2, m3));
+            when(accountDartDisclosureRepository.findRecentByAccountId(eq(10L), anyString()))
+                    .thenReturn(List.of());
             doNothing().when(aiSuggestionService).createNextActionBySystem(any(), any());
 
             triggerService.triggerFromCollectResult(TENANT_ID, result);
@@ -237,6 +252,8 @@ class NextActionTriggerServiceTest {
             );
 
             when(activityRepository.findRecentMeetingsByAccountId(eq(10L), eq(TENANT_ID), any(OffsetDateTime.class)))
+                    .thenReturn(List.of());
+            when(accountDartDisclosureRepository.findRecentByAccountId(eq(10L), anyString()))
                     .thenReturn(List.of());
             doNothing().when(aiSuggestionService).createNextActionBySystem(any(), any());
 
@@ -260,6 +277,117 @@ class NextActionTriggerServiceTest {
                     0, 0, 0, List.of(),
                     Map.of(), Map.of(), Map.of(), Map.of()
             );
+        }
+    }
+
+    @Nested
+    @DisplayName("supplementNewsIfNeeded / supplementDartIfNeeded")
+    class SupplementTest {
+
+        @Test
+        @DisplayName("DART_UPDATED 이고 뉴스가 비어있으면 최근 7일 뉴스 최대 3개를 보충한다")
+        void dartUpdated_supplementsNews() {
+            when(accountNewsArticleRepository.findRecentByAccountId(eq(10L), any(OffsetDateTime.class)))
+                    .thenReturn(List.of(
+                            newAccountNewsArticle(301L),
+                            newAccountNewsArticle(302L),
+                            newAccountNewsArticle(303L),
+                            newAccountNewsArticle(304L)
+                    ));
+
+            List<Long> result = triggerService.supplementNewsIfNeeded(
+                    TriggerType.DART_UPDATED, List.of(), 10L);
+
+            assertThat(result).containsExactly(301L, 302L, 303L);
+        }
+
+        @Test
+        @DisplayName("DART_MAPPED_TO_NEW_ACCOUNT 이고 뉴스가 비어있으면 뉴스를 보충한다")
+        void dartMapped_supplementsNews() {
+            when(accountNewsArticleRepository.findRecentByAccountId(eq(10L), any(OffsetDateTime.class)))
+                    .thenReturn(List.of(newAccountNewsArticle(301L)));
+
+            List<Long> result = triggerService.supplementNewsIfNeeded(
+                    TriggerType.DART_MAPPED_TO_NEW_ACCOUNT, List.of(), 10L);
+
+            assertThat(result).containsExactly(301L);
+        }
+
+        @Test
+        @DisplayName("DART 트리거여도 이미 뉴스가 있으면 보충하지 않는다")
+        void dartUpdated_alreadyHasNews_noSupplement() {
+            List<Long> result = triggerService.supplementNewsIfNeeded(
+                    TriggerType.DART_UPDATED, List.of(100L), 10L);
+
+            assertThat(result).containsExactly(100L);
+        }
+
+        @Test
+        @DisplayName("NEWS_UPDATED 트리거에서는 뉴스 보충이 발생하지 않는다")
+        void newsUpdated_noNewsSupplement() {
+            List<Long> result = triggerService.supplementNewsIfNeeded(
+                    TriggerType.NEWS_UPDATED, List.of(), 10L);
+
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        @DisplayName("NEWS_UPDATED 이고 DART가 비어있으면 최근 7일 DART 1개를 보충한다")
+        void newsUpdated_supplementsDart() {
+            when(accountDartDisclosureRepository.findRecentByAccountId(eq(10L), anyString()))
+                    .thenReturn(List.of(
+                            newAccountDartDisclosure(401L),
+                            newAccountDartDisclosure(402L)
+                    ));
+
+            List<Long> result = triggerService.supplementDartIfNeeded(
+                    TriggerType.NEWS_UPDATED, List.of(), 10L);
+
+            assertThat(result).containsExactly(401L);
+        }
+
+        @Test
+        @DisplayName("NEWS_MAPPED_TO_NEW_ACCOUNT 이고 DART가 비어있으면 DART를 보충한다")
+        void newsMapped_supplementsDart() {
+            when(accountDartDisclosureRepository.findRecentByAccountId(eq(10L), anyString()))
+                    .thenReturn(List.of(newAccountDartDisclosure(401L)));
+
+            List<Long> result = triggerService.supplementDartIfNeeded(
+                    TriggerType.NEWS_MAPPED_TO_NEW_ACCOUNT, List.of(), 10L);
+
+            assertThat(result).containsExactly(401L);
+        }
+
+        @Test
+        @DisplayName("NEWS 트리거여도 이미 DART가 있으면 보충하지 않는다")
+        void newsUpdated_alreadyHasDart_noSupplement() {
+            List<Long> result = triggerService.supplementDartIfNeeded(
+                    TriggerType.NEWS_UPDATED, List.of(200L), 10L);
+
+            assertThat(result).containsExactly(200L);
+        }
+
+        @Test
+        @DisplayName("DART_UPDATED 트리거에서는 DART 보충이 발생하지 않는다")
+        void dartUpdated_noDartSupplement() {
+            List<Long> result = triggerService.supplementDartIfNeeded(
+                    TriggerType.DART_UPDATED, List.of(), 10L);
+
+            assertThat(result).isEmpty();
+        }
+
+        private AccountNewsArticle newAccountNewsArticle(Long newsArticleId) {
+            NewsArticle news = NewsArticle.builder().title("뉴스").build();
+            ReflectionTestUtils.setField(news, "newsArticleId", newsArticleId);
+            return new AccountNewsArticle(null, news);
+        }
+
+        private AccountDartDisclosure newAccountDartDisclosure(Long dartDisclosureId) {
+            DartDisclosure dart = DartDisclosure.builder()
+                    .corpCode("00000000").corpName("테스트").reportNm("보고서")
+                    .rceptNo("00000000").rceptDt("20260519").build();
+            ReflectionTestUtils.setField(dart, "dartDisclosureId", dartDisclosureId);
+            return new AccountDartDisclosure(null, dart);
         }
     }
 }
