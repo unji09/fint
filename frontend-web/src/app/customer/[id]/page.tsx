@@ -22,6 +22,21 @@ import type { Deal, StrategyCard } from '@/types/customer';
 const SA = ['#06b6d4', '#cbd5e1', '#fb923c'];
 const F = 'Pretendard,sans-serif';
 
+// 전화번호 입력 자동 포맷팅. 숫자만 남기고 11자리(휴대폰) / 10자리(일반) 기준 하이픈 삽입.
+function formatPhoneNumber(input: string): string {
+  const digits = input.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
+
+// 이메일 형식 검증. 빈 문자열은 valid 로 간주(선택 입력).
+function isValidEmail(value: string): boolean {
+  if (!value.trim()) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 // Next Action category → AddEventModal 카테고리 매핑.
 // NEWS/DART/CRM 같은 시그널 출처는 '미팅'(가장 일반적) 으로, ActivityType 코드면 직접 매핑.
 function mapNextActionCategory(c: string): string {
@@ -148,7 +163,7 @@ export default function CustomerDetailPage() {
     if (selContact) {
       setEcName(selContact.name);
       setEcTitle(selContact.role);
-      setEcPhone(selContact.phone ?? '');
+      setEcPhone(formatPhoneNumber(selContact.phone ?? ''));
       setEcEmail(selContact.email ?? '');
     }
   }, [selContact]);
@@ -232,15 +247,41 @@ export default function CustomerDetailPage() {
                             <input value={ecName} onChange={e => setEcName(e.target.value)} placeholder="이름" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
                             <input value={ecTitle} onChange={e => setEcTitle(e.target.value)} placeholder="직책" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
                           </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                            <input value={ecPhone} onChange={e => setEcPhone(e.target.value)} placeholder="전화번호" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
-                            <input value={ecEmail} onChange={e => setEcEmail(e.target.value)} placeholder="이메일" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'start' }}>
+                            <input
+                              value={ecPhone}
+                              onChange={e => setEcPhone(formatPhoneNumber(e.target.value))}
+                              placeholder="전화번호 (숫자만)"
+                              inputMode="numeric"
+                              autoComplete="tel"
+                              style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }}
+                            />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              <input
+                                type="email"
+                                value={ecEmail}
+                                onChange={e => setEcEmail(e.target.value)}
+                                placeholder="이메일"
+                                autoComplete="email"
+                                style={{ padding: '7px 10px', borderRadius: 6, border: `1px solid ${isValidEmail(ecEmail) ? '#e2eaf0' : '#ef4444'}`, fontSize: 13, outline: 'none', fontFamily: F }}
+                              />
+                              {!isValidEmail(ecEmail) && (
+                                <span style={{ fontSize: 11, color: '#ef4444', fontFamily: F }}>
+                                  이메일 형식이 올바르지 않습니다.
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <button onClick={async () => {
-                            if (!selContact.contactId) return;
-                            await updContact(selContact.contactId, { name: ecName.trim() || undefined, title: ecTitle.trim() || undefined, phone: ecPhone.trim() || undefined, email: ecEmail.trim() || undefined });
-                            setEditContact(false); refDetail();
-                          }} style={{ alignSelf: 'flex-end', padding: '5px 14px', borderRadius: 6, border: 'none', backgroundColor: '#06b6d4', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>저장</button>
+                          <button
+                            onClick={async () => {
+                              if (!selContact.contactId) return;
+                              if (!isValidEmail(ecEmail)) return;
+                              await updContact(selContact.contactId, { name: ecName.trim() || undefined, title: ecTitle.trim() || undefined, phone: ecPhone.trim() || undefined, email: ecEmail.trim() || undefined });
+                              setEditContact(false); refDetail();
+                            }}
+                            disabled={!isValidEmail(ecEmail)}
+                            style={{ alignSelf: 'flex-end', padding: '5px 14px', borderRadius: 6, border: 'none', backgroundColor: isValidEmail(ecEmail) ? '#06b6d4' : '#cbd5e1', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isValidEmail(ecEmail) ? 'pointer' : 'default', fontFamily: F }}
+                          >저장</button>
                         </div>
                       ) : (
                         <>
