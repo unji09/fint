@@ -56,7 +56,7 @@ public class DashboardQueryService {
 
         String traceId = UUID.randomUUID().toString();
         log.info("[SSE] query start traceId={} dashboardId={} userId={}", traceId, dashboardId, me.getUserId());
-        registerPendingState(traceId, dashboardId, request.inputText(), me);
+        registerPendingState(traceId, dashboardId, request.inputText(), request.widgetId(), me);
 
         try {
             queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), request.widgetId(), me));
@@ -70,7 +70,7 @@ public class DashboardQueryService {
         return new QueryStartResponse(traceId);
     }
 
-    private void registerPendingState(String traceId, Long dashboardId, String inputText, CustomUserDetails me) {
+    private void registerPendingState(String traceId, Long dashboardId, String inputText, Long widgetId, CustomUserDetails me) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", STATUS_PENDING);
         payload.put("dashboardId", dashboardId);
@@ -78,6 +78,9 @@ public class DashboardQueryService {
         payload.put("userId", me.getUserId());
         payload.put("tenantId", me.getTenantId());
         payload.put("requestedAt", OffsetDateTime.now().toString());
+        if (widgetId != null) {
+            payload.put("widgetId", widgetId);
+        }
 
         try {
             redisTemplate.opsForValue().set(

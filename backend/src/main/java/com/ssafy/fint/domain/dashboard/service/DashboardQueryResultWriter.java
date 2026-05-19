@@ -37,8 +37,13 @@ public class DashboardQueryResultWriter {
     private final DashboardQueryRepository dashboardQueryRepository;
     private final DashboardWidgetRepository dashboardWidgetRepository;
 
+    /**
+     * 자연어 쿼리 결과를 DB에 반영한다.
+     * - modifyWidgetId != null (MODIFY): 기존 위젯을 업데이트하고 position은 보존
+     * - modifyWidgetId == null (ADD/CREATE): 새 위젯을 INSERT
+     */
     @Transactional
-    public InsertedIds persist(Long tenantId, Long dashboardId, String inputText, Map<String, Object> result) {
+    public InsertedIds persist(Long tenantId, Long dashboardId, String inputText, Long modifyWidgetId, Map<String, Object> result) {
         Dashboard dashboard = dashboardRepository.findById(dashboardId)
                 .orElseThrow(() -> new BusinessException(DashboardErrorCode.DASHBOARD_NOT_FOUND));
 
@@ -53,15 +58,33 @@ public class DashboardQueryResultWriter {
                 .completedAt(OffsetDateTime.now())
                 .build());
 
-        DashboardWidget widget = dashboardWidgetRepository.save(DashboardWidget.builder()
-                .dashboard(dashboard)
-                .dashboardQuery(query)
-                .widgetType(WidgetType.valueOf((String) result.get(FIELD_WIDGET_TYPE)))
-                .title((String) result.get(FIELD_TITLE))
-                .config(asMap(result.get(FIELD_CONFIG)))
-                .position(null)
-                .sourceQuery((String) result.get(FIELD_SOURCE_QUERY))
-                .build());
+        WidgetType widgetType = WidgetType.valueOf((String) result.get(FIELD_WIDGET_TYPE));
+        String title = (String) result.get(FIELD_TITLE);
+        Map<String, Object> config = asMap(result.get(FIELD_CONFIG));
+        String sourceQuery = (String) result.get(FIELD_SOURCE_QUERY);
+
+        DashboardWidget widget;
+        if (modifyWidgetId != null) {
+            // MODIFY: 기존 위젯 업데이트 (position 유지)
+            widget = dashboardWidgetRepository.findById(modifyWidgetId)
+                    .orElseThrow(() -> new BusinessException(DashboardErrorCode.WIDGET_NOT_FOUND));
+            widget.changeWidgetType(widgetType);
+            widget.changeTitle(title);
+            widget.changeConfig(config);
+            widget.changeSourceQuery(sourceQuery);
+            widget.linkToQuery(query);
+        } else {
+            // ADD / CREATE: 새 위젯 삽입
+            widget = dashboardWidgetRepository.save(DashboardWidget.builder()
+                    .dashboard(dashboard)
+                    .dashboardQuery(query)
+                    .widgetType(widgetType)
+                    .title(title)
+                    .config(config)
+                    .position(null)
+                    .sourceQuery(sourceQuery)
+                    .build());
+        }
 
         return new InsertedIds(widget.getDashboardWidgetId(), query.getDashboardQueryId());
     }
