@@ -65,7 +65,7 @@ export default function CustomerDetailPage() {
   const isCompact = bp !== 'desktop';
   const scrollRef = useRef<HTMLDivElement>(null);
   const { accounts } = useAccountList();
-  const { signals, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
+  const { signals, contacts, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
   const { remove: delContact } = useDeleteContact();
   const { update: updContact } = useUpdateContact();
@@ -101,6 +101,13 @@ export default function CustomerDetailPage() {
   // 딜 추가
   const [showAddDeal, setShowAddDeal] = useState(false);
   const [showAllSignals, setShowAllSignals] = useState(false);
+  // 삭제 등 mutation 후 사용자 피드백 메시지 (2.5초 뒤 자동 사라짐)
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [toast]);
   const [ndTitle, setNdTitle] = useState('');
   const [ndAmount, setNdAmount] = useState('');
   const [ndDate, setNdDate] = useState('');
@@ -167,6 +174,45 @@ export default function CustomerDetailPage() {
       setEcEmail(selContact.email ?? '');
     }
   }, [selContact]);
+
+  // contacts 가 갱신되면(편집/등록/삭제 후 refDetail) selContact 도 최신 객체로 동기화.
+  // 새로고침 없이 편집 결과가 즉시 화면에 반영된다.
+  useEffect(() => {
+    if (!selContact) return;
+    const updated = contacts.find((c) => c.contactId === selContact.contactId);
+    if (updated && updated !== selContact) {
+      setSelContact(updated);
+    }
+    // selContact 자체를 의존성에 두면 setSelContact 후 무한 루프 → contactId 만 추적
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts, selContact?.contactId]);
+
+  // deals 가 갱신되면(추가/수정/삭제 후 refDetail) selDeal 도 동기화.
+  // 삭제된 경우(deals 에서 못 찾음) selDeal=null + 토스트로 사용자 피드백.
+  useEffect(() => {
+    if (!selDeal) return;
+    const updated = deals.find((d) => d.dealId === selDeal.dealId);
+    if (!updated) {
+      setToast(`‘${selDeal.title}’ 딜이 삭제되었습니다.`);
+      setSelDeal(null);
+      setAllDeals(false);
+      return;
+    }
+    if (updated !== selDeal) setSelDeal(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deals, selDeal?.dealId]);
+
+  // contacts 에서 selContact 가 사라진 경우(삭제됨) 피드백.
+  useEffect(() => {
+    if (!selContact) return;
+    if (contacts.length === 0) return; // 초기 로딩 중에는 무시
+    const exists = contacts.some((c) => c.contactId === selContact.contactId);
+    if (!exists) {
+      setToast(`‘${selContact.name}’ 담당자가 삭제되었습니다.`);
+      setSelContact(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts, selContact?.contactId]);
 
   const crumbs: { label: string; onClick?: () => void }[] = [{ label: acc?.name ?? '고객사', onClick: () => { setSelContact(null); setSelDeal(null); setAllDeals(false); } }];
   if (selContact) crumbs.push({ label: selContact.name, onClick: () => { setSelDeal(null); setAllDeals(false); } });
@@ -412,6 +458,39 @@ export default function CustomerDetailPage() {
         signals={signals}
         accountName={acc?.name}
       />
+
+      {/* 삭제/수정 후 사용자 피드백 토스트 (자동 2.5초 후 사라짐) */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 80,
+            right: 24,
+            zIndex: 1300,
+            padding: '10px 16px',
+            borderRadius: 8,
+            backgroundColor: '#1e293b',
+            color: '#fff',
+            fontFamily: F,
+            fontSize: 13,
+            fontWeight: 500,
+            boxShadow: '0 6px 16px rgba(0,0,0,0.18)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            animation: 'fintToastIn 180ms ease-out',
+          }}
+        >
+          <span style={{ color: '#22c55e' }}>✓</span>
+          <span>{toast}</span>
+        </div>
+      )}
+      <style jsx global>{`
+        @keyframes fintToastIn {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </>
   );
 }
