@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
+import AllSignalsModal from '@/components/customer/AllSignalsModal';
 import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
 import WeatherPanel from '@/components/customer/WeatherPanel';
@@ -82,6 +83,7 @@ export default function CustomerDetailPage() {
   const [ecEmail, setEcEmail] = useState('');
   // 딜 추가
   const [showAddDeal, setShowAddDeal] = useState(false);
+  const [showAllSignals, setShowAllSignals] = useState(false);
   const [ndTitle, setNdTitle] = useState('');
   const [ndAmount, setNdAmount] = useState('');
   const [ndDate, setNdDate] = useState('');
@@ -104,6 +106,26 @@ export default function CustomerDetailPage() {
 
   const visDeal = cDealIds ? deals.filter(d => cDealIds.has(d.dealId)) : deals;
   const acc = accounts.find(a => String(a.accountId) === String(id)) ?? accounts[0];
+
+  // 회사 정보 박스 대표 3건: 최신 NEWS 1 + 최신 DART 1 + 사용 안 한 것 중 최신순으로 3건 채움.
+  // 시간순으로만 자르면 한 종류에 몰려서 다양성이 사라지므로 종류별 최신을 우선 보장한다.
+  // DART 가 없으면 NEWS 로, NEWS 가 없으면 DART 로 채워 항상 가능한 만큼 3건까지 노출.
+  const repSignals = (() => {
+    const result: typeof signals = [];
+    const used = new Set<number>();
+    const pick = (predicate: (s: typeof signals[number]) => boolean) => {
+      const idx = signals.findIndex((s, i) => !used.has(i) && predicate(s));
+      if (idx >= 0) { result.push(signals[idx]); used.add(idx); }
+    };
+    pick((s) => s.type === 'NEWS');
+    pick((s) => s.type === 'DART');
+    while (result.length < 3) {
+      const before = result.length;
+      pick(() => true);
+      if (result.length === before) break;
+    }
+    return result;
+  })();
 
   // 사이드바에서 setSelContact 호출 시 — 관련 page state reset
   useEffect(() => {
@@ -228,10 +250,17 @@ export default function CustomerDetailPage() {
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontFamily: F, fontWeight: 600, fontSize: 14, color: '#1e293b' }}>회사 정보</span>
-                        <button style={{ fontFamily: F, fontSize: 11, color: '#94a3b8', cursor: 'pointer', background: 'none', border: 'none' }}>더보기</button>
+                        {signals.length > 0 && (
+                          <button
+                            onClick={() => setShowAllSignals(true)}
+                            style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}
+                          >
+                            더보기
+                          </button>
+                        )}
                       </div>
-                      {signals.length > 0 ? (
-                        signals.slice(0, 3).map((s, i) => <SignalItem key={i} signal={s} accent={SA[i] ?? '#cbd5e1'} />)
+                      {repSignals.length > 0 ? (
+                        repSignals.map((s, i) => <SignalItem key={i} signal={s} accent={SA[i] ?? '#cbd5e1'} />)
                       ) : (
                         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0, textAlign: 'center' }}>시그널 없음</p>
@@ -320,6 +349,14 @@ export default function CustomerDetailPage() {
         defaultAccountId={id ? Number(id) : undefined}
         defaultAccountName={accounts.find((a) => String(a.accountId) === id)?.name}
         onSaved={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
+      />
+
+      {/* 회사 정보 시그널 전체 보기 모달 */}
+      <AllSignalsModal
+        open={showAllSignals}
+        onClose={() => setShowAllSignals(false)}
+        signals={signals}
+        accountName={acc?.name}
       />
     </>
   );
