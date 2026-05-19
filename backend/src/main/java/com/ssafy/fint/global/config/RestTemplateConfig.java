@@ -86,11 +86,12 @@ public class RestTemplateConfig {
 
     /**
      * 시그널 수집 전용 RestTemplate.
+     * 뉴스 + DART 수집은 account 수에 비례해 1~3분 소요될 수 있으므로 readTimeout을 여유 있게 설정.
      */
     @Bean
     public RestTemplate signalRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(30)))
+                .requestFactory(() -> http11RequestFactory(Duration.ofSeconds(3), Duration.ofSeconds(180)))
                 .build();
     }
 
