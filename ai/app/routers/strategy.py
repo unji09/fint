@@ -1,4 +1,5 @@
 """POST /api/v1/ai/next-actions — AI 전략 추천 엔드포인트."""
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Header
@@ -49,7 +50,7 @@ async def generate_next_actions(
         account_id=body.account_id,
         news_article_ids=body.news_article_ids,
         dart_disclosure_ids=body.dart_disclosure_ids,
-        meeting_id=body.meeting_id,
+        meeting_ids=body.meeting_ids,
         extra_context=body.context,
     )
 
@@ -88,7 +89,7 @@ async def generate_next_actions(
             "현재 상황에 적합한 추천 액션이 없습니다",
         )
 
-    related_type = _resolve_related_type(body.trigger_type, body.meeting_id)
+    related_type = _resolve_related_type(body.trigger_type, body.meeting_ids)
     sources = _build_sources(context_data)
     stages_map = await load_pipeline_stages(db, tenant_id)
 
@@ -136,9 +137,9 @@ async def submit_feedback(
     return {"status": "ok"}
 
 
-def _resolve_related_type(trigger_type, meeting_id: int | None) -> str:
+def _resolve_related_type(trigger_type, meeting_ids: list[int] | None) -> str:
     from app.schemas.strategy import TriggerType
-    if trigger_type == TriggerType.MEETING_CREATED or meeting_id is not None:
+    if trigger_type == TriggerType.MEETING_CREATED or (meeting_ids and len(meeting_ids) > 0):
         return "MEETING"
     return "ACCOUNT"
 
@@ -182,8 +183,18 @@ def _build_sources(ctx) -> dict:
         dart.append(item)
 
     crm: list[dict] = []
-    if ctx.meeting:
-        summary = ctx.meeting.get("summary") or ctx.meeting.get("memo") or ctx.meeting.get("title", "")
-        crm.append({"summary": summary})
+    for m in ctx.meetings:
+        summary_text = ""
+        raw = m.get("summary")
+        if raw:
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                summary_text = parsed.get("text", "") if isinstance(parsed, dict) else ""
+            except (json.JSONDecodeError, TypeError):
+                summary_text = ""
+        crm.append({
+            "title": m.get("title", ""),
+            "summary": summary_text,
+        })
 
     return {"news": news, "dart": dart, "crm": crm}

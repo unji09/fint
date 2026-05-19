@@ -49,6 +49,7 @@ fun FintWebView(
     commands: Flow<WebCommand> = emptyFlow(),
     onPageStarted: (String) -> Unit = {},
     onPageFinished: (String) -> Unit = {},
+    onUrlChanged: (String) -> Unit = {},
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -106,6 +107,10 @@ fun FintWebView(
                             pageUrl?.let(onPageFinished)
                             view?.evaluateJavascript(TOKEN_SYNC_JS, null)
                             view?.evaluateJavascript(CALENDAR_HEIGHT_FIX_JS, null)
+                        }
+
+                        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                            url?.let(onUrlChanged)
                         }
 
                         override fun shouldOverrideUrlLoading(

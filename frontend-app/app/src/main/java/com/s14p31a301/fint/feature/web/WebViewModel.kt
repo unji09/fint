@@ -40,6 +40,10 @@ class WebViewModel(
     )
     val commands: SharedFlow<WebCommand> = _commands.asSharedFlow()
 
+    fun onUrlChanged(url: String) {
+        _uiState.value = _uiState.value.copy(currentUrl = url)
+    }
+
     fun onPageStarted(url: String) {
         _uiState.value = _uiState.value.copy(currentUrl = url, isLoading = true, error = null)
     }

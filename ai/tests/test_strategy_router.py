@@ -36,7 +36,7 @@ _MOCK_CONTEXT = ContextData(
     account_industry="IT",
     news_items=[],
     dart_items=[],
-    meeting=None,
+    meetings=[],
     context_text="[고객사 정보]\n회사명: 테스트기업\n업종: IT\n\n[추가 컨텍스트]\n한국 대형 보험사 PoC 진행 중",
 )
 

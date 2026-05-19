@@ -114,7 +114,7 @@ class BriefingServiceTest {
         when(activityRepository.findByActivityIdAndUser_UserIdAndUser_Tenant_TenantId(
                 ACTIVITY_ID, USER_ID, TENANT_ID))
                 .thenReturn(Optional.of(activity));
-        when(activityRepository.findRecentMeetingsByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
+        when(activityRepository.findRecentMeetingByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
                 .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
@@ -207,7 +207,7 @@ class BriefingServiceTest {
         Tenant tenant = tenant();
         Activity activity = meetingActivity(user(tenant), deal(account()));
 
-        when(activityRepository.findRecentMeetingsByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
+        when(activityRepository.findRecentMeetingByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
                 .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
@@ -227,7 +227,7 @@ class BriefingServiceTest {
         Tenant tenant = tenant();
         Activity activity = meetingActivity(user(tenant), deal(account()));
 
-        when(activityRepository.findRecentMeetingsByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
+        when(activityRepository.findRecentMeetingByAccountId(eq(ACCOUNT_ID), eq(TENANT_ID), any()))
                 .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(eq(ACCOUNT_ID), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
@@ -247,7 +247,7 @@ class BriefingServiceTest {
         Tenant tenant = tenant();
         Activity activity = meetingActivity(user(tenant), deal(account()));
 
-        when(activityRepository.findRecentMeetingsByAccountId(any(), any(), any()))
+        when(activityRepository.findRecentMeetingByAccountId(any(), any(), any()))
                 .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(any(), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
@@ -288,7 +288,7 @@ class BriefingServiceTest {
         attendees.add(validAttendee);
         ReflectionTestUtils.setField(activity, "attendees", attendees);
 
-        when(activityRepository.findRecentMeetingsByAccountId(any(), any(), any()))
+        when(activityRepository.findRecentMeetingByAccountId(any(), any(), any()))
                 .thenReturn(Optional.empty());
         when(accountNewsArticleRepository.findRecentByAccountId(any(), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
