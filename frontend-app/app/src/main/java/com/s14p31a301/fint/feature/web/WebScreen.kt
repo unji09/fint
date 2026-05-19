@@ -10,8 +10,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.s14p31a301.fint.core.webview.FintWebView
 import com.s14p31a301.fint.core.webview.WebViewBridge
+import com.s14p31a301.fint.core.webview.WebViewConfig
 import com.s14p31a301.fint.core.webview.WebViewRoute
-import com.s14p31a301.fint.feature.debug.DebugEntryOverlay
+import com.s14p31a301.fint.feature.debug.BusinessCardFab
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -37,6 +38,10 @@ fun WebScreen(
     }
 
     val isLoggedIn by webViewModel.isLoggedIn.collectAsState()
+    val uiState by webViewModel.uiState.collectAsState()
+    val customerUrlPrefix = "${WebViewConfig.WEB_BASE_URL.trimEnd('/')}/customer"
+    val showBusinessCardFab = isLoggedIn &&
+        uiState.currentUrl.startsWith(customerUrlPrefix)
 
     val bridge = remember(webViewModel) {
         WebViewBridge(
@@ -55,12 +60,12 @@ fun WebScreen(
             commands = webViewModel.commands,
             onPageStarted = webViewModel::onPageStarted,
             onPageFinished = webViewModel::onPageFinished,
+            onUrlChanged = webViewModel::onUrlChanged,
         )
 
-        if (isLoggedIn) {
-            DebugEntryOverlay(
+        if (showBusinessCardFab) {
+            BusinessCardFab(
                 onOpenBusinessCardScanner = onOpenBusinessCardScanner,
-                onOpenDeviceContactPicker = onOpenDeviceContactPicker,
             )
         }
     }
