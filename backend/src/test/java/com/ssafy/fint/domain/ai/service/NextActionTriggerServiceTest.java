@@ -1,5 +1,7 @@
 package com.ssafy.fint.domain.ai.service;
 
+import com.ssafy.fint.domain.activity.entity.Activity;
+import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
 import com.ssafy.fint.domain.ai.entity.TriggerType;
 import com.ssafy.fint.domain.ai.service.NextActionTriggerService.AccountSignalChange;
@@ -12,18 +14,22 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class NextActionTriggerServiceTest {
@@ -31,6 +37,7 @@ class NextActionTriggerServiceTest {
     private static final Long TENANT_ID = 1L;
 
     @Mock private AiSuggestionService aiSuggestionService;
+    @Mock private ActivityRepository activityRepository;
     @InjectMocks private NextActionTriggerService triggerService;
 
     @Nested
@@ -136,6 +143,8 @@ class NextActionTriggerServiceTest {
                     Map.of()
             );
 
+            when(activityRepository.findRecentMeetingsByAccountId(anyLong(), eq(TENANT_ID), any(OffsetDateTime.class)))
+                    .thenReturn(List.of());
             doNothing().when(aiSuggestionService).createNextActionBySystem(any(), any());
 
             triggerService.triggerFromCollectResult(TENANT_ID, result);
@@ -155,6 +164,8 @@ class NextActionTriggerServiceTest {
                     Map.of()
             );
 
+            when(activityRepository.findRecentMeetingsByAccountId(eq(10L), eq(TENANT_ID), any(OffsetDateTime.class)))
+                    .thenReturn(List.of());
             doNothing().when(aiSuggestionService).createNextActionBySystem(any(), any());
 
             triggerService.triggerFromCollectResult(TENANT_ID, result);
@@ -179,6 +190,8 @@ class NextActionTriggerServiceTest {
                     Map.of(), Map.of(), Map.of()
             );
 
+            when(activityRepository.findRecentMeetingsByAccountId(anyLong(), eq(TENANT_ID), any(OffsetDateTime.class)))
+                    .thenReturn(List.of());
             doThrow(new RuntimeException("AI server down"))
                     .doNothing()
                     .when(aiSuggestionService).createNextActionBySystem(any(), any());
@@ -187,6 +200,59 @@ class NextActionTriggerServiceTest {
 
             verify(aiSuggestionService, times(2))
                     .createNextActionBySystem(eq(TENANT_ID), any(NextActionCreateRequest.class));
+        }
+
+        @Test
+        @DisplayName("최근 미팅이 있으면 request 에 meetingIds 가 포함된다")
+        void recentMeetingIdsIncluded() {
+            SignalCollectResult result = new SignalCollectResult(
+                    1, 0, 0, List.of(),
+                    Map.of(10L, List.of(100L)),
+                    Map.of(), Map.of(), Map.of()
+            );
+
+            Activity m1 = newActivity(501L);
+            Activity m2 = newActivity(502L);
+            Activity m3 = newActivity(503L);
+            when(activityRepository.findRecentMeetingsByAccountId(eq(10L), eq(TENANT_ID), any(OffsetDateTime.class)))
+                    .thenReturn(List.of(m1, m2, m3));
+            doNothing().when(aiSuggestionService).createNextActionBySystem(any(), any());
+
+            triggerService.triggerFromCollectResult(TENANT_ID, result);
+
+            ArgumentCaptor<NextActionCreateRequest> captor =
+                    ArgumentCaptor.forClass(NextActionCreateRequest.class);
+            verify(aiSuggestionService).createNextActionBySystem(eq(TENANT_ID), captor.capture());
+
+            assertThat(captor.getValue().meetingIds()).containsExactly(501L, 502L, 503L);
+        }
+
+        @Test
+        @DisplayName("최근 미팅이 없으면 meetingIds 가 빈 리스트이다")
+        void noRecentMeetingsEmptyList() {
+            SignalCollectResult result = new SignalCollectResult(
+                    1, 0, 0, List.of(),
+                    Map.of(10L, List.of(100L)),
+                    Map.of(), Map.of(), Map.of()
+            );
+
+            when(activityRepository.findRecentMeetingsByAccountId(eq(10L), eq(TENANT_ID), any(OffsetDateTime.class)))
+                    .thenReturn(List.of());
+            doNothing().when(aiSuggestionService).createNextActionBySystem(any(), any());
+
+            triggerService.triggerFromCollectResult(TENANT_ID, result);
+
+            ArgumentCaptor<NextActionCreateRequest> captor =
+                    ArgumentCaptor.forClass(NextActionCreateRequest.class);
+            verify(aiSuggestionService).createNextActionBySystem(eq(TENANT_ID), captor.capture());
+
+            assertThat(captor.getValue().meetingIds()).isEmpty();
+        }
+
+        private Activity newActivity(Long activityId) {
+            Activity activity = Activity.builder().title("test").build();
+            ReflectionTestUtils.setField(activity, "activityId", activityId);
+            return activity;
         }
 
         private SignalCollectResult emptyResult() {

@@ -1,5 +1,7 @@
 package com.ssafy.fint.domain.ai.service;
 
+import com.ssafy.fint.domain.activity.entity.Activity;
+import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
 import com.ssafy.fint.domain.ai.entity.TriggerType;
 import com.ssafy.fint.domain.signal.service.SignalCollectService.SignalCollectResult;
@@ -7,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -19,6 +22,7 @@ import java.util.Set;
 public class NextActionTriggerService {
 
     private final AiSuggestionService aiSuggestionService;
+    private final ActivityRepository activityRepository;
 
     public void triggerFromCollectResult(Long tenantId, SignalCollectResult result) {
         Map<Long, AccountSignalChange> changes = groupByAccount(result);
@@ -38,9 +42,10 @@ public class NextActionTriggerService {
                 TriggerType triggerType = determineTriggerType(change);
                 List<Long> newsIds = mergeIds(change.newNewsIds, change.mappedNewsIds);
                 List<Long> dartIds = mergeIds(change.newDartIds, change.mappedDartIds);
+                List<Long> meetingIds = findRecentMeetingIds(accountId, tenantId);
 
                 NextActionCreateRequest request = new NextActionCreateRequest(
-                        accountId, triggerType, newsIds, dartIds, null, null);
+                        accountId, triggerType, newsIds, dartIds, meetingIds, null);
 
                 aiSuggestionService.createNextActionBySystem(tenantId, request);
 
@@ -77,6 +82,14 @@ public class NextActionTriggerService {
             return TriggerType.DART_MAPPED_TO_NEW_ACCOUNT;
         }
         return TriggerType.NEWS_UPDATED;
+    }
+
+    private List<Long> findRecentMeetingIds(Long accountId, Long tenantId) {
+        return activityRepository
+                .findRecentMeetingsByAccountId(accountId, tenantId, OffsetDateTime.now())
+                .stream()
+                .map(Activity::getActivityId)
+                .toList();
     }
 
     private Map<Long, AccountSignalChange> groupByAccount(SignalCollectResult result) {

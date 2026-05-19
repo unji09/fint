@@ -18,7 +18,7 @@ class NextActionRequest(BaseModel):
     trigger_type: TriggerType
     news_article_ids: list[int] | None = None
     dart_disclosure_ids: list[int] | None = None
-    meeting_id: int | None = None
+    meeting_ids: list[int] | None = None
     context: str | None = None
 
 
