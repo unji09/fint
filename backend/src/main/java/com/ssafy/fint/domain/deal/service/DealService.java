@@ -76,6 +76,12 @@ public class DealService {
         if (request.teamId() != null) {
             team = teamRepository.findByTeamIdAndTenant_TenantId(request.teamId(), tenantId)
                     .orElseThrow(() -> new BusinessException(DealErrorCode.TEAM_NOT_FOUND));
+        } else {
+            // 요청에 teamId 가 없으면 호출자의 team 으로 자동 매핑.
+            // AccountDealsResponse 의 "같은 팀 deal" 필터에 새 딜이 포함되도록 한다.
+            team = userRepository.findById(me.getUserId())
+                    .map(User::getTeam)
+                    .orElse(null);
         }
 
         Deal deal = Deal.builder()

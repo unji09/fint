@@ -25,6 +25,13 @@ public class MoodClient {
     }
 
     public void requestMoodAnalysis(Long activityId, Long accountId, Long tenantId, String transcript) {
+        // accountId / tenantId 가 없으면 분석·콜백이 끝까지 동작하지 못한다(콜백에서 Account 조회 필요).
+        // Map.of 가 null 을 거부해 NPE 가 발생하는 것을 막고, 의미 있는 경고만 남기고 호출을 건너뛴다.
+        if (accountId == null || tenantId == null) {
+            log.warn("[MoodClient] 분석 건너뜀: accountId 또는 tenantId 누락 activityId={} accountId={} tenantId={}",
+                    activityId, accountId, tenantId);
+            return;
+        }
         try{
             restTemplate.postForEntity(
                 pythonBaseUrl + "/api/v1/mood/analyze",
