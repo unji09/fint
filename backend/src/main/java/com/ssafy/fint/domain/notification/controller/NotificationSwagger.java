@@ -12,10 +12,10 @@ public interface NotificationSwagger {
 
     @Operation(
             summary = "알림 목록 조회",
-            description = "현재 로그인 사용자별 미확인(읽지 않은) AI 제안을 최신순 10건 반환한다. "
-                    + "데이터 소스는 ai_suggestions 테이블이다."
+            description = "현재 로그인 사용자별 긴급(중요도 4.0 이상) AI 제안을 최신순 10건 반환한다. "
+                    + "읽음 여부와 무관하게 조회된다."
     )
-    ApiResponse<NotificationListResponse> findUnread(CustomUserDetails me);
+    ApiResponse<NotificationListResponse> findNotifications(CustomUserDetails me);
 
     @Operation(
             summary = "알림 전체 읽음",

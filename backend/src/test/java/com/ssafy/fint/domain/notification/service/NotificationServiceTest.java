@@ -80,10 +80,10 @@ class NotificationServiceTest {
         OffsetDateTime createdAt = OffsetDateTime.of(2026, 5, 1, 9, 30, 0, 0, ZoneOffset.UTC);
         ReflectionTestUtils.setField(s1, "createdAt", createdAt);
 
-        when(aiSuggestionRepository.findUnreadByUserId(eq(USER_ID), any(Pageable.class)))
+        when(aiSuggestionRepository.findUrgentByUserId(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(List.of(s1));
 
-        NotificationListResponse res = notificationService.findUnreadNotifications(me);
+        NotificationListResponse res = notificationService.findNotifications(me);
 
         assertThat(res.content()).hasSize(1);
         NotificationItemResponse item = res.content().get(0);
@@ -100,13 +100,13 @@ class NotificationServiceTest {
     @Test
     @DisplayName("Repository 호출 시 PageRequest(0, 10) 가 전달되어 최신 10건으로 제한된다.")
     void unreadLimits10WithPageable() {
-        when(aiSuggestionRepository.findUnreadByUserId(eq(USER_ID), any(Pageable.class)))
+        when(aiSuggestionRepository.findUrgentByUserId(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(List.of());
 
-        notificationService.findUnreadNotifications(me);
+        notificationService.findNotifications(me);
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(aiSuggestionRepository).findUnreadByUserId(eq(USER_ID), captor.capture());
+        verify(aiSuggestionRepository).findUrgentByUserId(eq(USER_ID), captor.capture());
         Pageable pageable = captor.getValue();
         assertThat(pageable.getPageNumber()).isZero();
         assertThat(pageable.getPageSize()).isEqualTo(10);
@@ -116,10 +116,10 @@ class NotificationServiceTest {
     @Test
     @DisplayName("결과가 없으면 content 가 빈 배열로 반환된다.")
     void unreadReturnsEmptyContent() {
-        when(aiSuggestionRepository.findUnreadByUserId(eq(USER_ID), any(Pageable.class)))
+        when(aiSuggestionRepository.findUrgentByUserId(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(List.of());
 
-        NotificationListResponse res = notificationService.findUnreadNotifications(me);
+        NotificationListResponse res = notificationService.findNotifications(me);
 
         assertThat(res.content()).isEmpty();
     }
@@ -139,10 +139,10 @@ class NotificationServiceTest {
         AiSuggestion oldest = newSuggestion(a3, stage, 32L, "이전",
                 Map.of("sources", Map.of("news", List.of(), "dart", List.of())));
 
-        when(aiSuggestionRepository.findUnreadByUserId(eq(USER_ID), any(Pageable.class)))
+        when(aiSuggestionRepository.findUrgentByUserId(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(List.of(newest, mid, oldest));
 
-        NotificationListResponse res = notificationService.findUnreadNotifications(me);
+        NotificationListResponse res = notificationService.findNotifications(me);
 
         assertThat(res.content()).extracting("notificationId")
                 .containsExactly(30L, 31L, 32L);
@@ -159,10 +159,10 @@ class NotificationServiceTest {
         reason.put("recommendedScript", "이메일 회신");
         AiSuggestion s = newSuggestion(account, stage, 2L, "메일 회신 필요", reason);
 
-        when(aiSuggestionRepository.findUnreadByUserId(eq(USER_ID), any(Pageable.class)))
+        when(aiSuggestionRepository.findUrgentByUserId(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(List.of(s));
 
-        NotificationListResponse res = notificationService.findUnreadNotifications(me);
+        NotificationListResponse res = notificationService.findNotifications(me);
 
         assertThat(res.content().get(0).sources()).isNull();
     }

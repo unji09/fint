@@ -1,7 +1,7 @@
 'use client';
 // src/components/calendar/EventDetailPanel.tsx
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
@@ -15,6 +15,7 @@ import {
   type SttLine,
   type RecordingItem,
 } from '@/hooks/useActivity';
+import { useBriefing } from '@/hooks/useBriefing';
 
 interface Props {
   event: CalendarEvent | null;
@@ -80,13 +81,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoSaving, setMemoSaving] = useState(false);
 
-  // ── 브리핑 ──
-  // 자동 생성(미팅 30분 전 스케줄) 결과는 활동 상세의 briefing 필드에 들어있고,
-  // 없는 경우 사용자가 "생성하기" 를 누르면 POST /ai/briefing 으로 즉시 만든다.
-  const [briefing, setBriefing] = useState<{ key_points: string[]; alerts: string[] } | null>(null);
-  const [briefingLoading, setBriefingLoading] = useState(false);
-  const [briefingLoaded, setBriefingLoaded] = useState(false); // 첫 로드 완료 플래그 — 두 번 자동 fetch 방지
-  const [briefingError, setBriefingError] = useState<string | null>(null);
+  // ── 브리핑 (useBriefing 훅으로 관리) ──
 
   // 녹음 종료 시 duration 캡처용 ref — stopRec의 setRecordSec(0) 이후 onstop이 비동기로 실행되므로 state 대신 사용
   const finalDurationRef = useRef<number>(0);
@@ -229,74 +224,22 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const activityId =
     event?.source === 'FINT' ? event.eventId.replace(/^act-/, '') : null;
 
-  // ── 브리핑 로드 / 생성 ──
-  // 활동 상세에 저장된 브리핑(스케줄러 자동 생성 결과 등)을 먼저 확인. 없으면 사용자가 명시적으로 생성.
-  const loadBriefingFromActivity = useCallback(async () => {
-    if (!activityId) return;
-    setBriefingLoading(true);
-    setBriefingError(null);
-    try {
-      const res = await fetch(`${API_BASE}/activities/${activityId}`, { headers: authHeader() });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const j = await res.json();
-      const data = j?.data ?? j;
-      const b = data?.briefing;
-      if (b && typeof b === 'object' && (Array.isArray(b.key_points) || Array.isArray(b.alerts))) {
-        setBriefing({
-          key_points: Array.isArray(b.key_points) ? b.key_points : [],
-          alerts: Array.isArray(b.alerts) ? b.alerts : [],
-        });
-      } else {
-        setBriefing(null);
-      }
-    } catch (e) {
-      console.error('[EDP] 브리핑 조회 실패', e);
-      setBriefingError('브리핑을 불러오지 못했어요.');
-    } finally {
-      setBriefingLoading(false);
-      setBriefingLoaded(true);
-    }
-  }, [activityId]);
+  // ── 브리핑 (훅으로 위임) ──
+  const {
+    briefing,
+    loading: briefingLoading,
+    loaded: briefingLoaded,
+    error: briefingError,
+    load: loadBriefingFromActivity,
+    generate: generateBriefing,
+  } = useBriefing(activityId);
 
-  // POST /ai/briefing?activityId=N — FastAPI 호출 비용이 있어 사용자가 직접 트리거할 때만 실행.
-  const generateBriefing = useCallback(async () => {
-    if (!activityId) return;
-    setBriefingLoading(true);
-    setBriefingError(null);
-    try {
-      const res = await fetch(`${API_BASE}/ai/briefing?activityId=${activityId}`, {
-        method: 'POST',
-        headers: authHeader(),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const j = await res.json();
-      const data = j?.data ?? j;
-      setBriefing({
-        key_points: Array.isArray(data?.key_points) ? data.key_points : [],
-        alerts: Array.isArray(data?.alerts) ? data.alerts : [],
-      });
-    } catch (e) {
-      console.error('[EDP] 브리핑 생성 실패', e);
-      setBriefingError('브리핑 생성에 실패했어요. 잠시 후 다시 시도해 주세요.');
-    } finally {
-      setBriefingLoading(false);
-      setBriefingLoaded(true);
-    }
-  }, [activityId]);
-
-  // 브리핑 탭 첫 진입 시 활동 상세에서 한 번만 로드.
+  // 브리핑 탭 첫 진입 시 활동 상세에서 한 번만 로드. (초기화는 훅 내부에서 처리)
   useEffect(() => {
     if (rightView === 'briefing' && !briefingLoaded && !briefingLoading) {
       loadBriefingFromActivity();
     }
   }, [rightView, briefingLoaded, briefingLoading, loadBriefingFromActivity]);
-
-  // 활동(=event)이 바뀌면 브리핑 상태 초기화 (다음 활동의 브리핑 다시 로드되도록).
-  useEffect(() => {
-    setBriefing(null);
-    setBriefingLoaded(false);
-    setBriefingError(null);
-  }, [activityId]);
 
   if (!event) return null;
 
