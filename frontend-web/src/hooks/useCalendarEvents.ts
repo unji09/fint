@@ -83,7 +83,7 @@ export function useCalendarEvents({
       setEvents((json.data?.content ?? []).map((r: any) => toCalendarEvent(r)));
     } catch (err) {
       console.error('[useCalendarEvents]', err);
-      setEvents([]); // 실패 시 빈 배열 → page에서 MOCK fallback 처리
+      setEvents([]); // 실패 시 빈 배열 — 사용자가 명시적으로 빈 캘린더를 보게 둔다.
     } finally {
       setLoading(false);
     }

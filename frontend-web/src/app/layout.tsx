@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import GNB from '@/components/common/GNB';
 import ConfirmDialogProvider from '@/components/common/ConfirmDialog';
+import LayoutShell from '@/components/common/LayoutShell';
 
 export const metadata: Metadata = {
   title: 'F!NT — AI 기반 B2B 영업 CRM',
@@ -9,8 +9,6 @@ export const metadata: Metadata = {
     icon: '/logo.png',
   },
 };
-
-const GNB_H = 64;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -27,17 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         }}
       >
         <ConfirmDialogProvider>
-          <GNB />
-          <main
-            style={{
-              height: `calc(100vh - ${GNB_H}px)`,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            {children}
-          </main>
+          <LayoutShell>{children}</LayoutShell>
         </ConfirmDialogProvider>
       </body>
     </html>
