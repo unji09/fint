@@ -33,8 +33,8 @@ import com.ssafy.fint.global.exception.DealErrorCode;
 import com.ssafy.fint.global.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -163,19 +163,21 @@ public class DealService {
     }
 
     @Transactional(readOnly = true)
-    public DealListResponse findList(CustomUserDetails me, Long accountId, Long contactId, Pageable pageable) {
+    public DealListResponse findList(CustomUserDetails me, Long accountId, Long contactId, String keyword, Pageable pageable) {
+        String normalizedKeyword = (keyword == null || keyword.isBlank()) ? null : keyword;
+
         User caller = userRepository.findById(me.getUserId())
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_TOKEN));
 
         boolean tenantWide = UserRole.ADMIN.name().equals(me.getRole()) || caller.getTeam() == null;
 
-        Page<Deal> page = tenantWide
-                ? dealRepository.findAllByTenant(me.getTenantId(), accountId, contactId, pageable)
-                : dealRepository.findAllByTeam(caller.getTeam().getTeamId(), accountId, contactId, pageable);
+        Slice<Deal> page = tenantWide
+                ? dealRepository.findAllByTenant(me.getTenantId(), accountId, contactId, normalizedKeyword, pageable)
+                : dealRepository.findAllByTeam(caller.getTeam().getTeamId(), accountId, contactId, normalizedKeyword, pageable);
 
         List<Deal> deals = page.getContent();
         if (deals.isEmpty()) {
-            return new DealListResponse(List.of(), page.getTotalElements());
+            return new DealListResponse(List.of(), page.hasNext());
         }
 
         List<Long> dealIds = deals.stream().map(Deal::getDealId).toList();
@@ -200,7 +202,7 @@ public class DealService {
                 ))
                 .toList();
 
-        return new DealListResponse(summaries, page.getTotalElements());
+        return new DealListResponse(summaries, page.hasNext());
     }
 
     private static List<DealAssignee> dedupByUserId(List<DealAssignee> assignees) {
