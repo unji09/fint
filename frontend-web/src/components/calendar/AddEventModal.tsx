@@ -1,7 +1,8 @@
 'use client';
 // src/components/calendar/AddEventModal.tsx
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { DealSearchItem } from '@/hooks/useDeal';
 import type { CalendarEvent } from './types';
 
 interface Props {
@@ -127,7 +128,6 @@ function Label({ children }: { children: string }) {
 
 // ─── 타입 ────────────────────────────────────────────────────────────────────
 interface AccountItem { accountId: number; name: string; industry: string }
-interface DealItem { dealId: number; title: string; amount: number | null; stage: string | null }
 interface ContactItem { contactId: number; name: string; title: string | null }
 
 // ─── 초기값 ──────────────────────────────────────────────────────────────────
@@ -167,11 +167,23 @@ export default function AddEventModal({
   const [selectedAccount, setSelectedAccount] = useState<AccountItem | null>(null);
 
   // ── 고객사 선택 시 자동 로드되는 목록 ──
-  const [accountDeals, setAccountDeals] = useState<DealItem[]>([]);
   const [accountContacts, setAccountContacts] = useState<ContactItem[]>([]);
 
+  // ── 딜 검색 드롭다운 ──
+  const [dealQuery, setDealQuery] = useState('');
+  const [dealResults, setDealResults] = useState<DealSearchItem[]>([]);
+  const [dealDropOpen, setDealDropOpen] = useState(false);
+  const [dealSearchLoading, setDealSearchLoading] = useState(false);
+  const [dealPage, setDealPage] = useState(0);
+  const [dealHasNext, setDealHasNext] = useState(false);
+  const [dealLoadingMore, setDealLoadingMore] = useState(false);
+  const dealDropdownRef = useRef<HTMLDivElement>(null);
+  // 무한 스크롤 effect에서 최신 쿼리·계정을 stale closure 없이 읽기 위한 refs
+  const dealQueryRef = useRef(dealQuery);
+  const dealAccountRef = useRef<AccountItem | null>(null);
+
   // ── 딜 선택 / 신규 생성 ──
-  const [selectedDealId, setSelectedDealId] = useState<number | null>(null);
+  const [selectedDeal, setSelectedDeal] = useState<DealSearchItem | null>(null);
   const [creatingDeal, setCreatingDeal] = useState(false);
   const [newDeal, setNewDeal] = useState(EMPTY_NEW_DEAL);
 
@@ -179,6 +191,10 @@ export default function AddEventModal({
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [creatingContact, setCreatingContact] = useState(false);
   const [newContact, setNewContact] = useState(EMPTY_NEW_CONTACT);
+
+  // ref 동기화 (매 렌더, effect stale closure 방지)
+  dealQueryRef.current = dealQuery;
+  dealAccountRef.current = selectedAccount;
 
   // ── 전체 초기화 함수 ──
   const resetForm = useCallback((date?: Date, ev?: CalendarEvent | null, endDate?: Date, prefill?: {
@@ -204,70 +220,86 @@ export default function AddEventModal({
     setAccountQuery('');
     setAccountResults([]);
     setAccountDropOpen(false);
+    setDealQuery('');
+    setDealResults([]);
+    setDealDropOpen(false);
+    setDealPage(0);
+    setDealHasNext(false);
+    setSelectedDeal(null);
     setCreatingDeal(false);
     setNewDeal(EMPTY_NEW_DEAL);
     setCreatingContact(false);
     setNewContact(EMPTY_NEW_CONTACT);
     setSaving(false);
 
+    const headers = authHeader();
+
     // 수정 모드: 고객사·딜 정보 복원
     if (ev?.accountId && ev?.accountName) {
       const acct: AccountItem = { accountId: ev.accountId, name: ev.accountName, industry: '' };
       setSelectedAccount(acct);
-      setSelectedDealId(ev.dealId ?? null);
       setSelectedContactId(null);
-      // 해당 고객사의 딜+담당자 로드 (딜 목록은 별도 엔드포인트)
-      const headers = authHeader();
-      Promise.allSettled([
-        fetch(`${API_BASE}/accounts/${ev.accountId}/deals`, { headers }).then(r => r.json()),
-        fetch(`${API_BASE}/accounts/${ev.accountId}/contacts`, { headers }).then(r => r.json()),
-      ]).then(([detailRes, contactsRes]) => {
-        if (detailRes.status === 'fulfilled') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          setAccountDeals((detailRes.value.data?.deals ?? []).map((d: any) => ({
-            dealId: d.dealId, title: d.title, amount: d.amount, stage: d.stage,
-          })));
+
+      // 딜 복원: dealTitle이 있으면 바로 설정, 없으면 상세 API로 조회
+      if (ev.dealId) {
+        if (ev.dealTitle) {
+          setSelectedDeal({ dealId: ev.dealId, title: ev.dealTitle, amount: null, expectedClose: null });
+        } else {
+          fetch(`${API_BASE}/deals/${ev.dealId}`, { headers })
+            .then(r => r.ok ? r.json() : null)
+            .then(json => {
+              const detail = json?.data ?? json;
+              if (detail?.dealId) {
+                setSelectedDeal({
+                  dealId: detail.dealId,
+                  title: detail.title,
+                  amount: detail.amount ?? null,
+                  expectedClose: detail.expectedClose ?? null,
+                });
+              }
+            })
+            .catch(() => {});
         }
-        if (contactsRes.status === 'fulfilled') {
+      }
+
+      // 담당자 로드
+      fetch(`${API_BASE}/accounts/${ev.accountId}/contacts`, { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(json => {
+          if (!json) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const contacts = (contactsRes.value.data ?? []).map((c: any) => ({
-            contactId: c.contactId, name: c.name, title: c.title,
+          const contacts = (json.data ?? []).map((c: any) => ({
+            contactId: c.contactId, name: c.name, title: c.title ?? null,
           }));
           setAccountContacts(contacts);
-          // attendees에서 일치하는 담당자 자동 선택
           if (ev.attendees?.external?.[0]) {
             const match = contacts.find((c: ContactItem) => c.name === ev.attendees!.external[0]);
             if (match) setSelectedContactId(match.contactId);
           }
-        }
-      });
+        })
+        .catch(() => {});
+
     } else if (prefill?.accountId && prefill.accountName) {
       // Next Action 등에서 고객사 prefill 받은 신규 모드
       const acct: AccountItem = { accountId: prefill.accountId, name: prefill.accountName, industry: '' };
       setSelectedAccount(acct);
-      setSelectedDealId(null);
+      setSelectedDeal(null);
       setSelectedContactId(null);
-      const headers = authHeader();
-      Promise.allSettled([
-        fetch(`${API_BASE}/accounts/${prefill.accountId}/deals`, { headers }).then(r => r.json()),
-        fetch(`${API_BASE}/accounts/${prefill.accountId}/contacts`, { headers }).then(r => r.json()),
-      ]).then(([detailRes, contactsRes]) => {
-        if (detailRes.status === 'fulfilled') {
-          setAccountDeals((detailRes.value.data?.deals ?? []).map((d: { dealId: number; title: string; amount?: number; stage?: string }) => ({
-            dealId: d.dealId, title: d.title, amount: d.amount, stage: d.stage,
+
+      fetch(`${API_BASE}/accounts/${prefill.accountId}/contacts`, { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(json => {
+          if (!json) return;
+          setAccountContacts((json.data ?? []).map((c: { contactId: number; name: string; title?: string }) => ({
+            contactId: c.contactId, name: c.name, title: c.title ?? null,
           })));
-        }
-        if (contactsRes.status === 'fulfilled') {
-          setAccountContacts((contactsRes.value.data ?? []).map((c: { contactId: number; name: string; title?: string }) => ({
-            contactId: c.contactId, name: c.name, title: c.title,
-          })));
-        }
-      });
+        })
+        .catch(() => {});
+
     } else {
       setSelectedAccount(null);
-      setAccountDeals([]);
       setAccountContacts([]);
-      setSelectedDealId(ev?.dealId ?? null);
+      setSelectedDeal(null);
       setSelectedContactId(null);
     }
   }, []);
@@ -305,24 +337,87 @@ export default function AddEventModal({
     return () => clearTimeout(t);
   }, [accountQuery]);
 
-  // ── 고객사 선택 시 딜+담당자 자동 로드 (딜 목록은 별도 엔드포인트) ──
-  const loadAccountData = useCallback(async (accountId: number) => {
-    const headers = authHeader();
-    const [detailRes, contactsRes] = await Promise.allSettled([
-      fetch(`${API_BASE}/accounts/${accountId}/deals`, { headers }).then(r => r.json()),
-      fetch(`${API_BASE}/accounts/${accountId}/contacts`, { headers }).then(r => r.json()),
-    ]);
-    if (detailRes.status === 'fulfilled') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setAccountDeals((detailRes.value.data?.deals ?? []).map((d: any) => ({
-        dealId: d.dealId, title: d.title, amount: d.amount, stage: d.stage,
-      })));
+  // ── 딜 검색: 드롭다운 열림 / 쿼리 / 고객사 변경 → page 0부터 새로 로드 ──
+  useEffect(() => {
+    if (!dealDropOpen) return;
+    setDealPage(0);
+    setDealHasNext(false);
+    setDealSearchLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const qs = new URLSearchParams();
+        if (dealQuery.trim()) qs.set('keyword', dealQuery.trim());
+        if (selectedAccount) qs.set('accountId', String(selectedAccount.accountId));
+        qs.set('size', '15');
+        qs.set('page', '0');
+        const res = await fetch(`${API_BASE}/deals?${qs.toString()}`, { headers: authHeader() });
+        if (!res.ok) throw new Error();
+        const json = await res.json();
+        const listResponse = json.data ?? {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setDealResults((listResponse.data ?? []).map((d: any) => ({
+          dealId: d.dealId, title: d.title,
+          amount: d.amount != null ? Number(d.amount) : null,
+          expectedClose: d.expectedClose ?? null,
+        })));
+        setDealHasNext(listResponse.hasNext ?? false);
+      } catch {
+        setDealResults([]);
+      } finally {
+        setDealSearchLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealQuery, selectedAccount?.accountId, dealDropOpen]);
+
+  // ── 딜 무한 스크롤: page > 0 일 때 결과 append ──
+  useEffect(() => {
+    if (dealPage === 0) return;
+    setDealLoadingMore(true);
+    const qs = new URLSearchParams();
+    if (dealQueryRef.current.trim()) qs.set('keyword', dealQueryRef.current.trim());
+    if (dealAccountRef.current) qs.set('accountId', String(dealAccountRef.current.accountId));
+    qs.set('size', '15');
+    qs.set('page', String(dealPage));
+    fetch(`${API_BASE}/deals?${qs.toString()}`, { headers: authHeader() })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json) return;
+        const listResponse = json.data ?? {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setDealResults(prev => [...prev, ...(listResponse.data ?? []).map((d: any) => ({
+          dealId: d.dealId, title: d.title,
+          amount: d.amount != null ? Number(d.amount) : null,
+          expectedClose: d.expectedClose ?? null,
+        }))]);
+        setDealHasNext(listResponse.hasNext ?? false);
+      })
+      .catch(() => {})
+      .finally(() => setDealLoadingMore(false));
+  }, [dealPage]); // dealPage만 의존 — query/account는 ref로 읽음
+
+  // ── 딜 드롭다운 스크롤 → 다음 페이지 로드 ──
+  const handleDealDropdownScroll = useCallback(() => {
+    const el = dealDropdownRef.current;
+    if (!el || !dealHasNext || dealLoadingMore || dealSearchLoading) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60) {
+      setDealPage(prev => prev + 1);
     }
-    if (contactsRes.status === 'fulfilled') {
+  }, [dealHasNext, dealLoadingMore, dealSearchLoading]);
+
+  // ── 고객사 선택 시 담당자 로드 ──
+  const loadAccountContacts = useCallback(async (accountId: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/accounts/${accountId}/contacts`, { headers: authHeader() });
+      if (!res.ok) return;
+      const json = await res.json();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setAccountContacts((contactsRes.value.data ?? []).map((c: any) => ({
-        contactId: c.contactId, name: c.name, title: c.title,
+      setAccountContacts((json.data ?? []).map((c: any) => ({
+        contactId: c.contactId, name: c.name, title: c.title ?? null,
       })));
+    } catch {
+      setAccountContacts([]);
     }
   }, []);
 
@@ -330,21 +425,31 @@ export default function AddEventModal({
     setSelectedAccount(a);
     setAccountQuery('');
     setAccountDropOpen(false);
-    setSelectedDealId(null);
+    setSelectedDeal(null);
+    setDealQuery('');
+    setDealResults([]);
     setSelectedContactId(null);
     setCreatingDeal(false);
     setCreatingContact(false);
-    loadAccountData(a.accountId);
-  }, [loadAccountData]);
+    loadAccountContacts(a.accountId);
+  }, [loadAccountContacts]);
 
   const handleClearAccount = useCallback(() => {
     setSelectedAccount(null);
-    setAccountDeals([]);
     setAccountContacts([]);
-    setSelectedDealId(null);
+    setSelectedDeal(null);
+    setDealQuery('');
+    setDealResults([]);
     setSelectedContactId(null);
     setCreatingDeal(false);
     setCreatingContact(false);
+  }, []);
+
+  // ── 딜 선택 ──
+  const handleSelectDeal = useCallback((deal: DealSearchItem) => {
+    setSelectedDeal(deal);
+    setDealDropOpen(false);
+    setDealQuery('');
   }, []);
 
   if (!open && !visible) return null;
@@ -359,7 +464,7 @@ export default function AddEventModal({
     if (!title.trim() || saving) return;
     setSaving(true);
     try {
-      let dealId: number | null = selectedDealId;
+      let dealId: number | null = selectedDeal?.dealId ?? null;
 
       // 신규 담당자 생성
       let newContactId: number | null = null;
@@ -489,119 +594,133 @@ export default function AddEventModal({
 
           {/* ── 고객사 선택 시: 딜 + 담당자 ── */}
           {selectedAccount && (
-            <>
-              {/* 영업 목표 */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Label>영업 목표</Label>
-                  <span style={{ fontSize: 11, color: '#9CA3AF' }}>선택사항</span>
-                </div>
-                {accountDeals.length > 0 ? (
-                  /* 기존 딜이 있으면 선택 목록 */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {!creatingDeal && accountDeals.map((d) => {
-                      const sel = selectedDealId === d.dealId;
-                      return (
-                        <button key={d.dealId} onClick={() => setSelectedDealId(sel ? null : d.dealId)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, border: sel ? `1.5px solid ${TEAL}` : '1px solid #E5E6DE', backgroundColor: sel ? '#ECFEFF' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s' }}>
-                          <span style={{ width: 16, height: 16, borderRadius: '50%', border: sel ? `5px solid ${TEAL}` : '2px solid #D1D5DB', flexShrink: 0, boxSizing: 'border-box' }} />
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: sel ? 600 : 400, color: '#16180F' }}>{d.title}</span>
-                          {d.stage && <span style={{ fontSize: 11, color: '#6B7280', backgroundColor: '#F3F4F6', padding: '2px 6px', borderRadius: 4 }}>{d.stage}</span>}
-                        </button>
-                      );
-                    })}
-                    {creatingDeal ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <input placeholder="딜 제목 *" value={newDeal.title} onChange={(e) => setNewDeal(p => ({ ...p, title: e.target.value }))} style={inputStyle} />
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                          <input placeholder="예상 금액 (₩)" type="number" value={newDeal.amount} onChange={(e) => setNewDeal(p => ({ ...p, amount: e.target.value }))} style={inputStyle} />
-                          <input type="date" value={newDeal.date} onChange={(e) => setNewDeal(p => ({ ...p, date: e.target.value }))} style={inputStyle} />
-                        </div>
-                        <button onClick={() => { setCreatingDeal(false); setNewDeal(EMPTY_NEW_DEAL); }}
-                          style={{ alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9CA3AF' }}>
-                          ← 기존 딜에서 선택
-                        </button>
-                      </div>
-                    ) : (
-                      <button onClick={() => { setCreatingDeal(true); setSelectedDealId(null); }}
-                        style={{ padding: '8px 12px', borderRadius: 8, border: '1px dashed #D1D5DB', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: TEAL, fontWeight: 500, textAlign: 'center' }}>
-                        + 새 딜 만들기
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  /* 기존 딜 없음 → 바로 새 딜 입력 폼 */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {!creatingDeal ? (
-                      <>
-                        <div style={{ fontSize: 12, color: '#9CA3AF' }}>등록된 딜이 없습니다.</div>
-                        <button onClick={() => setCreatingDeal(true)}
-                          style={{ padding: '10px 12px', borderRadius: 8, border: '1px dashed #D1D5DB', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 13, color: TEAL, fontWeight: 500, textAlign: 'center', width: '100%' }}>
-                          + 새 딜 만들기
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <input placeholder="딜 제목 *" value={newDeal.title} onChange={(e) => setNewDeal(p => ({ ...p, title: e.target.value }))} style={inputStyle} />
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                          <input placeholder="예상 금액 (₩)" type="number" value={newDeal.amount} onChange={(e) => setNewDeal(p => ({ ...p, amount: e.target.value }))} style={inputStyle} />
-                          <input type="date" value={newDeal.date} onChange={(e) => setNewDeal(p => ({ ...p, date: e.target.value }))} style={inputStyle} />
-                        </div>
-                        <button onClick={() => { setCreatingDeal(false); setNewDeal(EMPTY_NEW_DEAL); }}
-                          style={{ alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9CA3AF' }}>
-                          취소
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+          <>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Label>영업 목표</Label>
+              <span style={{ fontSize: 11, color: '#9CA3AF' }}>선택사항</span>
+            </div>
 
-              {/* 담당자 */}
-              <div>
-                <Label>담당자</Label>
-                {accountContacts.length > 0 && !creatingContact ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {accountContacts.map((c) => {
-                      const sel = selectedContactId === c.contactId;
-                      return (
-                        <button key={c.contactId} onClick={() => setSelectedContactId(sel ? null : c.contactId)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, border: sel ? `1.5px solid ${TEAL}` : '1px solid #E5E6DE', backgroundColor: sel ? '#ECFEFF' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s' }}>
-                          <span style={{ width: 16, height: 16, borderRadius: '50%', border: sel ? `5px solid ${TEAL}` : '2px solid #D1D5DB', flexShrink: 0, boxSizing: 'border-box' }} />
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: sel ? 600 : 400, color: '#16180F' }}>{c.name}{c.title ? ` · ${c.title}` : ''}</span>
-                        </button>
-                      );
-                    })}
-                    <button onClick={() => { setCreatingContact(true); setSelectedContactId(null); }}
-                      style={{ padding: '8px 12px', borderRadius: 8, border: '1px dashed #D1D5DB', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: TEAL, fontWeight: 500, textAlign: 'center' }}>
-                      + 새 담당자 추가
-                    </button>
+            {selectedDeal ? (
+              /* 선택된 딜 chip */
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 8, border: `1px solid ${TEAL}`, backgroundColor: '#ECFEFF' }}>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#16180F' }}>{selectedDeal.title}</span>
+                {selectedDeal.expectedClose && (
+                  <span style={{ fontSize: 11, color: '#6B7280' }}>{selectedDeal.expectedClose}</span>
+                )}
+                <button
+                  onClick={() => { setSelectedDeal(null); setDealQuery(''); }}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 16, lineHeight: 1 }}>×</button>
+              </div>
+            ) : creatingDeal ? (
+              /* 신규 딜 입력 폼 — 고객사 선택된 경우에만 활성화 */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input placeholder="딜 제목 *" value={newDeal.title} onChange={(e) => setNewDeal(p => ({ ...p, title: e.target.value }))} style={inputStyle} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <input placeholder="예상 금액 (₩)" type="number" value={newDeal.amount} onChange={(e) => setNewDeal(p => ({ ...p, amount: e.target.value }))} style={inputStyle} />
+                  <input type="date" value={newDeal.date} onChange={(e) => setNewDeal(p => ({ ...p, date: e.target.value }))} style={inputStyle} />
+                </div>
+                <button onClick={() => { setCreatingDeal(false); setNewDeal(EMPTY_NEW_DEAL); }}
+                  style={{ alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9CA3AF' }}>
+                  ← 딜 검색으로 돌아가기
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {/* 딜 키워드 검색 드롭다운 */}
+                <div style={{ position: 'relative' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 8, border: '1px solid #E5E6DE', backgroundColor: '#F8F8F5' }}>
+                    <IconSearch />
+                    <input
+                      placeholder={`${selectedAccount.name}의 딜 검색...`}
+                      value={dealQuery}
+                      onChange={(e) => setDealQuery(e.target.value)}
+                      onFocus={() => setDealDropOpen(true)}
+                      onBlur={() => setTimeout(() => setDealDropOpen(false), 150)}
+                      style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, color: '#16180F', outline: 'none', fontFamily: 'inherit' }}
+                    />
+                    {dealSearchLoading && <span style={{ fontSize: 11, color: '#9CA193' }}>...</span>}
                   </div>
-                ) : creatingContact ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      <input placeholder="이름 *" value={newContact.name} onChange={(e) => setNewContact(p => ({ ...p, name: e.target.value }))} style={inputStyle} />
-                      <input placeholder="직책" value={newContact.title} onChange={(e) => setNewContact(p => ({ ...p, title: e.target.value }))} style={inputStyle} />
+                  {dealDropOpen && (
+                    <div
+                      ref={dealDropdownRef}
+                      onScroll={handleDealDropdownScroll}
+                      style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, backgroundColor: '#fff', border: '1px solid #E5E6DE', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: 4, maxHeight: 200, overflowY: 'auto' }}>
+                      {dealSearchLoading && dealResults.length === 0
+                        ? <div style={{ padding: '10px 12px', fontSize: 13, color: '#9CA3AF' }}>불러오는 중...</div>
+                        : dealResults.length === 0
+                          ? <div style={{ padding: '10px 12px', fontSize: 13, color: '#9CA3AF' }}>결과 없음</div>
+                          : dealResults.map((d) => (
+                              <button key={d.dealId} onClick={() => handleSelectDeal(d)}
+                                style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#16180F', borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'center', gap: 8 }}
+                                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#F8F8F5'; }}
+                                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}>
+                                <span style={{ flex: 1 }}>{d.title}</span>
+                                {d.amount != null && (
+                                  <span style={{ fontSize: 11, color: '#6B7280' }}>{Number(d.amount).toLocaleString()}원</span>
+                                )}
+                              </button>
+                            ))
+                      }
+                      {dealLoadingMore && (
+                        <div style={{ padding: '8px 12px', fontSize: 12, color: '#9CA3AF', textAlign: 'center' }}>더 불러오는 중...</div>
+                      )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      <input placeholder="전화번호" value={newContact.phone} onChange={(e) => setNewContact(p => ({ ...p, phone: e.target.value }))} style={inputStyle} />
-                      <input placeholder="이메일" value={newContact.email} onChange={(e) => setNewContact(p => ({ ...p, email: e.target.value }))} style={inputStyle} />
-                    </div>
-                    {accountContacts.length > 0 && (
-                      <button onClick={() => { setCreatingContact(false); setNewContact(EMPTY_NEW_CONTACT); }}
-                        style={{ alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9CA3AF' }}>
-                        ← 기존 담당자에서 선택
+                  )}
+                </div>
+
+                <button onClick={() => setCreatingDeal(true)}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px dashed #D1D5DB', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: TEAL, fontWeight: 500, textAlign: 'center' }}>
+                  + 새 딜 만들기
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div>
+              <Label>담당자</Label>
+              {accountContacts.length > 0 && !creatingContact ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {accountContacts.map((c) => {
+                    const sel = selectedContactId === c.contactId;
+                    return (
+                      <button key={c.contactId} onClick={() => setSelectedContactId(sel ? null : c.contactId)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, border: sel ? `1.5px solid ${TEAL}` : '1px solid #E5E6DE', backgroundColor: sel ? '#ECFEFF' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s' }}>
+                        <span style={{ width: 16, height: 16, borderRadius: '50%', border: sel ? `5px solid ${TEAL}` : '2px solid #D1D5DB', flexShrink: 0, boxSizing: 'border-box' }} />
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: sel ? 600 : 400, color: '#16180F' }}>{c.name}{c.title ? ` · ${c.title}` : ''}</span>
                       </button>
-                    )}
-                  </div>
-                ) : (
-                  <button onClick={() => setCreatingContact(true)}
-                    style={{ padding: '10px 12px', borderRadius: 8, border: '1px dashed #D1D5DB', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 13, color: TEAL, fontWeight: 500, textAlign: 'center', width: '100%' }}>
+                    );
+                  })}
+                  <button onClick={() => { setCreatingContact(true); setSelectedContactId(null); }}
+                    style={{ padding: '8px 12px', borderRadius: 8, border: '1px dashed #D1D5DB', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: TEAL, fontWeight: 500, textAlign: 'center' }}>
                     + 새 담당자 추가
                   </button>
-                )}
-              </div>
-            </>
+                </div>
+              ) : creatingContact ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <input placeholder="이름 *" value={newContact.name} onChange={(e) => setNewContact(p => ({ ...p, name: e.target.value }))} style={inputStyle} />
+                    <input placeholder="직책" value={newContact.title} onChange={(e) => setNewContact(p => ({ ...p, title: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <input placeholder="전화번호" value={newContact.phone} onChange={(e) => setNewContact(p => ({ ...p, phone: e.target.value }))} style={inputStyle} />
+                    <input placeholder="이메일" value={newContact.email} onChange={(e) => setNewContact(p => ({ ...p, email: e.target.value }))} style={inputStyle} />
+                  </div>
+                  {accountContacts.length > 0 && (
+                    <button onClick={() => { setCreatingContact(false); setNewContact(EMPTY_NEW_CONTACT); }}
+                      style={{ alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 6, border: 'none', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#9CA3AF' }}>
+                      ← 기존 담당자에서 선택
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button onClick={() => setCreatingContact(true)}
+                  style={{ padding: '10px 12px', borderRadius: 8, border: '1px dashed #D1D5DB', backgroundColor: 'transparent', cursor: 'pointer', fontSize: 13, color: TEAL, fontWeight: 500, textAlign: 'center', width: '100%' }}>
+                  + 새 담당자 추가
+                </button>
+              )}
+            </div>
+          </>
           )}
 
           {/* 카테고리 */}
