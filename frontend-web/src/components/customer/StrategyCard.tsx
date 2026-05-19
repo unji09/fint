@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import useBreakpoint from '@/hooks/useBreakpoint';
 import type { StrategyCard } from '@/types/customer';
 
@@ -78,17 +77,14 @@ interface StrategyCardProps {
 }
 
 export default function StrategyCardComponent({ card, index, onExpand, onAddToCalendar }: StrategyCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  // 펼침 여부는 부모(page.tsx)의 expStrat 단일 상태에서 props 로 내려온다.
+  // 자식이 별도 useState 로 관리하면 카드마다 토글이 누적돼 두 카드가 동시에 활성화되는 버그가 생긴다.
+  const expanded = card.isExpanded ?? false;
   const bp = useBreakpoint();
   const isCompact = bp !== 'desktop';
 
   const handleToggle = () => {
-    if (onExpand) {
-      onExpand();
-      setExpanded(!expanded);
-    } else {
-      setExpanded(!expanded);
-    }
+    onExpand?.();
   };
 
   return (
