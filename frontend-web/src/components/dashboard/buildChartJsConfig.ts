@@ -23,13 +23,23 @@ interface PresetChartConfig {
   display?: { format?: string; emptyMessage?: string; koreanUnit?: boolean };
 }
 
-const MOOD_TICK_LABELS: Record<number, string> = {
+// 0-1 scale: preset widgets (CASE WHEN mood → 0/0.25/0.5/0.75/1.0)
+const MOOD_TICK_LABELS_01: Record<number, string> = {
   0: '⛈️ 천둥',
   0.25: '🌧️ 비',
   0.5: '☁️ 흐림',
   0.75: '☀️ 맑음',
   1: '🌈 무지개',
 };
+
+// 0-100 scale: AI-generated widgets using AVG(mood_score)
+function moodLabel100(v: number): string {
+  if (v >= 80) return '🌈 무지개';
+  if (v >= 60) return '☀️ 맑음';
+  if (v >= 40) return '☁️ 흐림';
+  if (v >= 20) return '🌧️ 비';
+  return '⛈️ 천둥';
+}
 
 const COLORS = [
   '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',
@@ -76,6 +86,15 @@ export function buildChartJsConfig(
     };
   });
 
+  // Detect mood y-axis and scale (0-1 preset vs 0-100 AI-generated)
+  const yUnit = cfg.options?.yAxis?.unit ?? '';
+  const yLabel = cfg.options?.yAxis?.label ?? '';
+  const isMood = yUnit === 'mood' || /무드|감정|mood/i.test(yLabel) || cfg.display?.format === 'mood';
+  const moodMax = isMood
+    ? Math.max(0, ...chartDatasets.flatMap((d) => d.data as number[]))
+    : 0;
+  const isMood100 = isMood && moodMax > 1; // AVG(mood_score) 0-100 scale
+
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const options: ChartOptions = {
     responsive: true,
@@ -98,21 +117,44 @@ export function buildChartJsConfig(
           ticks: { maxRotation: 45, font: { size: fontSize } },
         },
         y: (() => {
-          const yUnit = cfg.options?.yAxis?.unit ?? '';
-          const yLabel = cfg.options?.yAxis?.label ?? '';
-          const isMood = yUnit === 'mood' || /무드|감정|mood/i.test(yLabel) || cfg.display?.format === 'mood';
-          return {
-            title: yLabel
-              ? { display: true, text: `${yLabel}${yUnit && yUnit !== 'mood' ? ` (${yUnit})` : ''}`, font: { size: fontSize } }
-              : undefined,
-            beginAtZero: true,
-            ...(isMood ? { min: 0, max: 1 } : {}),
-            ticks: {
-              ...(isMood ? { stepSize: 0.25 } : {}),
-              callback: (v: any) => {
-                if (isMood) return MOOD_TICK_LABELS[Number(v)] ?? '';
-                return formatKoreanNumber(Number(v));
+          const titleText = yLabel
+            ? `${yLabel}${yUnit && yUnit !== 'mood' ? ` (${yUnit})` : ''}`
+            : undefined;
+          const titleObj = titleText
+            ? { display: true, text: titleText, font: { size: fontSize } }
+            : undefined;
+
+          if (isMood100) {
+            // 10-90 scale: mood_score values are 10/30/50/70/90 → ticks align exactly
+            return {
+              title: titleObj,
+              beginAtZero: false,
+              min: 10, max: 90,
+              ticks: {
+                stepSize: 20,
+                callback: (v: any) => moodLabel100(Number(v)),
+                font: { size: fontSize },
               },
+            };
+          }
+          if (isMood) {
+            // 0-1 scale: preset CASE WHEN approach
+            return {
+              title: titleObj,
+              beginAtZero: true,
+              min: 0, max: 1,
+              ticks: {
+                stepSize: 0.25,
+                callback: (v: any) => MOOD_TICK_LABELS_01[Number(v)] ?? '',
+                font: { size: fontSize },
+              },
+            };
+          }
+          return {
+            title: titleObj,
+            beginAtZero: true,
+            ticks: {
+              callback: (v: any) => formatKoreanNumber(Number(v)),
               font: { size: fontSize },
             },
           };

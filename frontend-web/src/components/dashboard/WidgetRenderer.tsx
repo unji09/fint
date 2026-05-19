@@ -211,6 +211,9 @@ interface ColumnDef {
 
 export function formatCellValue(val: unknown, col: ColumnDef): string {
   if (val == null) return '-';
+  // Mood enum auto-detect — must run before numeric format checks (Number("RAINBOW") = NaN)
+  const rawStr = String(val);
+  if (MOOD_LABELS[rawStr]) return MOOD_LABELS[rawStr];
   if (col.format === 'currency') {
     const n = Number(val);
     return `${formatNumber(n, col.koreanUnit)}${col.unit ? ` ${col.unit}` : ''}`;
@@ -218,13 +221,10 @@ export function formatCellValue(val: unknown, col: ColumnDef): string {
   if (col.format === 'number') return formatNumber(Number(val));
   if (col.format === 'date') return formatDatetime(String(val), true);
   if (col.format === 'datetime') return formatDatetime(String(val), false);
-  if (col.format === 'mood') return MOOD_LABELS[String(val)] ?? String(val);
+  if (col.format === 'mood') return MOOD_LABELS[rawStr] ?? rawStr;
   // ISO 날짜 문자열 자동 감지 (created_at 등 raw ISO)
-  const s = String(val);
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return formatDatetime(s, false);
-  // 무드 ENUM 자동 감지
-  if (MOOD_LABELS[s]) return MOOD_LABELS[s];
-  return s;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(rawStr)) return formatDatetime(rawStr, false);
+  return rawStr;
 }
 
 function PresetTableRenderer({ config, data }: { config: Record<string, unknown>; data: Record<string, unknown>[] }) {
