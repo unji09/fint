@@ -52,6 +52,7 @@ public interface AiSuggestionRepository extends JpaRepository<AiSuggestion, Long
             where u.userId = :userId
               and u.isDeleted = false
               and s.isRead = false
+              and s.importanceScore >= 4.0
             order by s.createdAt desc
             """)
     List<AiSuggestion> findUnreadByUserId(
