@@ -147,7 +147,7 @@ class NaverNewsCollector:
             text(
                 "SELECT title_embedding::real[]"
                 " FROM news_articles"
-                " WHERE published_at >= CURRENT_DATE - :days"
+                " WHERE published_at >= CURRENT_DATE - :days * INTERVAL '1 day'"
                 " AND title_embedding IS NOT NULL"
             ),
             {"days": self._DB_DEDUP_DAYS},

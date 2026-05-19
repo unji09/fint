@@ -30,7 +30,7 @@ public class SignalCollectScheduler {
 
         log.info("[SignalScheduler] starting scheduled signal collection");
         try {
-            SignalCollectResult result = signalCollectService.collectAndSave(SYSTEM_TENANT_ID);
+            SignalCollectResult result = signalCollectService.collectAndSave(SYSTEM_TENANT_ID, null);
             log.info("[SignalScheduler] done. news={} dart={} errors={}",
                     result.newsInserted(), result.dartInserted(), result.errors().size());
 
