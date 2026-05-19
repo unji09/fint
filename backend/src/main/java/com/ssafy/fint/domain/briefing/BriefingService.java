@@ -148,18 +148,15 @@ public class BriefingService {
     }
 
     private List<BriefingRequest.MeetingHistory> buildRecentMeetings(Long accountId, Long tenantId, OffsetDateTime before) {
-        return activityRepository.findRecentMeetingsByAccountId(accountId, tenantId, before)
-                .map(m -> {
-                    String summaryText = extractSummaryText(m);
-                    return List.of(new BriefingRequest.MeetingHistory(
-                            m.getActivityId(),
-                            m.getTitle(),
-                            m.getStartAt().toLocalDate().toString(),
-                            summaryText,
-                            null,
-                            null
-                    ));
-                })
+        return activityRepository.findRecentMeetingByAccountId(accountId, tenantId, before)
+                .map(m -> List.of(new BriefingRequest.MeetingHistory(
+                        m.getActivityId(),
+                        m.getTitle(),
+                        m.getStartAt().toLocalDate().toString(),
+                        extractSummaryText(m),
+                        null,
+                        null
+                )))
                 .orElse(List.of());
     }
 
