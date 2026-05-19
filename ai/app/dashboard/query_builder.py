@@ -18,8 +18,9 @@ from app.schemas.dashboard import FilterOperator, QuerySpec
 _DATE_COLUMN_TYPES = frozenset({"DATE"})
 _DATETIME_COLUMN_TYPES = frozenset({"TIMESTAMPTZ", "TIMESTAMP"})
 
-_AGG_PATTERN = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\((\*|\w+(?:\.\w+)?)\)$", re.IGNORECASE)
+_AGG_PATTERN = re.compile(r"^(COUNT|SUM|AVG|MIN|MAX)\((DISTINCT\s+)?(\*|\w+(?:\.\w+)?)\)$", re.IGNORECASE)
 _DATE_TRUNC_PATTERN = re.compile(r"^DATE_TRUNC\('(\w+)',\s*(\w+(?:\.\w+)?)\)$", re.IGNORECASE)
+_TO_CHAR_MONTH_PATTERN = re.compile(r"^TO_CHAR\((\w+(?:\.\w+)?),\s*'YYYY-MM'\)$", re.IGNORECASE)
 _DOT_COL_PATTERN = re.compile(r"^(\w+)\.(\w+)$")
 _ALIAS_PATTERN = re.compile(r"\s+[Aa][Ss]\s+\w+$")
 
@@ -110,19 +111,27 @@ def _strip_alias(col: str) -> str:
     return _ALIAS_PATTERN.sub("", col).strip()
 
 
+def _rewrite_to_char(expr: str) -> str:
+    """TO_CHAR(col, 'YYYY-MM') → DATE_TRUNC('month', col)으로 정규화."""
+    m = _TO_CHAR_MONTH_PATTERN.match(expr)
+    if m:
+        return f"DATE_TRUNC('month', {m.group(1)})"
+    return expr
+
+
 def _sanitize_spec(spec: QuerySpec) -> QuerySpec:
     updates: dict = {}
-    cleaned_cols = [_strip_alias(c) for c in spec.columns]
+    cleaned_cols = [_rewrite_to_char(_strip_alias(c)) for c in spec.columns]
     if cleaned_cols != spec.columns:
         updates["columns"] = cleaned_cols
     if spec.group_by:
-        cleaned_gb = [_strip_alias(c) for c in spec.group_by]
+        cleaned_gb = [_rewrite_to_char(_strip_alias(c)) for c in spec.group_by]
         if cleaned_gb != spec.group_by:
             updates["group_by"] = cleaned_gb
     if spec.order_by:
         cleaned_ob = [
-            o.model_copy(update={"column": _strip_alias(o.column)})
-            if _strip_alias(o.column) != o.column else o
+            o.model_copy(update={"column": _rewrite_to_char(_strip_alias(o.column))})
+            if _rewrite_to_char(_strip_alias(o.column)) != o.column else o
             for o in spec.order_by
         ]
         if any(a.column != b.column for a, b in zip(cleaned_ob, spec.order_by)):
@@ -156,11 +165,14 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
         agg_match = _AGG_PATTERN.match(col)
         dt_match = _DATE_TRUNC_PATTERN.match(col)
         if agg_match:
-            func, arg = agg_match.group(1).upper(), agg_match.group(2)
+            func = agg_match.group(1).upper()
+            distinct_kw = agg_match.group(2) or ""
+            arg = agg_match.group(3)
             if arg == "*":
                 return f'{func}(*) AS "{col}"'
             tbl, c = _resolve_column(arg, spec)
-            return f'{func}({tbl}.{c}) AS "{col}"'
+            distinct_prefix = "DISTINCT " if distinct_kw.strip() else ""
+            return f'{func}({distinct_prefix}{tbl}.{c}) AS "{col}"'
         if dt_match:
             interval, column = dt_match.group(1), dt_match.group(2)
             tbl, c = _resolve_column(column, spec)
@@ -229,11 +241,14 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
         agg_match = _AGG_PATTERN.match(col)
         dt_match = _DATE_TRUNC_PATTERN.match(col)
         if agg_match:
-            func, arg = agg_match.group(1).upper(), agg_match.group(2)
+            func = agg_match.group(1).upper()
+            distinct_kw = agg_match.group(2) or ""
+            arg = agg_match.group(3)
             if arg == "*":
                 return f"{func}(*)"
             tbl, c = _resolve_column(arg, spec)
-            return f"{func}({tbl}.{c})"
+            distinct_prefix = "DISTINCT " if distinct_kw.strip() else ""
+            return f"{func}({distinct_prefix}{tbl}.{c})"
         if dt_match:
             interval, column = dt_match.group(1), dt_match.group(2)
             tbl, c = _resolve_column(column, spec)
@@ -279,7 +294,8 @@ def _validate_spec(spec: QuerySpec) -> None:
         agg_match = _AGG_PATTERN.match(col)
         dt_match = _DATE_TRUNC_PATTERN.match(col)
         if agg_match:
-            func, arg = agg_match.group(1).upper(), agg_match.group(2)
+            func = agg_match.group(1).upper()
+            arg = agg_match.group(3)
             if func not in ALLOWED_AGGREGATES:
                 raise QueryBuildError(f"허용되지 않은 집계 함수: {func}")
             if arg == "*" and func != "COUNT":
@@ -306,7 +322,7 @@ def _validate_spec(spec: QuerySpec) -> None:
             agg_match = _AGG_PATTERN.match(o.column)
             dt_match = _DATE_TRUNC_PATTERN.match(o.column)
             if agg_match:
-                arg = agg_match.group(2)
+                arg = agg_match.group(3)
                 if arg != "*":
                     _resolve_column(arg, spec)
             elif dt_match:

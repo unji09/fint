@@ -111,7 +111,7 @@ def _build_schema() -> dict[str, TableMeta]:
 
     tables["activities"] = TableMeta(
         name="activities",
-        description="영업 활동 (미팅, 전화, 업무, 이메일)",
+        description="영업 활동 (미팅, 전화, 업무, 이메일). 일정/미팅/활동 조회는 모두 이 테이블 사용. calendar_events 테이블은 존재하지 않음.",
         columns=[
             ColumnMeta("activity_id", "BIGINT", "활동 PK"),
             ColumnMeta("deal_id", "BIGINT", "딜 ID"),
