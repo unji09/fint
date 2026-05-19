@@ -14,6 +14,7 @@ from pydantic import BaseModel
 class SignalsCollectRequest(BaseModel):
     source: Literal["naver", "dart", "all"] = "naver"
     include_embeddings: bool = True
+    account_ids: list[int] | None = None
 
 
 # ── news_articles 테이블 매핑 ──

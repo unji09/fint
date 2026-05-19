@@ -31,18 +31,23 @@ logger = logging.getLogger(__name__)
 async def get_accounts_for_tenant(
     db: AsyncSession,
     tenant_id: int,
+    account_ids: list[int] | None = None,
 ) -> list[AccountInfo]:
-    result = await db.execute(
-        text("""
-            SELECT DISTINCT a.account_id, a.name
-            FROM accounts a
-            JOIN account_user_assignment aua ON a.account_id = aua.account_id
-            JOIN users u ON aua.user_id = u.user_id
-            WHERE u.tenant_id = :tenant_id
-              AND a.is_deleted = false
-        """),
-        {"tenant_id": tenant_id},
-    )
+    base_sql = """
+        SELECT DISTINCT a.account_id, a.name
+        FROM accounts a
+        JOIN account_user_assignment aua ON a.account_id = aua.account_id
+        JOIN users u ON aua.user_id = u.user_id
+        WHERE u.tenant_id = :tenant_id
+          AND a.is_deleted = false
+    """
+    params: dict = {"tenant_id": tenant_id}
+
+    if account_ids:
+        base_sql += " AND a.account_id = ANY(:account_ids)"
+        params["account_ids"] = account_ids
+
+    result = await db.execute(text(base_sql), params)
     return [
         AccountInfo(account_id=row[0], name=row[1])
         for row in result.fetchall()
@@ -58,8 +63,9 @@ async def collect_news(
     dart_client: DartClient | None = None,
     embedder: EmbedderClient | None = None,
     include_embeddings: bool = True,
+    account_ids: list[int] | None = None,
 ) -> SignalsCollectResponse:
-    accounts = await get_accounts_for_tenant(db, tenant_id)
+    accounts = await get_accounts_for_tenant(db, tenant_id, account_ids)
     if not accounts:
         return SignalsCollectResponse(
             total_accounts=0,

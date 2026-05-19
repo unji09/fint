@@ -5,10 +5,11 @@ import com.ssafy.fint.domain.signal.service.SignalCollectService;
 import com.ssafy.fint.domain.signal.service.SignalCollectService.SignalCollectResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+
+import java.util.List;
 
 @Slf4j
 @Component
@@ -18,7 +19,6 @@ public class AccountCreatedEventListener {
     private final SignalCollectService signalCollectService;
     private final NextActionTriggerService nextActionTriggerService;
 
-    @Async("accountEventExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handle(AccountCreatedEvent event) {
         Long tenantId = event.tenantId();
@@ -27,7 +27,7 @@ public class AccountCreatedEventListener {
         log.info("[AccountCreatedEvent] starting signal collection. tenantId={} accountId={}",
                 tenantId, accountId);
         try {
-            SignalCollectResult result = signalCollectService.collectAndSave(tenantId);
+            SignalCollectResult result = signalCollectService.collectAndSave(tenantId, List.of(accountId));
             log.info("[AccountCreatedEvent] collection done. news={} dart={}",
                     result.newsInserted(), result.dartInserted());
 
