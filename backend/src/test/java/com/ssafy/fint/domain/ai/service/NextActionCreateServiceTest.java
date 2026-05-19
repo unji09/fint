@@ -188,7 +188,7 @@ class NextActionCreateServiceTest {
 
         NextActionCreateRequest request = new NextActionCreateRequest(
                 ACCOUNT_ID, TriggerType.MEETING_CREATED,
-                null, null, 77L, "미팅 기반 추천 요청");
+                null, null, List.of(77L), "미팅 기반 추천 요청");
 
         when(accountRepository.findByIdAndTenantId(ACCOUNT_ID, TENANT_ID))
                 .thenReturn(Optional.of(account));

@@ -90,7 +90,22 @@ public interface ActivityRepository
             ORDER BY a.startAt DESC
             LIMIT 1
             """)
-    Optional<Activity> findRecentMeetingsByAccountId(
+    Optional<Activity> findRecentMeetingByAccountId(
+            @Param("accountId") Long accountId,
+            @Param("tenantId") Long tenantId,
+            @Param("before") OffsetDateTime before
+    );
+
+    @Query("""
+            SELECT a FROM Activity a
+            WHERE a.deal.account.accountId = :accountId
+              AND a.user.tenant.tenantId = :tenantId
+              AND a.type = com.ssafy.fint.domain.activity.entity.ActivityType.MEETING
+              AND a.startAt < :before
+            ORDER BY a.startAt DESC
+            LIMIT 3
+            """)
+    List<Activity> findRecentMeetingsByAccountId(
             @Param("accountId") Long accountId,
             @Param("tenantId") Long tenantId,
             @Param("before") OffsetDateTime before

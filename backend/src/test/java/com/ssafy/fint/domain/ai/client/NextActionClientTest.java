@@ -173,6 +173,35 @@ class NextActionClientTest {
     }
 
     @Test
+    @DisplayName("meetingIds 가 있으면 요청 본문에 meeting_ids 가 포함된다.")
+    @SuppressWarnings("unchecked")
+    void requestBodyContainsMeetingIds() {
+        String responseJson = """
+                [{ "action": "t", "reason": "d", "category": "c",
+                   "related_type": "ACCOUNT", "importance_score": 50.0,
+                   "success_probability": 1, "sources": {},
+                   "recommended_script": "s", "pipeline_stage_id": 10 }]
+                """;
+
+        when(aiRestTemplate.postForEntity(any(String.class), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(responseJson, HttpStatus.OK));
+
+        NextActionCreateRequest request = new NextActionCreateRequest(
+                ACCOUNT_ID, TriggerType.EXTERNAL_SIGNAL_UPDATED,
+                List.of(101L), null, List.of(501L, 502L, 503L), null);
+        nextActionClient.generate(TENANT_ID, request);
+
+        ArgumentCaptor<HttpEntity<String>> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(aiRestTemplate).postForEntity(any(String.class), captor.capture(), eq(String.class));
+
+        String body = captor.getValue().getBody();
+        assertThat(body).contains("\"meeting_ids\":");
+        assertThat(body).contains("501");
+        assertThat(body).contains("502");
+        assertThat(body).contains("503");
+    }
+
+    @Test
     @DisplayName("응답 본문이 비어있으면 EXTERNAL_API_FAILED 예외가 발생한다.")
     void externalApiFailedOnEmptyBody() {
         when(aiRestTemplate.postForEntity(any(String.class), any(HttpEntity.class), eq(String.class)))
