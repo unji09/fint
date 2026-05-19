@@ -59,7 +59,7 @@ public class DashboardQueryService {
         registerPendingState(traceId, dashboardId, request.inputText(), me);
 
         try {
-            queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), me));
+            queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), request.widgetId(), me));
         } catch (Exception e) {
             log.error("[SSE] dispatch failed traceId={}", traceId, e);
             markDispatchFailed(traceId);
@@ -106,14 +106,26 @@ public class DashboardQueryService {
     }
 
     private DashboardQueryDispatchCommand buildDispatchCommand(
-            String traceId, Long dashboardId, String inputText, CustomUserDetails me) {
-        // 위젯이 0개면 CREATE, 1개 이상이면 ADD (+ 기존 위젯 컨텍스트를 LLM 에 전달해 중복 회피 유도).
+            String traceId, Long dashboardId, String inputText, Long widgetId, CustomUserDetails me) {
         List<DashboardWidget> widgets = dashboardWidgetRepository.findAllByDashboard_DashboardId(dashboardId);
         boolean hasWidgets = !widgets.isEmpty();
         List<Object> existingWidgets = hasWidgets
                 ? widgets.stream().<Object>map(this::toAiPayload).toList()
                 : List.of();
-        QueryAction action = hasWidgets ? QueryAction.ADD : QueryAction.CREATE;
+
+        QueryAction action;
+        Object currentWidget = null;
+        if (widgetId != null) {
+            // MODIFY: 대상 위젯을 찾아 currentWidget 으로 전달 → AI 가 기존 쿼리 기반으로 수정
+            action = QueryAction.MODIFY;
+            currentWidget = widgets.stream()
+                    .filter(w -> w.getDashboardWidgetId().equals(widgetId))
+                    .findFirst()
+                    .map(this::toAiPayload)
+                    .orElse(null);
+        } else {
+            action = hasWidgets ? QueryAction.ADD : QueryAction.CREATE;
+        }
 
         return new DashboardQueryDispatchCommand(
                 traceId,
@@ -123,7 +135,7 @@ public class DashboardQueryService {
                 me.getTenantId(),
                 me.getUserId(),
                 existingWidgets,
-                null
+                currentWidget
         );
     }
 

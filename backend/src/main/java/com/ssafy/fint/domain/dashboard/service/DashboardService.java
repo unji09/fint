@@ -155,7 +155,7 @@ public class DashboardService {
             QueryStartResponse started = dashboardQueryService.start(
                     me,
                     dashboard.getDashboardId(),
-                    new QueryStartRequest(request.inputText())
+                    new QueryStartRequest(request.inputText(), null)
             );
             traceId = started.traceId();
         }
