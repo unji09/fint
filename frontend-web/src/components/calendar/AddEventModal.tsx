@@ -35,14 +35,17 @@ const CATS = [
   { id: '이메일', color: '#D85A30', bg: '#FEF0EC' },
 ];
 
+// BE pipeline_stages 테이블의 실제 stageName 과 stageId 에 맞춰 정의.
+// 이전엔 "협상 중", "첫 미팅 준비" 같은 옛 라벨이 박혀있어 BE 응답("협상", "발굴" 등)과 매칭 실패 →
+// 수정 모달에 파이프라인 선택이 빈 상태로 보이고 새로고침해도 반영 안 되던 문제 해소.
 const PIPELINE_STAGES = [
-  { id: 1, label: '첫 미팅 준비', code: 'FIRST_MEETING' },
-  { id: 2, label: '니즈 파악', code: 'NEEDS_ANALYSIS' },
-  { id: 3, label: '제안서 작성', code: 'PROPOSAL_WRITING' },
-  { id: 4, label: '제안 발표', code: 'PROPOSAL_PRESENT' },
-  { id: 5, label: '협상 중', code: 'NEGOTIATION' },
-  { id: 6, label: '계약 검토', code: 'CONTRACT_REVIEW' },
-  { id: 7, label: '성사 / 실패', code: 'CLOSED' },
+  { id: 1, label: '발굴', code: 'FIRST_MEETING' },
+  { id: 2, label: '가치 제안', code: 'NEEDS_ANALYSIS' },
+  { id: 3, label: '솔루션 설계', code: 'PROPOSAL_WRITING' },
+  { id: 4, label: '제안 제출', code: 'PROPOSAL_PRESENT' },
+  { id: 5, label: '협상', code: 'NEGOTIATION' },
+  { id: 6, label: '계약 대기', code: 'CONTRACT_REVIEW' },
+  { id: 7, label: '수주', code: 'CLOSED' },
 ];
 // 백엔드 ActivityType: MEETING("미팅") | CALL("통화") | TASK("업무") | EMAIL("이메일")
 const CAT_TO_TYPE: Record<string, string> = {

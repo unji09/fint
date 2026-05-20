@@ -107,6 +107,8 @@ export default function CustomerDetailPage() {
   const [showAllSignals, setShowAllSignals] = useState(false);
   // NextAction 의 CRM 근거 항목 클릭으로 띄우는 미팅 상세 — 캘린더의 EventDetailPanel 그대로 재사용.
   const [selectedMeetingEvent, setSelectedMeetingEvent] = useState<CalendarEvent | null>(null);
+  // EventDetailPanel 에서 "수정" 클릭 시 AddEventModal 을 편집 모드로 띄우기 위한 state.
+  const [editMeetingEvent, setEditMeetingEvent] = useState<CalendarEvent | null>(null);
   // 삭제 등 mutation 후 사용자 피드백 메시지 (2.5초 뒤 자동 사라짐)
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
@@ -537,13 +539,14 @@ export default function CustomerDetailPage() {
 
       {/* AI 추천 전략 → 일정 추가 모달 */}
       <AddEventModal
-        open={addEventOpen}
-        onClose={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
+        open={addEventOpen || !!editMeetingEvent}
+        onClose={() => { setAddEventOpen(false); setAddEventDefaults({}); setEditMeetingEvent(null); }}
         defaultTitle={addEventDefaults.title}
         defaultCategory={addEventDefaults.category}
         defaultAccountId={id ? Number(id) : undefined}
         defaultAccountName={accounts.find((a) => String(a.accountId) === id)?.name}
-        onSaved={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
+        editEvent={editMeetingEvent}
+        onSaved={() => { setAddEventOpen(false); setAddEventDefaults({}); setEditMeetingEvent(null); refDetail(); }}
       />
 
       {/* 회사 정보 시그널 전체 보기 모달 */}
@@ -559,6 +562,10 @@ export default function CustomerDetailPage() {
         event={selectedMeetingEvent}
         onClose={() => setSelectedMeetingEvent(null)}
         onDeleted={() => setSelectedMeetingEvent(null)}
+        onEdit={(ev) => {
+          setEditMeetingEvent(ev);
+          setSelectedMeetingEvent(null);
+        }}
       />
 
       {/* 삭제/수정 후 사용자 피드백 토스트 (자동 2.5초 후 사라짐) */}
