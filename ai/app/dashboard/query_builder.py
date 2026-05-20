@@ -129,11 +129,10 @@ def _sanitize_spec(spec: QuerySpec) -> QuerySpec:
         if cleaned_gb != spec.group_by:
             updates["group_by"] = cleaned_gb
     if spec.order_by:
-        cleaned_ob = [
-            o.model_copy(update={"column": _rewrite_to_char(_strip_alias(o.column))})
-            if _rewrite_to_char(_strip_alias(o.column)) != o.column else o
-            for o in spec.order_by
-        ]
+        cleaned_ob = []
+        for o in spec.order_by:
+            new_col = _rewrite_to_char(_strip_alias(o.column))
+            cleaned_ob.append(o.model_copy(update={"column": new_col}) if new_col != o.column else o)
         if any(a.column != b.column for a, b in zip(cleaned_ob, spec.order_by)):
             updates["order_by"] = cleaned_ob
     if updates:
@@ -272,6 +271,12 @@ def build_query(spec: QuerySpec, *, tenant_id: int) -> tuple[str, dict]:
             agg_ref = _qualify_ref(h.column)
             if h.operator in (FilterOperator.IS_NULL, FilterOperator.IS_NOT_NULL):
                 having_clauses.append(f"{agg_ref} {h.operator.value}")
+            elif h.operator in (FilterOperator.IN, FilterOperator.NOT_IN):
+                if not isinstance(h.value, list) or not h.value:
+                    raise QueryBuildError("HAVING IN/NOT IN 연산자에는 비어있지 않은 리스트가 필요합니다")
+                placeholders = ", ".join(_next_param(v) for v in h.value)
+                keyword = "IN" if h.operator == FilterOperator.IN else "NOT IN"
+                having_clauses.append(f"{agg_ref} {keyword} ({placeholders})")
             elif h.operator == FilterOperator.BETWEEN:
                 if not isinstance(h.value, list) or len(h.value) != 2:
                     raise QueryBuildError("HAVING BETWEEN에는 2개 값의 리스트가 필요합니다")

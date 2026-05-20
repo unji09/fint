@@ -93,7 +93,7 @@ export function buildChartJsConfig(
   const moodMax = isMood
     ? Math.max(0, ...chartDatasets.flatMap((d) => d.data as number[]))
     : 0;
-  const isMood100 = isMood && moodMax > 1; // AVG(mood_score) 0-100 scale
+  const isMood100 = isMood && Number.isInteger(moodMax) && moodMax > 1; // AVG(mood_score) 0-100 scale (정수 판별로 preset 0-1 스케일과 구분)
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const options: ChartOptions = {

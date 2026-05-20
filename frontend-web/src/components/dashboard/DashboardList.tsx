@@ -148,7 +148,7 @@ function DashboardCard({
       clickTimerRef.current = setTimeout(() => {
         clickTimerRef.current = null;
         router.push(`/dashboard/${dashboard.dashboardId}`);
-      }, 220);
+      }, 160);
     }
   };
 

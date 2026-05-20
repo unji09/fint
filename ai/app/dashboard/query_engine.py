@@ -929,7 +929,7 @@ def _zero_fill_enum_groups(spec: QuerySpec, rows: list[dict]) -> list[dict]:
         if f.operator == FilterOperator.EQ and isinstance(f.value, str):
             allowed_types = (f.value.upper(),)
         elif f.operator == FilterOperator.IN and isinstance(f.value, list):
-            allowed_types = tuple(str(v).upper() for v in f.value)
+            allowed_types = tuple(str(v).upper() for v in f.value if v is not None)
         elif f.operator in (FilterOperator.NEQ, FilterOperator.NOT_IN):
             # 제외 요청: zero-fill 안 함 (사용자가 일부 타입을 의도적으로 제거)
             return rows
