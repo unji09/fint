@@ -218,7 +218,8 @@ public class AiSuggestionService {
             } catch (IllegalArgumentException ignored) {
             }
         }
-        if (request.triggerType() == TriggerType.MEETING_CREATED || request.meetingId() != null) {
+        if (request.triggerType() == TriggerType.MEETING_CREATED
+                || (request.meetingIds() != null && !request.meetingIds().isEmpty())) {
             return AiSuggestionRelatedType.MEETING;
         }
         return AiSuggestionRelatedType.ACCOUNT;

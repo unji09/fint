@@ -21,6 +21,7 @@ class FilterOperator(StrEnum):
     GTE = ">="
     LTE = "<="
     IN = "IN"
+    NOT_IN = "NOT IN"
     LIKE = "LIKE"
     BETWEEN = "BETWEEN"
     IS_NULL = "IS NULL"
@@ -55,6 +56,7 @@ class QuerySpec(BaseModel):
     joins: list[JoinSpec] = Field(default_factory=list)
     filters: list[FilterCondition] = Field(default_factory=list)
     group_by: list[str] | None = None
+    having_conditions: list[FilterCondition] = Field(default_factory=list)
     order_by: list[OrderSpec] | None = None
     limit: int = Field(default=100, ge=1, le=500)
 

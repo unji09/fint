@@ -425,3 +425,45 @@ export function useAccountDetail(accountId: string | number | null) {
 
   return { signals, contacts, deals, mood, latestMood, latestMoodReason, loading, refetch: load };
 }
+
+/**
+ * GET /api/v1/deals?accountId=…&page=…&size=… 페이지네이션 훅.
+ * 전체 딜 섹션에서 가로 스크롤 + 끝 도달 시 다음 페이지 로딩에 사용.
+ */
+export function useAccountDeals(accountId: string | number | null, pageSize = 10) {
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPage = useCallback(async (p: number, reset: boolean) => {
+    if (!accountId) return;
+    setLoading(true);
+    try {
+      const res = await fetchWithAuth(`/deals?accountId=${accountId}&page=${p}&size=${pageSize}`);
+      const json = await res.json();
+      const inner = json.data ?? json;
+      const list: Deal[] = (inner.data ?? []).map((d: ApiDeal & Record<string, unknown>) =>
+        mapApiDeal(d),
+      );
+      setDeals(prev => reset ? list : [...prev, ...list]);
+      setHasNext(inner.hasNext ?? false);
+      setPage(p);
+    } finally {
+      setLoading(false);
+    }
+  }, [accountId, pageSize]);
+
+  useEffect(() => {
+    setDeals([]);
+    setPage(0);
+    setHasNext(false);
+    if (accountId) fetchPage(0, true);
+  }, [accountId, fetchPage]);
+
+  const loadMore = useCallback(() => {
+    if (!loading && hasNext) fetchPage(page + 1, false);
+  }, [loading, hasNext, page, fetchPage]);
+
+  return { deals, hasNext, loading, loadMore, refetch: () => fetchPage(0, true) };
+}

@@ -90,7 +90,7 @@ public class MoodAnalysisService {
         try {
             NextActionCreateRequest request = new NextActionCreateRequest(
                     accountId, TriggerType.MEETING_CREATED,
-                    List.of(), List.of(), activityId, null);
+                    List.of(), List.of(), List.of(activityId), null);
             aiSuggestionService.createNextActionBySystem(tenantId, request);
             log.info("[MoodCallback] next action triggered. tenantId={} accountId={} activityId={}",
                     tenantId, accountId, activityId);

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { DealSearchItem } from '@/hooks/useDeal';
 import type { CalendarEvent } from './types';
+import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface Props {
   open: boolean;
@@ -148,6 +149,8 @@ export default function AddEventModal({
   editEvent,
 }: Props) {
   const isEdit = !!editEvent;
+  const bp = useBreakpoint();
+  const isCompact = bp !== 'desktop';
 
   // ── 기본 필드 ──
   const [title, setTitle] = useState('');
@@ -531,7 +534,7 @@ export default function AddEventModal({
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 1200, fontFamily: "'Pretendard',-apple-system,sans-serif", WebkitFontSmoothing: 'antialiased', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', opacity: visible ? 1 : 0, transition: 'opacity 0.2s' }} />
-      <div style={{ position: 'relative', backgroundColor: '#fff', borderRadius: 16, width: '90%', maxWidth: 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', transform: visible ? 'scale(1)' : 'scale(0.96)', opacity: visible ? 1 : 0, transition: 'transform 0.2s, opacity 0.2s' }}>
+      <div style={{ position: 'relative', backgroundColor: '#fff', borderRadius: isCompact ? 0 : 16, width: isCompact ? '100%' : '90%', maxWidth: isCompact ? '100%' : 520, height: isCompact ? '100%' : 'auto', maxHeight: isCompact ? '100%' : '90vh', display: 'flex', flexDirection: 'column', boxShadow: isCompact ? 'none' : '0 20px 60px rgba(0,0,0,0.15)', transform: visible ? 'scale(1)' : 'scale(0.96)', opacity: visible ? 1 : 0, transition: 'transform 0.2s, opacity 0.2s' }}>
         {/* 헤더 */}
         <div style={{ padding: '20px 22px 16px', borderBottom: '1px solid #F0F0EE', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <span style={{ fontSize: 17, fontWeight: 700, color: '#16180F' }}>{isEdit ? '일정 수정' : '일정 추가'}</span>

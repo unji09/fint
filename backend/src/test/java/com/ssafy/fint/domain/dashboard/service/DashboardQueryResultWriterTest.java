@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 class DashboardQueryResultWriterTest {
 
     private static final long TENANT_ID = 1L;
+    private static final long USER_ID = 99L;   // newDashboard()의 owner userId와 일치
     private static final long DASHBOARD_ID = 5L;
     private static final long NEW_QUERY_ID = 10L;
     private static final long NEW_WIDGET_ID = 20L;
@@ -75,7 +76,7 @@ class DashboardQueryResultWriterTest {
                 "source_query", "SELECT week, SUM(amount) FROM deals"
         );
 
-        DashboardQueryResultWriter.InsertedIds ids = writer.persist(TENANT_ID, DASHBOARD_ID, INPUT_TEXT, result);
+        DashboardQueryResultWriter.InsertedIds ids = writer.persist(TENANT_ID, USER_ID, DASHBOARD_ID, INPUT_TEXT, null, result);
 
         assertThat(ids.widgetId()).isEqualTo(NEW_WIDGET_ID);
         assertThat(ids.queryId()).isEqualTo(NEW_QUERY_ID);
@@ -105,7 +106,7 @@ class DashboardQueryResultWriterTest {
     void notFoundWhenDashboardMissing() {
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> writer.persist(TENANT_ID, DASHBOARD_ID, INPUT_TEXT, Map.of("widget_type", "CHART")))
+        assertThatThrownBy(() -> writer.persist(TENANT_ID, USER_ID, DASHBOARD_ID, INPUT_TEXT, null, Map.of("widget_type", "CHART")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_NOT_FOUND);
@@ -131,7 +132,7 @@ class DashboardQueryResultWriterTest {
                 "config", Map.of()
         );
 
-        assertThatThrownBy(() -> writer.persist(TENANT_ID, DASHBOARD_ID, INPUT_TEXT, result))
+        assertThatThrownBy(() -> writer.persist(TENANT_ID, USER_ID, DASHBOARD_ID, INPUT_TEXT, null, result))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(dashboardWidgetRepository, never()).save(any());
@@ -160,7 +161,7 @@ class DashboardQueryResultWriterTest {
                 "source_query", "SELECT 1"
         );
 
-        DashboardQueryResultWriter.InsertedIds ids = writer.persist(TENANT_ID, DASHBOARD_ID, INPUT_TEXT, result);
+        DashboardQueryResultWriter.InsertedIds ids = writer.persist(TENANT_ID, USER_ID, DASHBOARD_ID, INPUT_TEXT, null, result);
 
         assertThat(ids.widgetId()).isEqualTo(NEW_WIDGET_ID);
 
@@ -176,7 +177,23 @@ class DashboardQueryResultWriterTest {
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
 
         long wrongTenantId = 999L;
-        assertThatThrownBy(() -> writer.persist(wrongTenantId, DASHBOARD_ID, INPUT_TEXT, Map.of("widget_type", "CHART")))
+        assertThatThrownBy(() -> writer.persist(wrongTenantId, USER_ID, DASHBOARD_ID, INPUT_TEXT, null, Map.of("widget_type", "CHART")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
+
+        verify(dashboardQueryRepository, never()).save(any());
+        verify(dashboardWidgetRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("userId 불일치 → DASHBOARD_ACCESS_DENIED 로 차단되고 INSERT 되지 않는다.")
+    void accessDeniedWhenUserMismatch() {
+        Dashboard dashboard = newDashboard();
+        when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
+
+        long wrongUserId = 1234L;
+        assertThatThrownBy(() -> writer.persist(TENANT_ID, wrongUserId, DASHBOARD_ID, INPUT_TEXT, null, Map.of("widget_type", "CHART")))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);

@@ -16,7 +16,7 @@ class ContextData:
     account_industry: str
     news_items: list[dict] = field(default_factory=list)
     dart_items: list[dict] = field(default_factory=list)
-    meeting: dict | None = None
+    meetings: list[dict] = field(default_factory=list)
     context_text: str = ""
 
 
@@ -43,14 +43,14 @@ _DART_SQL = text(
     "WHERE d.dart_disclosure_id IN :ids"
 ).bindparams(bindparam("ids", expanding=True))
 
-_MEETING_SQL = text("""
-    SELECT a.activity_id, a.title, a.memo, a.summary::text AS summary,
-           a.start_at::text AS start_at, a.end_at::text AS end_at, a.type
-    FROM activities a
-    JOIN users u ON a.user_id = u.user_id
-    WHERE a.activity_id = :meeting_id AND u.tenant_id = :tenant_id
-    LIMIT 1
-""")
+_MEETINGS_SQL = text(
+    "SELECT a.activity_id, a.title, a.memo, a.summary::text AS summary, "
+    "a.start_at::text AS start_at, a.end_at::text AS end_at, a.type "
+    "FROM activities a "
+    "JOIN users u ON a.user_id = u.user_id "
+    "WHERE a.activity_id IN :ids AND u.tenant_id = :tenant_id "
+    "ORDER BY a.start_at DESC"
+).bindparams(bindparam("ids", expanding=True))
 
 _PIPELINE_STAGES_SQL = text("""
     SELECT ps.pipeline_stage_id, ps.name, ps.sort_order
@@ -83,7 +83,7 @@ async def build_context(
     account_id: int,
     news_article_ids: list[int] | None = None,
     dart_disclosure_ids: list[int] | None = None,
-    meeting_id: int | None = None,
+    meeting_ids: list[int] | None = None,
     extra_context: str | None = None,
 ) -> ContextData:
     result = await db.execute(_ACCOUNT_SQL, {"account_id": account_id, "tenant_id": tenant_id})
@@ -104,12 +104,10 @@ async def build_context(
         result = await db.execute(_DART_SQL, {"ids": dart_disclosure_ids})
         dart_items = [dict(row) for row in result.mappings().all()]
 
-    meeting: dict | None = None
-    if meeting_id:
-        result = await db.execute(_MEETING_SQL, {"meeting_id": meeting_id, "tenant_id": tenant_id})
-        row = result.mappings().first()
-        if row:
-            meeting = dict(row)
+    meetings: list[dict] = []
+    if meeting_ids:
+        result = await db.execute(_MEETINGS_SQL, {"ids": meeting_ids, "tenant_id": tenant_id})
+        meetings = [dict(row) for row in result.mappings().all()]
 
     parts: list[str] = []
     parts.append(f"[고객사 정보]\n회사명: {account_name}\n업종: {account_industry}")
@@ -130,12 +128,17 @@ async def build_context(
             lines.append(f"- {report}: {summary}" if summary else f"- {report}")
         parts.append("\n".join(lines))
 
-    if meeting:
-        lines = ["[미팅 정보]", f"제목: {meeting.get('title', '')}"]
-        if meeting.get("memo"):
-            lines.append(f"메모: {meeting['memo']}")
-        if meeting.get("summary"):
-            lines.append(f"요약: {meeting['summary']}")
+    if meetings:
+        lines = ["[미팅 이력]"]
+        for i, m in enumerate(meetings, 1):
+            lines.append(f"--- 미팅 {i} ---")
+            lines.append(f"제목: {m.get('title', '')}")
+            if m.get("start_at"):
+                lines.append(f"일시: {m['start_at']}")
+            if m.get("memo"):
+                lines.append(f"메모: {m['memo']}")
+            if m.get("summary"):
+                lines.append(f"요약: {m['summary']}")
         parts.append("\n".join(lines))
 
     if extra_context:
@@ -146,7 +149,7 @@ async def build_context(
         account_industry=account_industry,
         news_items=news_items,
         dart_items=dart_items,
-        meeting=meeting,
+        meetings=meetings,
         context_text="\n\n".join(parts),
     )
 
