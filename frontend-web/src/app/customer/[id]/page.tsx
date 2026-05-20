@@ -11,7 +11,7 @@ import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
 import WeatherPanel from '@/components/customer/WeatherPanel';
 import AddEventModal from '@/components/calendar/AddEventModal';
-import { useAccountList, useAccountDetail, useAccountDeals } from '@/hooks/useCustomer';
+import { useAccountList, useAccountDetail, useAccountDeals, invalidateDetailCache, mapApiDeal } from '@/hooks/useCustomer';
 import { useCustomer } from '../CustomerContext';
 import { useDeleteContact, useUpdateContact } from '@/hooks/useContact';
 import { useCreateDeal } from '@/hooks/useDeal';
@@ -19,7 +19,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog';
 import { useNextActions, fetchNextActionDetail } from '@/hooks/useNextActions';
 import { fetchWithAuth } from '@/hooks/useAuth';
 import useBreakpoint from '@/hooks/useBreakpoint';
-import type { Deal, StrategyCard } from '@/types/customer';
+import type { ApiDeal, Deal, StrategyCard } from '@/types/customer';
 
 const SA = ['#06b6d4', '#cbd5e1', '#fb923c'];
 const F = 'Pretendard,sans-serif';
@@ -67,8 +67,8 @@ export default function CustomerDetailPage() {
   const isCompact = bp !== 'desktop';
   const scrollRef = useRef<HTMLDivElement>(null);
   const { accounts } = useAccountList();
-  const { signals, contacts, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
-  const { deals: pagedDeals, hasNext: hasMoreDeals, loading: dealsLoading, loadMore: loadMoreDeals, refetch: refDeals } = useAccountDeals(id ?? null, 10);
+  const { signals, contacts, deals, latestMood, latestMoodReason, refetch: refDetail, prependDeal: prependDetailDeal } = useAccountDetail(id ?? null);
+  const { deals: pagedDeals, hasNext: hasMoreDeals, loading: dealsLoading, loadMore: loadMoreDeals, refetch: refDeals, prependDeal: prependPagedDeal } = useAccountDeals(id ?? null, 10);
   const allDealsScrollRef = useRef<HTMLDivElement>(null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
   const { remove: delContact } = useDeleteContact();
@@ -238,6 +238,7 @@ export default function CustomerDetailPage() {
           {/* 모바일 뒤로가기 */}
           {isCompact && (
             <button
+              type="button"
               onClick={() => { setSelContact(null); router.push('/customer'); }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: F, fontSize: 14, color: '#06b6d4', fontWeight: 500 }}
             >
@@ -249,7 +250,7 @@ export default function CustomerDetailPage() {
             {crumbs.map((c, i) => {
               const last = i === crumbs.length - 1;
               return <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {i > 0 && <span style={{ color: '#cbd5e1', fontSize: 14 }}>›</span>}
+                {i > 0 && <span style={{ color: '#0f172a', fontSize: 28, fontWeight: 700, lineHeight: 1 }}>›</span>}
                 <span onClick={!last ? c.onClick : undefined} style={{ fontFamily: F, fontWeight: 700, fontSize: 22, color: last ? '#0f172a' : '#94a3b8', cursor: !last ? 'pointer' : 'default' }}>{c.label}</span>
               </span>;
             })}
@@ -271,7 +272,7 @@ export default function CustomerDetailPage() {
               <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontFamily: F, fontWeight: 600, fontSize: 15, color: '#1e293b' }}>{selContact ? `${selContact.name} 관련 딜` : '전체 딜'}</span>
-                  <button onClick={() => setAllDeals(false)} style={{ fontFamily: F, fontSize: 12, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>접기</button>
+                  <button type="button" onClick={() => setAllDeals(false)} style={{ fontFamily: F, fontSize: 12, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>접기</button>
                 </div>
                 {(selContact ? visDeal : pagedDeals).length > 0 ? (
                   <div
@@ -300,16 +301,20 @@ export default function CustomerDetailPage() {
             ) : (
               <>
                 {/* 왼쪽 */}
-                <div style={{ flex: isCompact ? '0 0 auto' : '1 1 0', minWidth: 0, minHeight: isCompact ? undefined : 0, borderRight: isCompact ? 'none' : '1px solid #e2eaf0', borderBottom: isCompact ? '1px solid #e2eaf0' : 'none', padding: isCompact ? '16px' : '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: isCompact ? undefined : 'auto' }}>
+                <div style={{ flex: isCompact ? '0 0 auto' : '1 1 0', minWidth: 0, minHeight: isCompact ? undefined : 0, borderRight: isCompact ? 'none' : '1px solid #e2eaf0', borderBottom: isCompact ? '1px solid #e2eaf0' : 'none', padding: isCompact ? '16px' : '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
                   {selContact ? (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontFamily: F, fontWeight: 600, fontSize: 14, color: '#1e293b' }}>담당자</span>
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <button onClick={() => setEditContact(v => !v)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>{editContact ? '취소' : '편집'}</button>
-                          <button onClick={async () => {
+                          <button type="button" onClick={() => setEditContact(v => !v)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>{editContact ? '취소' : '편집'}</button>
+                          <button type="button" onClick={async () => {
                             if (!selContact.contactId || !await confirm(`${selContact.name} 삭제?`)) return;
-                            if (await delContact(selContact.contactId)) { setSelContact(null); refDetail(); }
+                            if (await delContact(selContact.contactId)) {
+                              setSelContact(null);
+                              invalidateDetailCache(id!);
+                              refDetail();
+                            }
                           }} style={{ fontFamily: F, fontSize: 11, color: '#94a3b8', cursor: 'pointer', background: 'none', border: 'none' }}>삭제</button>
                         </div>
                       </div>
@@ -347,7 +352,6 @@ export default function CustomerDetailPage() {
                           <button
                             onClick={async () => {
                               if (!selContact.contactId) return;
-                              if (!isValidEmail(ecEmail)) return;
                               await updContact(selContact.contactId, { name: ecName.trim() || undefined, title: ecTitle.trim() || undefined, phone: ecPhone.trim() || undefined, email: ecEmail.trim() || undefined });
                               setEditContact(false); refDetail();
                             }}
@@ -397,25 +401,31 @@ export default function CustomerDetailPage() {
                 </div>
 
                 {/* 오른쪽: 최근 딜 */}
-                <div style={{ flex: isCompact ? '0 0 auto' : '1 1 0', minWidth: 0, minHeight: isCompact ? undefined : 0, padding: isCompact ? '16px' : '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: isCompact ? undefined : 'auto' }}>
+                <div style={{ flex: isCompact ? '0 0 auto' : '1 1 0', minWidth: 0, minHeight: isCompact ? undefined : 0, padding: isCompact ? '16px' : '20px 28px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontFamily: F, fontWeight: 600, fontSize: 14, color: '#1e293b' }}>{selContact ? `${selContact.name} 딜` : '최근 딜'}</span>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      {visDeal.length > 0 && <button onClick={() => setAllDeals(true)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>전체보기</button>}
-                      <button onClick={() => setShowAddDeal(v => !v)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>{showAddDeal ? '취소' : '+ 딜 추가'}</button>
+                      {visDeal.length > 0 && <button type="button" onClick={() => setAllDeals(true)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>전체보기</button>}
+                      <button type="button" onClick={() => setShowAddDeal(v => !v)} style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>{showAddDeal ? '취소' : '+ 딜 추가'}</button>
                     </div>
                   </div>
                   {showAddDeal ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <input placeholder="딜 제목 *" value={ndTitle} onChange={e => setNdTitle(e.target.value)} style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                        <input placeholder="예상 금액" type="number" value={ndAmount} onChange={e => setNdAmount(e.target.value)} style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
+                        <input placeholder="예상 금액" type="number" value={ndAmount} onChange={e => setNdAmount(e.target.value)} onKeyDown={e => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }} style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
                         <input type="date" value={ndDate} onChange={e => setNdDate(e.target.value)} style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
                       </div>
-                      <button onClick={async () => {
+                      <button type="button" onClick={async () => {
                         if (!ndTitle.trim() || !acc || addingD) return;
-                        await addDeal({ accountId: acc.accountId, title: ndTitle.trim(), amount: ndAmount ? Number(ndAmount) : undefined, expectedClose: ndDate || undefined });
-                        setShowAddDeal(false); setNdTitle(''); setNdAmount(''); setNdDate(''); refDetail(); refDeals();
+                        if (ndAmount && Number(ndAmount) < 0) { alert('금액은 0 이상이어야 합니다.'); return; }
+                        const newDealData = await addDeal({ accountId: acc.accountId, title: ndTitle.trim(), amount: ndAmount ? Number(ndAmount) : undefined, expectedClose: ndDate || undefined });
+                        if (newDealData) {
+                          const mapped = mapApiDeal(newDealData as ApiDeal & Record<string, unknown>);
+                          prependDetailDeal(mapped);
+                          prependPagedDeal(mapped);
+                        }
+                        setShowAddDeal(false); setNdTitle(''); setNdAmount(''); setNdDate('');
                       }} disabled={!ndTitle.trim() || addingD}
                         style={{ alignSelf: 'flex-end', padding: '5px 14px', borderRadius: 6, border: 'none', backgroundColor: ndTitle.trim() ? '#06b6d4' : '#cbd5e1', color: '#fff', fontSize: 12, fontWeight: 600, cursor: ndTitle.trim() ? 'pointer' : 'default', fontFamily: F }}>
                         {addingD ? '등록 중...' : '등록'}
@@ -444,7 +454,7 @@ export default function CustomerDetailPage() {
           {selDeal && (
             <DealDetailPanel
               deal={selDeal}
-              onDealChanged={() => { refDetail(); refDeals(); }}
+              onDealChanged={() => { invalidateDetailCache(id!); refDetail(); refDeals(); }}
               onMeetingDetail={(a) => {
                 // 미팅 활동 객체를 CalendarEvent 로 변환해 EventDetailPanel 모달 마운트.
                 // 캘린더 페이지로 navigation 하지 않는다.

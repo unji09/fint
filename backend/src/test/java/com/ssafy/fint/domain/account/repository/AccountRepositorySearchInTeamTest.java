@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import org.springframework.data.domain.Page;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,10 +42,10 @@ class AccountRepositorySearchInTeamTest {
         Account lgCns = persistAccount("LG CNS");
         persistAssignment(lgCns, caller);
 
-        List<Account> result = accountRepository.searchInTeam(
+        Page<Account> result = accountRepository.searchInTeam(
                 "lg", null, tenant.getTenantId(), PageRequest.of(0, 10));
 
-        assertThat(result)
+        assertThat(result.getContent())
                 .extracting(Account::getName)
                 .containsExactly("LG CNS");
     }
@@ -58,10 +58,10 @@ class AccountRepositorySearchInTeamTest {
         Account aws = persistAccount("amazon web services");
         persistAssignment(aws, caller);
 
-        List<Account> result = accountRepository.searchInTeam(
+        Page<Account> result = accountRepository.searchInTeam(
                 "AMAZON", null, tenant.getTenantId(), PageRequest.of(0, 10));
 
-        assertThat(result)
+        assertThat(result.getContent())
                 .extracting(Account::getName)
                 .containsExactly("amazon web services");
     }

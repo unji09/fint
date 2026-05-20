@@ -198,20 +198,26 @@ export default function CanvasWidgetCard({ w, isSelected, onSelect, onUpdate, on
     : { border: '1px solid #dee3e6', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' };
 
   return (
+    // 외부 컨테이너: overflow 없음 → 리사이즈 핸들이 카드 바깥으로 연장 가능
     <div
       data-widget-card="1"
       onMouseDown={onCardMouseDown}
       onTouchStart={onCardTouchStart}
       style={{
         position: 'absolute', left: w.px, top: w.py, width: w.pw, height: w.ph,
-        background: 'white', borderRadius: 10,
-        ...selectedBorder,
-        overflow: 'hidden',
-        display: 'flex', flexDirection: 'column', cursor: 'grab', userSelect: 'none',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
+        cursor: 'grab', userSelect: 'none',
         zIndex: isSelected ? 2 : 1,
       }}
     >
+      {/* 내부 카드: 시각적 클리핑 담당 */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'white', borderRadius: 10,
+        ...selectedBorder,
+        overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+        transition: 'border-color 0.15s, box-shadow 0.15s',
+      }}>
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid #eff4f7', flexShrink: 0, minWidth: 0 }}>
         {editTitle
@@ -285,13 +291,16 @@ export default function CanvasWidgetCard({ w, isSelected, onSelect, onUpdate, on
         )}
       </div>
 
-      {/* 전체 테두리 투명 리사이즈 존 (시각적 표시 없음) */}
-      <div data-resize="1" onMouseDown={e => onResizeDown(e, 'n')}  style={{ position: 'absolute', top: 0,    left: 12,  right: 12,  height: 6,  cursor: 'n-resize',  zIndex: 10 }} />
+      </div>{/* 내부 카드 종료 */}
+
+      {/* 전체 테두리 투명 리사이즈 존 — 외부 컨테이너 기준으로 배치 (overflow 제한 없음) */}
+      {/* 북쪽 핸들: 카드 상단 바깥(-6px)~내부(+6px), 총 12px 히트 영역 */}
+      <div data-resize="1" onMouseDown={e => onResizeDown(e, 'n')}  style={{ position: 'absolute', top: -6,   left: 12,  right: 12,  height: 12, cursor: 'n-resize',  zIndex: 10 }} />
       <div data-resize="1" onMouseDown={e => onResizeDown(e, 's')}  style={{ position: 'absolute', bottom: 0, left: 12,  right: 12,  height: 6,  cursor: 's-resize',  zIndex: 10 }} />
       <div data-resize="1" onMouseDown={e => onResizeDown(e, 'w')}  style={{ position: 'absolute', top: 12,   bottom: 12, left: 0,    width: 6,   cursor: 'w-resize',  zIndex: 10 }} />
       <div data-resize="1" onMouseDown={e => onResizeDown(e, 'e')}  style={{ position: 'absolute', top: 12,   bottom: 12, right: 0,   width: 6,   cursor: 'e-resize',  zIndex: 10 }} />
-      <div data-resize="1" onMouseDown={e => onResizeDown(e, 'nw')} style={{ position: 'absolute', top: 0,    left: 0,    width: 12,  height: 12, cursor: 'nw-resize', zIndex: 11 }} />
-      <div data-resize="1" onMouseDown={e => onResizeDown(e, 'ne')} style={{ position: 'absolute', top: 0,    right: 0,   width: 12,  height: 12, cursor: 'ne-resize', zIndex: 11 }} />
+      <div data-resize="1" onMouseDown={e => onResizeDown(e, 'nw')} style={{ position: 'absolute', top: -6,   left: -6,   width: 18,  height: 18, cursor: 'nw-resize', zIndex: 11 }} />
+      <div data-resize="1" onMouseDown={e => onResizeDown(e, 'ne')} style={{ position: 'absolute', top: -6,   right: -6,  width: 18,  height: 18, cursor: 'ne-resize', zIndex: 11 }} />
       {/* SW — 데스크탑 전용 (마우스만) */}
       <div
         data-resize="1"

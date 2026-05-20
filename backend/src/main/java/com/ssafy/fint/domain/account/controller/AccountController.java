@@ -7,7 +7,7 @@ import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
-import com.ssafy.fint.domain.account.dto.AccountSearchableResponse;
+import com.ssafy.fint.domain.account.dto.AccountSearchablePageResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.domain.account.service.AccountService;
@@ -74,11 +74,12 @@ public class AccountController implements AccountSwagger {
 
     @Override
     @GetMapping("/searchable")
-    public ApiResponse<List<AccountSearchableResponse>> searchInTeam(
-            @RequestParam String keyword,
+    public ApiResponse<AccountSearchablePageResponse> searchInTeam(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(required = false) Integer size
     ) {
-        return ApiResponse.ok(accountService.searchInTeam(keyword, size));
+        return ApiResponse.ok(accountService.searchInTeam(keyword, page, size));
     }
 
     @Override
