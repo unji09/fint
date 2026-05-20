@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PipelineProgress from './PipelineProgress';
 import { fetchWithAuth } from '@/hooks/useAuth';
@@ -89,46 +89,50 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
   const [detail, setDetail] = useState<DealDetail | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
   const [expandedMeetingId, setExpandedMeetingId] = useState<number | null>(null);
 
-  useEffect(() => {
+  const reload = useCallback(async () => {
     if (!deal.dealId) return;
     setLoading(true);
 
-    Promise.allSettled([
+    const [detailRes, actRes] = await Promise.allSettled([
       fetchWithAuth(`/deals/${deal.dealId}`).then((r) => r.json()),
-      // 미팅만 — 날짜 desc 정렬은 백엔드 기본
       fetchWithAuth(`/activities?dealId=${deal.dealId}&type=MEETING&size=20`).then((r) => r.json()),
-    ]).then(async ([detailRes, actRes]) => {
-      if (detailRes.status === 'fulfilled') setDetail(detailRes.value.data);
-      let list: Activity[] = [];
-      if (actRes.status === 'fulfilled') {
-        const ad = actRes.value.data;
-        list =
-          (Array.isArray(ad?.data) ? ad.data : null) ??
-          ad?.content ??
-          (Array.isArray(ad) ? ad : []);
-      }
-      // 각 미팅 detail 호출 → summary 보강. 백엔드 list 응답엔 summary 없음.
-      const detailedList = await Promise.all(
-        list.map(async (a) => {
-          try {
-            const r = await fetchWithAuth(`/activities/${a.activityId}`);
-            if (!r.ok) return a;
-            const j = await r.json();
-            const d = j?.data ?? j;
-            return { ...a, summary: d?.summary ?? null } as Activity;
-          } catch {
-            return a;
-          }
-        }),
-      );
-      // 날짜 desc 정렬 (최신이 위)
-      detailedList.sort((x, y) => new Date(y.startAt).getTime() - new Date(x.startAt).getTime());
-      setActivities(detailedList);
-      setLoading(false);
-    });
+    ]);
+
+    if (detailRes.status === 'fulfilled') setDetail(detailRes.value.data);
+
+    let list: Activity[] = [];
+    if (actRes.status === 'fulfilled') {
+      const ad = actRes.value.data;
+      list =
+        (Array.isArray(ad?.data) ? ad.data : null) ??
+        ad?.content ??
+        (Array.isArray(ad) ? ad : []);
+    }
+
+    const detailedList = await Promise.all(
+      list.map(async (a) => {
+        try {
+          const r = await fetchWithAuth(`/activities/${a.activityId}`);
+          if (!r.ok) return a;
+          const j = await r.json();
+          const d = j?.data ?? j;
+          return { ...a, summary: d?.summary ?? null } as Activity;
+        } catch {
+          return a;
+        }
+      }),
+    );
+    detailedList.sort((x, y) => new Date(y.startAt).getTime() - new Date(x.startAt).getTime());
+    setActivities(detailedList);
+    setLoading(false);
   }, [deal.dealId]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   // 캘린더 등 다른 화면에서 활동 삭제 시 즉시 카드/요약 제거
   useEffect(() => {
@@ -141,6 +145,37 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
     window.addEventListener('activity:deleted', handler);
     return () => window.removeEventListener('activity:deleted', handler);
   }, []);
+
+  // PATCH 후 detail state 부분 갱신 (응답 데이터 직접 반영)
+  const applyDealUpdate = useCallback(async (body: Record<string, unknown>) => {
+    if (processing) return;
+    setProcessing(true);
+    try {
+      const res = await fetchWithAuth(`/deals/${deal.dealId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const updated = json.data ?? json;
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentPipelineStage: updated.currentPipelineStage ?? prev.currentPipelineStage,
+              wonAt: updated.wonAt ?? prev.wonAt,
+              lostAt: updated.lostAt ?? prev.lostAt,
+              lostReason: updated.lostReason ?? prev.lostReason,
+            }
+          : prev,
+      );
+      onDealChanged?.();
+    } catch {
+      alert('처리에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setProcessing(false);
+    }
+  }, [deal.dealId, processing, onDealChanged]);
 
   const d = detail;
   const stageIdx = pipelineIndex(d?.currentPipelineStage ?? null);
@@ -202,38 +237,48 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
         {!d?.wonAt && !d?.lostAt && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={async () => {
-                if (!await confirm('이 딜을 완료 처리할까요?')) return;
-                // DealUpdateRequest: pipelineStageId(7=수주) + wonAt 동시 갱신
-                try {
-                  await fetchWithAuth(`/deals/${deal.dealId}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ pipelineStageId: 7, wonAt: new Date().toISOString() }),
-                  });
-                  onDealChanged?.();
-                } catch { /* */ }
-              }} style={{ flex: 1, padding: '7px 0', borderRadius: 6, border: '1px solid #86efac', backgroundColor: '#f0fdf4', color: '#166534', fontFamily: 'Pretendard,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                딜 완료
+              <button
+                type="button"
+                disabled={processing}
+                onClick={async () => {
+                  if (!await confirm('이 딜을 완료 처리할까요?')) return;
+                  await applyDealUpdate({ pipelineStageId: 7, wonAt: new Date().toISOString() });
+                }}
+                style={{ flex: 1, padding: '7px 0', borderRadius: 6, border: '1px solid #86efac', backgroundColor: '#f0fdf4', color: '#166534', fontFamily: 'Pretendard,sans-serif', fontSize: 12, fontWeight: 600, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.6 : 1 }}
+              >
+                {processing ? '처리 중...' : '딜 완료'}
               </button>
-              <button onClick={async () => {
-                const reason = await prompt({ message: '실주 사유를 입력하세요', placeholder: '사유 입력 (선택)', variant: 'danger', confirmText: '실패 처리' });
-                if (reason === null) return;
-                // lostAt 도 함께 갱신 (백엔드가 자동 갱신하지 않을 수 있어 명시)
-                try {
-                  await fetchWithAuth(`/deals/${deal.dealId}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ lostReason: reason || '실패 처리', lostAt: new Date().toISOString() }),
-                  });
-                  onDealChanged?.();
-                } catch { /* */ }
-              }} style={{ flex: 1, padding: '7px 0', borderRadius: 6, border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#991b1b', fontFamily: 'Pretendard,sans-serif', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                딜 실패
+              <button
+                type="button"
+                disabled={processing}
+                onClick={async () => {
+                  const reason = await prompt({ message: '실주 사유를 입력하세요', placeholder: '사유 입력 (선택)', variant: 'danger', confirmText: '실패 처리' });
+                  if (reason === null) return;
+                  await applyDealUpdate({ lostReason: reason || '실패 처리', lostAt: new Date().toISOString() });
+                }}
+                style={{ flex: 1, padding: '7px 0', borderRadius: 6, border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#991b1b', fontFamily: 'Pretendard,sans-serif', fontSize: 12, fontWeight: 600, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.6 : 1 }}
+              >
+                {processing ? '처리 중...' : '딜 실패'}
               </button>
             </div>
-            <button onClick={async () => {
-              if (!await confirm({ message: '이 딜을 삭제할까요? 복구할 수 없습니다.', variant: 'danger' })) return;
-              try { await fetchWithAuth(`/deals/${deal.dealId}`, { method: 'DELETE' }); onDealChanged?.(); } catch { /* */ }
-            }} style={{ padding: '6px 0', borderRadius: 6, border: '1px solid #e2eaf0', backgroundColor: '#fff', color: '#94a3b8', fontFamily: 'Pretendard,sans-serif', fontSize: 11, cursor: 'pointer' }}>
+            <button
+              type="button"
+              disabled={processing}
+              onClick={async () => {
+                if (!await confirm({ message: '이 딜을 삭제할까요? 복구할 수 없습니다.', variant: 'danger' })) return;
+                setProcessing(true);
+                try {
+                  const res = await fetchWithAuth(`/deals/${deal.dealId}`, { method: 'DELETE' });
+                  if (!res.ok) throw new Error();
+                  onDealChanged?.();
+                } catch {
+                  alert('삭제에 실패했습니다. 다시 시도해주세요.');
+                } finally {
+                  setProcessing(false);
+                }
+              }}
+              style={{ padding: '6px 0', borderRadius: 6, border: '1px solid #e2eaf0', backgroundColor: '#fff', color: '#94a3b8', fontFamily: 'Pretendard,sans-serif', fontSize: 11, cursor: processing ? 'not-allowed' : 'pointer' }}
+            >
               딜 삭제
             </button>
           </div>
@@ -254,7 +299,7 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
         <PipelineProgress current={stageIdx} onStageClick={async (idx, stageName) => {
           if (!await confirm(`파이프라인을 "${stageName}" 단계로 변경할까요?`)) return;
           const stageId = idx + 1; // pipeline_stages PK: 1=발굴, 2=가치제안, ...7=수주
-          try { await fetchWithAuth(`/deals/${deal.dealId}`, { method: 'PATCH', body: JSON.stringify({ pipelineStageId: stageId }) }); onDealChanged?.(); } catch { /* */ }
+          await applyDealUpdate({ pipelineStageId: stageId });
         }} />
 
         <div>
