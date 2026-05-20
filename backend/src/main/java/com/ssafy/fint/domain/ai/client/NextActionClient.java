@@ -57,8 +57,8 @@ public class NextActionClient {
         if (request.dartDisclosureIds() != null && !request.dartDisclosureIds().isEmpty()) {
             body.put("dart_disclosure_ids", request.dartDisclosureIds());
         }
-        if (request.meetingId() != null) {
-            body.put("meeting_id", request.meetingId());
+        if (request.meetingIds() != null && !request.meetingIds().isEmpty()) {
+            body.put("meeting_ids", request.meetingIds());
         }
         if (request.context() != null) {
             body.put("context", request.context());

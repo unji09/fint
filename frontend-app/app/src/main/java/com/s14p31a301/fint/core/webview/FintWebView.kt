@@ -49,6 +49,7 @@ fun FintWebView(
     commands: Flow<WebCommand> = emptyFlow(),
     onPageStarted: (String) -> Unit = {},
     onPageFinished: (String) -> Unit = {},
+    onUrlChanged: (String) -> Unit = {},
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -104,10 +105,12 @@ fun FintWebView(
                         override fun onPageFinished(view: WebView?, pageUrl: String?) {
                             isLoading = false
                             pageUrl?.let(onPageFinished)
-                            // 폴백: 웹이 명시적으로 window.Android.saveAuthToken 을 호출하지 않더라도
-                            // localStorage / sessionStorage / cookie 에 저장된 토큰을 자동 추출하여
-                            // 네이티브 DataStore 로 동기화한다.
                             view?.evaluateJavascript(TOKEN_SYNC_JS, null)
+                            view?.evaluateJavascript(CALENDAR_HEIGHT_FIX_JS, null)
+                        }
+
+                        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                            url?.let(onUrlChanged)
                         }
 
                         override fun shouldOverrideUrlLoading(
@@ -328,3 +331,41 @@ private val TOKEN_SYNC_JS: String = """
 })();
 """.trimIndent()
 
+private val CALENDAR_HEIGHT_FIX_JS: String = """
+(function() {
+  if (window.__fintCalFix) return;
+  window.__fintCalFix = true;
+  var s = document.createElement('style');
+  s.id = '__fint_cal_fix';
+  document.head.appendChild(s);
+  var lastW = window.innerWidth;
+  function apply() {
+    var isCalendar = location.pathname.indexOf('/calendar') === 0;
+    if (!isCalendar) { s.textContent = ''; return; }
+    var header = document.querySelector('header');
+    var hH = header ? header.offsetHeight : 64;
+    var h = window.innerHeight - hH;
+    if (h > 0) {
+      s.textContent = 'main { height: ' + h + 'px !important; flex: none !important; overflow: visible !important; }';
+    }
+    lastW = window.innerWidth;
+  }
+  apply();
+  window.addEventListener('resize', function() {
+    if (window.innerWidth !== lastW) apply();
+  });
+  var origPush = history.pushState;
+  history.pushState = function() {
+    origPush.apply(this, arguments);
+    setTimeout(apply, 0);
+  };
+  var origReplace = history.replaceState;
+  history.replaceState = function() {
+    origReplace.apply(this, arguments);
+    setTimeout(apply, 0);
+  };
+  window.addEventListener('popstate', function() { setTimeout(apply, 0); });
+  setTimeout(apply, 100);
+  setTimeout(apply, 500);
+})();
+""".trimIndent()

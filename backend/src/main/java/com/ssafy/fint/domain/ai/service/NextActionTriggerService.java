@@ -1,12 +1,21 @@
 package com.ssafy.fint.domain.ai.service;
 
+import com.ssafy.fint.domain.activity.entity.Activity;
+import com.ssafy.fint.domain.activity.repository.ActivityRepository;
 import com.ssafy.fint.domain.ai.dto.NextActionCreateRequest;
 import com.ssafy.fint.domain.ai.entity.TriggerType;
+import com.ssafy.fint.domain.signal.entity.AccountDartDisclosure;
+import com.ssafy.fint.domain.signal.entity.AccountNewsArticle;
+import com.ssafy.fint.domain.signal.repository.AccountDartDisclosureRepository;
+import com.ssafy.fint.domain.signal.repository.AccountNewsArticleRepository;
 import com.ssafy.fint.domain.signal.service.SignalCollectService.SignalCollectResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -18,7 +27,15 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class NextActionTriggerService {
 
+    private static final int SUPPLEMENT_NEWS_LIMIT = 3;
+    private static final int SUPPLEMENT_DART_LIMIT = 1;
+    private static final int SUPPLEMENT_DAYS = 7;
+    private static final DateTimeFormatter DART_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
+
     private final AiSuggestionService aiSuggestionService;
+    private final ActivityRepository activityRepository;
+    private final AccountNewsArticleRepository accountNewsArticleRepository;
+    private final AccountDartDisclosureRepository accountDartDisclosureRepository;
 
     public void triggerFromCollectResult(Long tenantId, SignalCollectResult result) {
         Map<Long, AccountSignalChange> changes = groupByAccount(result);
@@ -38,9 +55,13 @@ public class NextActionTriggerService {
                 TriggerType triggerType = determineTriggerType(change);
                 List<Long> newsIds = mergeIds(change.newNewsIds, change.mappedNewsIds);
                 List<Long> dartIds = mergeIds(change.newDartIds, change.mappedDartIds);
+                List<Long> meetingIds = findRecentMeetingIds(accountId, tenantId);
+
+                newsIds = supplementNewsIfNeeded(triggerType, newsIds, accountId);
+                dartIds = supplementDartIfNeeded(triggerType, dartIds, accountId);
 
                 NextActionCreateRequest request = new NextActionCreateRequest(
-                        accountId, triggerType, newsIds, dartIds, null, null);
+                        accountId, triggerType, newsIds, dartIds, meetingIds, null);
 
                 aiSuggestionService.createNextActionBySystem(tenantId, request);
 
@@ -77,6 +98,44 @@ public class NextActionTriggerService {
             return TriggerType.DART_MAPPED_TO_NEW_ACCOUNT;
         }
         return TriggerType.NEWS_UPDATED;
+    }
+
+    private List<Long> findRecentMeetingIds(Long accountId, Long tenantId) {
+        return activityRepository
+                .findRecentMeetingsByAccountId(accountId, tenantId, OffsetDateTime.now())
+                .stream()
+                .map(Activity::getActivityId)
+                .toList();
+    }
+
+    List<Long> supplementNewsIfNeeded(TriggerType triggerType, List<Long> newsIds, Long accountId) {
+        if (!newsIds.isEmpty()) {
+            return newsIds;
+        }
+        if (triggerType != TriggerType.DART_UPDATED && triggerType != TriggerType.DART_MAPPED_TO_NEW_ACCOUNT) {
+            return newsIds;
+        }
+        OffsetDateTime since = OffsetDateTime.now().minusDays(SUPPLEMENT_DAYS);
+        return accountNewsArticleRepository.findRecentByAccountId(accountId, since)
+                .stream()
+                .map(a -> a.getNewsArticle().getNewsArticleId())
+                .limit(SUPPLEMENT_NEWS_LIMIT)
+                .toList();
+    }
+
+    List<Long> supplementDartIfNeeded(TriggerType triggerType, List<Long> dartIds, Long accountId) {
+        if (!dartIds.isEmpty()) {
+            return dartIds;
+        }
+        if (triggerType != TriggerType.NEWS_UPDATED && triggerType != TriggerType.NEWS_MAPPED_TO_NEW_ACCOUNT) {
+            return dartIds;
+        }
+        String since = LocalDate.now().minusDays(SUPPLEMENT_DAYS).format(DART_DATE_FORMAT);
+        return accountDartDisclosureRepository.findRecentByAccountId(accountId, since)
+                .stream()
+                .map(a -> a.getDartDisclosure().getDartDisclosureId())
+                .limit(SUPPLEMENT_DART_LIMIT)
+                .toList();
     }
 
     private Map<Long, AccountSignalChange> groupByAccount(SignalCollectResult result) {

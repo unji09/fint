@@ -10,6 +10,6 @@ public record NextActionCreateRequest(
         @NotNull TriggerType triggerType,
         List<Long> newsArticleIds,
         List<Long> dartDisclosureIds,
-        Long meetingId,
+        List<Long> meetingIds,
         String context
 ) {}
