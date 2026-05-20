@@ -107,6 +107,8 @@ export default function CustomerDetailPage() {
   const [showAllSignals, setShowAllSignals] = useState(false);
   // NextAction 의 CRM 근거 항목 클릭으로 띄우는 미팅 상세 — 캘린더의 EventDetailPanel 그대로 재사용.
   const [selectedMeetingEvent, setSelectedMeetingEvent] = useState<CalendarEvent | null>(null);
+  // EventDetailPanel 에서 "수정" 클릭 시 AddEventModal 을 편집 모드로 띄우기 위한 state.
+  const [editMeetingEvent, setEditMeetingEvent] = useState<CalendarEvent | null>(null);
   // 삭제 등 mutation 후 사용자 피드백 메시지 (2.5초 뒤 자동 사라짐)
   const [toast, setToast] = useState<string | null>(null);
   useEffect(() => {
@@ -547,13 +549,21 @@ export default function CustomerDetailPage() {
 
       {/* AI 추천 전략 → 일정 추가 모달 */}
       <AddEventModal
-        open={addEventOpen}
-        onClose={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
+        open={addEventOpen || !!editMeetingEvent}
+        onClose={() => { setAddEventOpen(false); setAddEventDefaults({}); setEditMeetingEvent(null); }}
         defaultTitle={addEventDefaults.title}
         defaultCategory={addEventDefaults.category}
         defaultAccountId={id ? Number(id) : undefined}
         defaultAccountName={accounts.find((a) => String(a.accountId) === id)?.name}
-        onSaved={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
+        editEvent={editMeetingEvent}
+        onSaved={() => {
+          // 수정 저장 시 EventDetailPanel 로 복귀. add 케이스는 selectedMeetingEvent 없음.
+          if (editMeetingEvent) setSelectedMeetingEvent(editMeetingEvent);
+          setAddEventOpen(false);
+          setAddEventDefaults({});
+          setEditMeetingEvent(null);
+          refDetail();
+        }}
       />
 
       {/* 회사 정보 시그널 전체 보기 모달 */}
@@ -569,6 +579,35 @@ export default function CustomerDetailPage() {
         event={selectedMeetingEvent}
         onClose={() => setSelectedMeetingEvent(null)}
         onDeleted={() => setSelectedMeetingEvent(null)}
+        onEdit={async (ev) => {
+          // ev 는 DealDetailPanel 미팅 list 에서 만든 가벼운 객체라 dealId/attendees 등이 비어있다.
+          // BE GET /activities/{id} 로 풍부한 데이터를 가져와 AddEventModal 에 넘긴다.
+          const activityId = Number(ev.eventId.replace(/^act-/, ''));
+          let enriched: CalendarEvent = ev;
+          try {
+            const res = await fetchWithAuth(`/activities/${activityId}`);
+            if (res.ok) {
+              const j = await res.json();
+              const d = (j?.data ?? j) as Record<string, unknown>;
+              enriched = {
+                ...ev,
+                title: typeof d.title === 'string' ? d.title : ev.title,
+                startAt: typeof d.startAt === 'string' ? d.startAt : ev.startAt,
+                endAt: typeof d.endAt === 'string' ? d.endAt : ev.endAt,
+                memo: typeof d.memo === 'string' ? d.memo : ev.memo,
+                dealId: typeof d.dealId === 'number' ? d.dealId : ev.dealId,
+                attendees: (d.attendees && typeof d.attendees === 'object')
+                  ? (d.attendees as { internal: string[]; external: string[] })
+                  : ev.attendees,
+                pipelineStage: (d.pipelineStage && typeof d.pipelineStage === 'object')
+                  ? (d.pipelineStage as { stageId: number; stageName: string; stageCode: string })
+                  : ev.pipelineStage,
+              };
+            }
+          } catch { /* 실패해도 ev 그대로 사용 */ }
+          setEditMeetingEvent(enriched);
+          setSelectedMeetingEvent(null);
+        }}
       />
 
       {/* 삭제/수정 후 사용자 피드백 토스트 (자동 2.5초 후 사라짐) */}

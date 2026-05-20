@@ -913,6 +913,18 @@ export default function CalendarPage() {
     window.history.replaceState({}, '', '/calendar');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiEvents]);
+  // GNB 로고(홈) 클릭 시 같은 /calendar 경로면 navigate 효과가 없으므로
+  // 월 뷰로 리셋해 달라는 custom event 를 수신한다.
+  useEffect(() => {
+    const handler = () => {
+      setViewModeRaw('month');
+      setCurrentDate(new Date());
+      setSelectedDate(new Date());
+    };
+    window.addEventListener('fint:goHome', handler);
+    return () => window.removeEventListener('fint:goHome', handler);
+  }, []);
+
   const miniWk = getWeekDays(selectedDate);
 
   // ── 알림 드롭 → 일정 추가 prefill ──
@@ -1595,6 +1607,8 @@ export default function CalendarPage() {
         }}
         onSaved={() => {
           refetch();
+          // 수정 저장 시 EventDetailPanel 로 복귀. 신규 등록(editEvent 없음)은 그대로 닫는다.
+          if (editEvent) setSelectedEvent(editEvent);
           setEditEvent(null);
           setDropPrefill(null);
         }}

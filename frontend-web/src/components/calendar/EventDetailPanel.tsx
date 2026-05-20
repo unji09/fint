@@ -67,6 +67,8 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const moodPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
   const [activitySummary, setActivitySummary] = useState<AiSummary | null>(null);
+  // mood 분석 상태. COMPLETED 일 때만 AI 미팅 요약을 렌더한다 (PENDING/PROCESSING 중 옛 데이터 잔재 노출 방지)
+  const [activityMoodStatus, setActivityMoodStatus] = useState<string | null>(null);
   const [expandedRecordingId, setExpandedRecordingId] = useState<number | null>(null);
   const { upload: uploadRecording, uploading: uploadingRec } = useUploadRecording();
   const { connect: connectWs, sendChunk: sendWsChunk, sendEOS, disconnect: disconnectWs } = useTranscriptStream();
@@ -120,7 +122,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   useEffect(() => {
     if (!event) {
       setRightView('memo'); setRecordSec(0);
-      setRecError(null); setActivitySummary(null); setExpandedRecordingId(null);
+      setRecError(null); setActivitySummary(null); setActivityMoodStatus(null); setExpandedRecordingId(null);
       setMemoText(''); setMemoEditing(false); setMemoSaving(false);
       setLiveSegments([]);
       setPendingRecordingId(null);
@@ -131,10 +133,11 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
     }
   }, [event]);
 
-  // Activity가 전환될 때 mood 폴링 초기화
+  // Activity가 전환될 때 mood 폴링 초기화 + 옛 요약/상태 클리어
   useEffect(() => {
     if (moodPollRef.current) { clearInterval(moodPollRef.current); moodPollRef.current = null; }
     setActivitySummary(null);
+    setActivityMoodStatus(null);
   }, [numericActivityId]);
 
   /**
@@ -162,7 +165,8 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           const d = j?.data ?? j;
           if (d?.moodStatus === 'COMPLETED' || d?.moodStatus === 'FAILED') {
             if (moodPollRef.current) { clearInterval(moodPollRef.current); moodPollRef.current = null; }
-            setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+            setActivitySummary((d?.summary as AiSummary | null) ?? null);
+            setActivityMoodStatus(d?.moodStatus ?? null);
           }
         })
         .catch(() => {});
@@ -178,7 +182,8 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data ?? j;
-        setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+        setActivitySummary((d?.summary as AiSummary | null) ?? null);
+        setActivityMoodStatus(d?.moodStatus ?? null);
         if (d?.moodStatus === 'PENDING' || d?.moodStatus === 'PROCESSING') {
           startMoodPoll(numericActivityId);
         }
@@ -209,7 +214,8 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
         .then((r) => r.json())
         .then((j) => {
           const d = j?.data ?? j;
-          setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+          setActivitySummary((d?.summary as AiSummary | null) ?? null);
+          setActivityMoodStatus(d?.moodStatus ?? null);
           // mood 분석이 아직 진행 중이면 폴링 시작
           if (d?.moodStatus === 'PENDING' || d?.moodStatus === 'PROCESSING') {
             startMoodPoll(numericActivityId);
@@ -646,9 +652,19 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
               </>
             )}
 
-            {/* AI 미팅 요약 — mood analysis 완료 시 독립 섹션으로 표시.
-                녹음이 모두 삭제되면 그 요약은 의미가 없으므로 함께 숨긴다. */}
-            {(rightView === 'memo' || rightView === 'stt') && recordings.length > 0 && activitySummary && Object.keys(activitySummary).length > 0 && (
+            {/* AI 미팅 요약 — mood analysis 가 COMPLETED + STT 도 모든 녹음에서 COMPLETED 일 때만 표시.
+                - PENDING/PROCESSING/FAILED 중에는 옛 데이터 잔재가 보이는 걸 막기 위해 숨긴다.
+                - 새 녹음이 분석 중일 때 옛 요약이 잠시 보이던 문제 회피 (BE moodStatus 는 새 녹음 STT 완료 후에야 갱신됨).
+                - summary 객체의 키만 있고 값이 다 비어있는 경우(라벨만 둥둥)도 숨긴다.
+                - 녹음이 모두 삭제되면 요약 자체가 의미 없으므로 함께 숨긴다. */}
+            {(rightView === 'memo' || rightView === 'stt')
+              && recordings.length > 0
+              && recordings.every((r) => r.sttStatus === 'COMPLETED')
+              && activityMoodStatus === 'COMPLETED'
+              && activitySummary
+              && Object.values(activitySummary).some((v) =>
+                Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0,
+              ) && (
               <div
                 style={{
                   border: '1px solid #E5E6DE',
