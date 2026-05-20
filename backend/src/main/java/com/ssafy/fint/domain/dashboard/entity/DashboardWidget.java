@@ -97,6 +97,14 @@ public class DashboardWidget extends BaseUpdatableEntity {
         this.widgetType = widgetType;
     }
 
+    public void changeSourceQuery(String sourceQuery) {
+        this.sourceQuery = sourceQuery;
+    }
+
+    public void linkToQuery(DashboardQuery dashboardQuery) {
+        this.dashboardQuery = dashboardQuery;
+    }
+
     public void linkToDashboard(Dashboard dashboard) {
         this.dashboard = dashboard;
     }

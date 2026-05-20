@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Dashboard } from '@/types/dashboard';
 import useBreakpoint from '@/hooks/useBreakpoint';
@@ -34,6 +34,7 @@ interface DashboardListProps {
   loading: boolean;
   onCreateNew: () => void;
   onDelete?: (dashboardId: number, title: string) => void;
+  onRename?: (dashboardId: number, title: string) => Promise<boolean>;
   deleting?: boolean;
 }
 
@@ -113,14 +114,43 @@ function NewCard({ onClick }: { onClick: () => void }) {
 function DashboardCard({
   dashboard,
   onDelete,
+  onRename,
   deleting,
 }: {
   dashboard: Dashboard;
   onDelete?: (dashboardId: number, title: string) => void;
+  onRename?: (dashboardId: number, title: string) => Promise<boolean>;
   deleting?: boolean;
 }) {
   const router = useRouter();
   const thumbnailUrl = useThumbnailUrl(dashboard.thumbnailKey);
+  const [editing, setEditing] = useState(false);
+  const [titleVal, setTitleVal] = useState(dashboard.title);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const commitRename = async () => {
+    setEditing(false);
+    const trimmed = titleVal.trim();
+    if (!trimmed || trimmed === dashboard.title) { setTitleVal(dashboard.title); return; }
+    const ok = await onRename?.(dashboard.dashboardId, trimmed);
+    if (!ok) setTitleVal(dashboard.title);
+  };
+
+  // Single click → navigate after delay; double click → rename
+  const handleTitleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (editing) return;
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      setEditing(true);
+    } else {
+      clickTimerRef.current = setTimeout(() => {
+        clickTimerRef.current = null;
+        router.push(`/dashboard/${dashboard.dashboardId}`);
+      }, 160);
+    }
+  };
 
   return (
     <div
@@ -150,15 +180,10 @@ function DashboardCard({
       }}
       style={{ position: 'relative' }}
     >
-      <button
-        onClick={() => {
-          const target = `/dashboard/${dashboard.dashboardId}`;
-          console.log('[FINT] DashboardCard click → push:', target);
-          router.push(target);
-        }}
-        style={{ ...CARD_BASE, gap: 0, justifyContent: 'flex-start', overflow: 'hidden' }}
-      >
+      <div style={{ ...CARD_BASE, gap: 0, justifyContent: 'flex-start', overflow: 'hidden' }}>
+        {/* Thumbnail — click navigates */}
         <div
+          onClick={() => !editing && router.push(`/dashboard/${dashboard.dashboardId}`)}
           style={{
             width: '100%',
             flex: 1,
@@ -169,6 +194,7 @@ function DashboardCard({
             background: '#f3f4f6',
             borderRadius: '11px 11px 0 0',
             overflow: 'hidden',
+            cursor: 'pointer',
           }}
         >
           {thumbnailUrl ? (
@@ -185,6 +211,8 @@ function DashboardCard({
             </svg>
           )}
         </div>
+
+        {/* Info bar — single click navigates (220ms delay), double click renames */}
         <div
           style={{
             width: '100%',
@@ -196,21 +224,54 @@ function DashboardCard({
             gap: 2,
           }}
         >
+          {editing ? (
+            <input
+              autoFocus
+              value={titleVal}
+              onChange={(e) => setTitleVal(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') { setTitleVal(dashboard.title); setEditing(false); }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                fontFamily: 'Pretendard, sans-serif',
+                fontWeight: 600,
+                fontSize: 15,
+                color: '#1d1a24',
+                border: 'none',
+                outline: '1px solid #06b6d4',
+                borderRadius: 4,
+                padding: '1px 4px',
+                width: '100%',
+                boxSizing: 'border-box',
+                background: 'white',
+              }}
+            />
+          ) : (
+            <span
+              title="더블클릭하면 이름을 바꿀 수 있어요"
+              onClick={handleTitleClick}
+              style={{
+                fontFamily: 'Pretendard, sans-serif',
+                fontWeight: 600,
+                fontSize: 15,
+                color: '#1d1a24',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'block',
+              }}
+            >
+              {titleVal}
+            </span>
+          )}
           <span
-            style={{
-              fontFamily: 'Pretendard, sans-serif',
-              fontWeight: 600,
-              fontSize: 15,
-              color: '#1d1a24',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              textAlign: 'left',
-            }}
-          >
-            {dashboard.title}
-          </span>
-          <span
+            onClick={() => !editing && router.push(`/dashboard/${dashboard.dashboardId}`)}
             style={{
               fontFamily: 'Pretendard, sans-serif',
               fontWeight: 500,
@@ -218,12 +279,13 @@ function DashboardCard({
               color: '#6e7590',
               whiteSpace: 'nowrap',
               textAlign: 'left',
+              cursor: 'pointer',
             }}
           >
             {formatRelativeTime(dashboard.lastAccessedAt ?? undefined)}
           </span>
         </div>
-      </button>
+      </div>
 
       {onDelete && (
         <button
@@ -275,7 +337,7 @@ function DashboardCard({
   );
 }
 
-export default function DashboardList({ dashboards, loading, onCreateNew, onDelete, deleting }: DashboardListProps) {
+export default function DashboardList({ dashboards, loading, onCreateNew, onDelete, onRename, deleting }: DashboardListProps) {
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
   return (
@@ -321,7 +383,7 @@ export default function DashboardList({ dashboards, loading, onCreateNew, onDele
           <>
             <NewCard onClick={onCreateNew} />
             {dashboards.map((db) => (
-              <DashboardCard key={db.dashboardId} dashboard={db} onDelete={onDelete} deleting={deleting} />
+              <DashboardCard key={db.dashboardId} dashboard={db} onDelete={onDelete} onRename={onRename} deleting={deleting} />
             ))}
           </>
         )}

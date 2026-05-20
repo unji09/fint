@@ -56,10 +56,10 @@ public class DashboardQueryService {
 
         String traceId = UUID.randomUUID().toString();
         log.info("[SSE] query start traceId={} dashboardId={} userId={}", traceId, dashboardId, me.getUserId());
-        registerPendingState(traceId, dashboardId, request.inputText(), me);
+        registerPendingState(traceId, dashboardId, request.inputText(), request.widgetId(), me);
 
         try {
-            queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), me));
+            queryDispatcher.dispatch(buildDispatchCommand(traceId, dashboardId, request.inputText(), request.widgetId(), me));
         } catch (Exception e) {
             log.error("[SSE] dispatch failed traceId={}", traceId, e);
             markDispatchFailed(traceId);
@@ -70,7 +70,7 @@ public class DashboardQueryService {
         return new QueryStartResponse(traceId);
     }
 
-    private void registerPendingState(String traceId, Long dashboardId, String inputText, CustomUserDetails me) {
+    private void registerPendingState(String traceId, Long dashboardId, String inputText, Long widgetId, CustomUserDetails me) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", STATUS_PENDING);
         payload.put("dashboardId", dashboardId);
@@ -78,6 +78,9 @@ public class DashboardQueryService {
         payload.put("userId", me.getUserId());
         payload.put("tenantId", me.getTenantId());
         payload.put("requestedAt", OffsetDateTime.now().toString());
+        if (widgetId != null) {
+            payload.put("widgetId", widgetId);
+        }
 
         try {
             redisTemplate.opsForValue().set(
@@ -106,14 +109,26 @@ public class DashboardQueryService {
     }
 
     private DashboardQueryDispatchCommand buildDispatchCommand(
-            String traceId, Long dashboardId, String inputText, CustomUserDetails me) {
-        // 위젯이 0개면 CREATE, 1개 이상이면 ADD (+ 기존 위젯 컨텍스트를 LLM 에 전달해 중복 회피 유도).
+            String traceId, Long dashboardId, String inputText, Long widgetId, CustomUserDetails me) {
         List<DashboardWidget> widgets = dashboardWidgetRepository.findAllByDashboard_DashboardId(dashboardId);
         boolean hasWidgets = !widgets.isEmpty();
         List<Object> existingWidgets = hasWidgets
                 ? widgets.stream().<Object>map(this::toAiPayload).toList()
                 : List.of();
-        QueryAction action = hasWidgets ? QueryAction.ADD : QueryAction.CREATE;
+
+        QueryAction action;
+        Object currentWidget = null;
+        if (widgetId != null) {
+            // MODIFY: 대상 위젯을 찾아 currentWidget 으로 전달 → AI 가 기존 쿼리 기반으로 수정
+            action = QueryAction.MODIFY;
+            currentWidget = widgets.stream()
+                    .filter(w -> w.getDashboardWidgetId().equals(widgetId))
+                    .findFirst()
+                    .map(this::toAiPayload)
+                    .orElseThrow(() -> new BusinessException(DashboardErrorCode.WIDGET_NOT_FOUND));
+        } else {
+            action = hasWidgets ? QueryAction.ADD : QueryAction.CREATE;
+        }
 
         return new DashboardQueryDispatchCommand(
                 traceId,
@@ -123,7 +138,7 @@ public class DashboardQueryService {
                 me.getTenantId(),
                 me.getUserId(),
                 existingWidgets,
-                null
+                currentWidget
         );
     }
 

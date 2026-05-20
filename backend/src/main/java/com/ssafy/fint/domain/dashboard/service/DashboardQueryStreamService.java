@@ -49,6 +49,7 @@ public class DashboardQueryStreamService {
     private static final String FIELD_RESULT = "result";
     private static final String FIELD_USER_ID = "userId";
     private static final String FIELD_TENANT_ID = "tenantId";
+    private static final String FIELD_WIDGET_ID = "widgetId";
     private static final String FIELD_ERROR = "error";
     private static final String FIELD_RESULT_DATA = "data";
     private static final String FIELD_RESULT_INSIGHT = "insight_text";
@@ -218,14 +219,16 @@ public class DashboardQueryStreamService {
     private void sendComplete(SseEmitter emitter, Map<String, Object> payload) throws IOException {
         Long dashboardId = extractLong(payload, FIELD_DASHBOARD_ID);
         Long tenantId = extractLong(payload, FIELD_TENANT_ID);
+        Long userId = extractLong(payload, FIELD_USER_ID);
+        Long modifyWidgetId = extractLong(payload, FIELD_WIDGET_ID);
         String inputText = (String) payload.get(FIELD_INPUT_TEXT);
         Map<String, Object> result = asMap(payload.get(FIELD_RESULT));
 
-        if (dashboardId == null || tenantId == null || result == null) {
-            throw new IllegalStateException("COMPLETED payload missing required fields: dashboardId, tenantId, or result");
+        if (dashboardId == null || tenantId == null || userId == null || result == null) {
+            throw new IllegalStateException("COMPLETED payload missing required fields: dashboardId, tenantId, userId, or result");
         }
 
-        DashboardQueryResultWriter.InsertedIds ids = resultWriter.persist(tenantId, dashboardId, inputText, result);
+        DashboardQueryResultWriter.InsertedIds ids = resultWriter.persist(tenantId, userId, dashboardId, inputText, modifyWidgetId, result);
 
         QueryStreamCompleteEvent body = new QueryStreamCompleteEvent(
                 ids.widgetId(),

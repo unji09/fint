@@ -1,6 +1,6 @@
 'use client';
 
-import { KeyboardEvent, useState } from 'react';
+import { KeyboardEvent, useRef, useState } from 'react';
 import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface DashboardHeroProps {
@@ -19,6 +19,7 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
   const bp = useBreakpoint();
   const isMobile = bp === 'mobile';
   const isTablet = bp === 'tablet';
+  const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState('');
   const handleSubmit = () => {
     if (!input.trim() || loading) return;
@@ -35,7 +36,6 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        overflow: 'hidden',
       }}
     >
       <div
@@ -96,6 +96,7 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
           }}
         />
         <div
+          onClick={() => inputRef.current?.focus()}
           style={{
             position: 'relative',
             background: '#fff',
@@ -104,6 +105,7 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
             alignItems: 'center',
             padding: 6,
             boxShadow: '0px 8px 15px rgba(0,104,122,0.08)',
+            cursor: 'text',
           }}
         >
           <div
@@ -121,6 +123,7 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
             </svg>
           </div>
           <input
+            ref={inputRef}
             style={{
               flex: 1,
               height: 42,
@@ -133,6 +136,7 @@ export default function DashboardHero({ onSubmit, loading = false }: DashboardHe
               background: 'transparent',
               color: '#1d1a24',
               minWidth: 0,
+              cursor: 'text',
             }}
             placeholder="예: 3분기 목표 달성률을 보여주는 대시보드"
             value={input}
