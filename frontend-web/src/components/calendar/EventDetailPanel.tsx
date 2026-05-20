@@ -165,7 +165,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           const d = j?.data ?? j;
           if (d?.moodStatus === 'COMPLETED' || d?.moodStatus === 'FAILED') {
             if (moodPollRef.current) { clearInterval(moodPollRef.current); moodPollRef.current = null; }
-            setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+            setActivitySummary((d?.summary as AiSummary | null) ?? null);
             setActivityMoodStatus(d?.moodStatus ?? null);
           }
         })
@@ -182,7 +182,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
       .then((r) => r.json())
       .then((j) => {
         const d = j?.data ?? j;
-        setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+        setActivitySummary((d?.summary as AiSummary | null) ?? null);
         setActivityMoodStatus(d?.moodStatus ?? null);
         if (d?.moodStatus === 'PENDING' || d?.moodStatus === 'PROCESSING') {
           startMoodPoll(numericActivityId);
@@ -214,7 +214,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
         .then((r) => r.json())
         .then((j) => {
           const d = j?.data ?? j;
-          setActivitySummary((d?.summary ?? d?.aiSummary) ?? null);
+          setActivitySummary((d?.summary as AiSummary | null) ?? null);
           setActivityMoodStatus(d?.moodStatus ?? null);
           // mood 분석이 아직 진행 중이면 폴링 시작
           if (d?.moodStatus === 'PENDING' || d?.moodStatus === 'PROCESSING') {
