@@ -4,6 +4,9 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import StrategyCardComponent from '@/components/customer/StrategyCard';
 import SignalItem from '@/components/customer/SignalItem';
+import AllSignalsModal from '@/components/customer/AllSignalsModal';
+import EventDetailPanel from '@/components/calendar/EventDetailPanel';
+import type { CalendarEvent, EventCategory } from '@/components/calendar/types';
 import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
 import WeatherPanel from '@/components/customer/WeatherPanel';
@@ -20,6 +23,21 @@ import type { Deal, StrategyCard } from '@/types/customer';
 
 const SA = ['#06b6d4', '#cbd5e1', '#fb923c'];
 const F = 'Pretendard,sans-serif';
+
+// 전화번호 입력 자동 포맷팅. 숫자만 남기고 11자리(휴대폰) / 10자리(일반) 기준 하이픈 삽입.
+function formatPhoneNumber(input: string): string {
+  const digits = input.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
+
+// 이메일 형식 검증. 빈 문자열은 valid 로 간주(선택 입력).
+function isValidEmail(value: string): boolean {
+  if (!value.trim()) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
 
 // Next Action category → AddEventModal 카테고리 매핑.
 // NEWS/DART/CRM 같은 시그널 출처는 '미팅'(가장 일반적) 으로, ActivityType 코드면 직접 매핑.
@@ -49,7 +67,7 @@ export default function CustomerDetailPage() {
   const isCompact = bp !== 'desktop';
   const scrollRef = useRef<HTMLDivElement>(null);
   const { accounts } = useAccountList();
-  const { signals, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
+  const { signals, contacts, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
   const { deals: pagedDeals, hasNext: hasMoreDeals, loading: dealsLoading, loadMore: loadMoreDeals, refetch: refDeals } = useAccountDeals(id ?? null, 10);
   const allDealsScrollRef = useRef<HTMLDivElement>(null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
@@ -86,6 +104,16 @@ export default function CustomerDetailPage() {
   const [ecEmail, setEcEmail] = useState('');
   // 딜 추가
   const [showAddDeal, setShowAddDeal] = useState(false);
+  const [showAllSignals, setShowAllSignals] = useState(false);
+  // NextAction 의 CRM 근거 항목 클릭으로 띄우는 미팅 상세 — 캘린더의 EventDetailPanel 그대로 재사용.
+  const [selectedMeetingEvent, setSelectedMeetingEvent] = useState<CalendarEvent | null>(null);
+  // 삭제 등 mutation 후 사용자 피드백 메시지 (2.5초 뒤 자동 사라짐)
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [toast]);
   const [ndTitle, setNdTitle] = useState('');
   const [ndAmount, setNdAmount] = useState('');
   const [ndDate, setNdDate] = useState('');
@@ -128,6 +156,26 @@ export default function CustomerDetailPage() {
   const visDeal = cDealIds ? deals.filter(d => cDealIds.has(d.dealId)) : deals;
   const acc = accounts.find(a => String(a.accountId) === String(id)) ?? accounts[0];
 
+  // 회사 정보 박스 대표 3건: 최신 NEWS 1 + 최신 DART 1 + 사용 안 한 것 중 최신순으로 3건 채움.
+  // 시간순으로만 자르면 한 종류에 몰려서 다양성이 사라지므로 종류별 최신을 우선 보장한다.
+  // DART 가 없으면 NEWS 로, NEWS 가 없으면 DART 로 채워 항상 가능한 만큼 3건까지 노출.
+  const repSignals = (() => {
+    const result: typeof signals = [];
+    const used = new Set<number>();
+    const pick = (predicate: (s: typeof signals[number]) => boolean) => {
+      const idx = signals.findIndex((s, i) => !used.has(i) && predicate(s));
+      if (idx >= 0) { result.push(signals[idx]); used.add(idx); }
+    };
+    pick((s) => s.type === 'NEWS');
+    pick((s) => s.type === 'DART');
+    while (result.length < 3) {
+      const before = result.length;
+      pick(() => true);
+      if (result.length === before) break;
+    }
+    return result;
+  })();
+
   // 사이드바에서 setSelContact 호출 시 — 관련 page state reset
   useEffect(() => {
     setSelDeal(null);
@@ -136,10 +184,49 @@ export default function CustomerDetailPage() {
     if (selContact) {
       setEcName(selContact.name);
       setEcTitle(selContact.role);
-      setEcPhone(selContact.phone ?? '');
+      setEcPhone(formatPhoneNumber(selContact.phone ?? ''));
       setEcEmail(selContact.email ?? '');
     }
   }, [selContact]);
+
+  // contacts 가 갱신되면(편집/등록/삭제 후 refDetail) selContact 도 최신 객체로 동기화.
+  // 새로고침 없이 편집 결과가 즉시 화면에 반영된다.
+  useEffect(() => {
+    if (!selContact) return;
+    const updated = contacts.find((c) => c.contactId === selContact.contactId);
+    if (updated && updated !== selContact) {
+      setSelContact(updated);
+    }
+    // selContact 자체를 의존성에 두면 setSelContact 후 무한 루프 → contactId 만 추적
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts, selContact?.contactId]);
+
+  // deals 가 갱신되면(추가/수정/삭제 후 refDetail) selDeal 도 동기화.
+  // 삭제된 경우(deals 에서 못 찾음) selDeal=null + 토스트로 사용자 피드백.
+  useEffect(() => {
+    if (!selDeal) return;
+    const updated = deals.find((d) => d.dealId === selDeal.dealId);
+    if (!updated) {
+      setToast(`‘${selDeal.title}’ 딜이 삭제되었습니다.`);
+      setSelDeal(null);
+      setAllDeals(false);
+      return;
+    }
+    if (updated !== selDeal) setSelDeal(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deals, selDeal?.dealId]);
+
+  // contacts 에서 selContact 가 사라진 경우(삭제됨) 피드백.
+  useEffect(() => {
+    if (!selContact) return;
+    if (contacts.length === 0) return; // 초기 로딩 중에는 무시
+    const exists = contacts.some((c) => c.contactId === selContact.contactId);
+    if (!exists) {
+      setToast(`‘${selContact.name}’ 담당자가 삭제되었습니다.`);
+      setSelContact(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts, selContact?.contactId]);
 
   const crumbs: { label: string; onClick?: () => void }[] = [{ label: acc?.name ?? '고객사', onClick: () => { setSelContact(null); setSelDeal(null); setAllDeals(false); } }];
   if (selContact) crumbs.push({ label: selContact.name, onClick: () => { setSelDeal(null); setAllDeals(false); } });
@@ -232,15 +319,41 @@ export default function CustomerDetailPage() {
                             <input value={ecName} onChange={e => setEcName(e.target.value)} placeholder="이름" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
                             <input value={ecTitle} onChange={e => setEcTitle(e.target.value)} placeholder="직책" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
                           </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                            <input value={ecPhone} onChange={e => setEcPhone(e.target.value)} placeholder="전화번호" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
-                            <input value={ecEmail} onChange={e => setEcEmail(e.target.value)} placeholder="이메일" style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }} />
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'start' }}>
+                            <input
+                              value={ecPhone}
+                              onChange={e => setEcPhone(formatPhoneNumber(e.target.value))}
+                              placeholder="전화번호 (숫자만)"
+                              inputMode="numeric"
+                              autoComplete="tel"
+                              style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #e2eaf0', fontSize: 13, outline: 'none', fontFamily: F }}
+                            />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              <input
+                                type="email"
+                                value={ecEmail}
+                                onChange={e => setEcEmail(e.target.value)}
+                                placeholder="이메일"
+                                autoComplete="email"
+                                style={{ padding: '7px 10px', borderRadius: 6, border: `1px solid ${isValidEmail(ecEmail) ? '#e2eaf0' : '#ef4444'}`, fontSize: 13, outline: 'none', fontFamily: F }}
+                              />
+                              {!isValidEmail(ecEmail) && (
+                                <span style={{ fontSize: 11, color: '#ef4444', fontFamily: F }}>
+                                  이메일 형식이 올바르지 않습니다.
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <button onClick={async () => {
-                            if (!selContact.contactId) return;
-                            await updContact(selContact.contactId, { name: ecName.trim() || undefined, title: ecTitle.trim() || undefined, phone: ecPhone.trim() || undefined, email: ecEmail.trim() || undefined });
-                            setEditContact(false); refDetail();
-                          }} style={{ alignSelf: 'flex-end', padding: '5px 14px', borderRadius: 6, border: 'none', backgroundColor: '#06b6d4', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>저장</button>
+                          <button
+                            onClick={async () => {
+                              if (!selContact.contactId) return;
+                              if (!isValidEmail(ecEmail)) return;
+                              await updContact(selContact.contactId, { name: ecName.trim() || undefined, title: ecTitle.trim() || undefined, phone: ecPhone.trim() || undefined, email: ecEmail.trim() || undefined });
+                              setEditContact(false); refDetail();
+                            }}
+                            disabled={!isValidEmail(ecEmail)}
+                            style={{ alignSelf: 'flex-end', padding: '5px 14px', borderRadius: 6, border: 'none', backgroundColor: isValidEmail(ecEmail) ? '#06b6d4' : '#cbd5e1', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isValidEmail(ecEmail) ? 'pointer' : 'default', fontFamily: F }}
+                          >저장</button>
                         </div>
                       ) : (
                         <>
@@ -263,10 +376,17 @@ export default function CustomerDetailPage() {
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontFamily: F, fontWeight: 600, fontSize: 14, color: '#1e293b' }}>회사 정보</span>
-                        <button style={{ fontFamily: F, fontSize: 11, color: '#94a3b8', cursor: 'pointer', background: 'none', border: 'none' }}>더보기</button>
+                        {signals.length > 0 && (
+                          <button
+                            onClick={() => setShowAllSignals(true)}
+                            style={{ fontFamily: F, fontSize: 11, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}
+                          >
+                            더보기
+                          </button>
+                        )}
                       </div>
-                      {signals.length > 0 ? (
-                        signals.slice(0, 3).map((s, i) => <SignalItem key={i} signal={s} accent={SA[i] ?? '#cbd5e1'} />)
+                      {repSignals.length > 0 ? (
+                        repSignals.map((s, i) => <SignalItem key={i} signal={s} accent={SA[i] ?? '#cbd5e1'} />)
                       ) : (
                         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <p style={{ fontFamily: F, fontSize: 13, color: '#94a3b8', margin: 0, textAlign: 'center' }}>시그널 없음</p>
@@ -321,7 +441,28 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* 딜 상세 */}
-          {selDeal && <DealDetailPanel deal={selDeal} onDealChanged={() => { refDetail(); refDeals(); }} />}
+          {selDeal && (
+            <DealDetailPanel
+              deal={selDeal}
+              onDealChanged={() => { refDetail(); refDeals(); }}
+              onMeetingDetail={(a) => {
+                // 미팅 활동 객체를 CalendarEvent 로 변환해 EventDetailPanel 모달 마운트.
+                // 캘린더 페이지로 navigation 하지 않는다.
+                const typeMap: Record<string, EventCategory> = { MEETING: '미팅', CALL: '전화', EMAIL: '이메일', MEMO: '업무' };
+                setSelectedMeetingEvent({
+                  eventId: `act-${a.activityId}`,
+                  source: 'FINT',
+                  title: a.title ?? '',
+                  startAt: a.startAt ?? '',
+                  endAt: a.startAt ?? '', // list 응답엔 endAt 없음 — EventDetailPanel 내부 fetch 가 실제 endAt 으로 덮어씀
+                  category: typeMap[a.type] ?? '미팅',
+                  accountName: acc?.name,
+                  accountId: id ? Number(id) : undefined,
+                  memo: a.memo ?? undefined,
+                });
+              }}
+            />
+          )}
 
           {/* AI 추천 전략 — 데이터 있을 때만 */}
           {!selDeal && strats.length > 0 && (
@@ -338,6 +479,54 @@ export default function CustomerDetailPage() {
                   onAddToCalendar={(c) => {
                     setAddEventDefaults({ title: c.title, category: mapNextActionCategory(c.category) });
                     setAddEventOpen(true);
+                  }}
+                  onCrmClick={async (summary) => {
+                    // BE 응답에 activity_id 가 없어서 summary 텍스트로 그 고객사 미팅을 매칭.
+                    // 같은 제목 미팅이 여럿이면 첫 매칭만 잡으므로 100% 정확하진 않다 (사용자 합의).
+                    if (!id) return;
+                    try {
+                      const res = await fetchWithAuth(`/activities?accountId=${id}&type=MEETING&size=50`);
+                      if (!res.ok) { setToast('미팅 정보를 불러오지 못했습니다.'); return; }
+                      const json = await res.json();
+                      const data = json?.data;
+                      const list: unknown[] = Array.isArray(data) ? data
+                        : (data && typeof data === 'object')
+                          ? (['items', 'content', 'activities', 'results']
+                              .map((k) => (data as Record<string, unknown>)[k])
+                              .find((v) => Array.isArray(v)) as unknown[] | undefined) ?? []
+                          : [];
+                      const trimmed = summary.trim();
+                      const match = list.find((a) => {
+                        if (!a || typeof a !== 'object') return false;
+                        const obj = a as Record<string, unknown>;
+                        const t = typeof obj.title === 'string' ? obj.title.trim() : '';
+                        const m = typeof obj.memo === 'string' ? obj.memo.trim() : '';
+                        return t === trimmed || m === trimmed;
+                      }) as Record<string, unknown> | undefined;
+                      if (!match) { setToast('연결된 미팅을 찾지 못했습니다.'); return; }
+                      const rawId = match.activityId ?? match.activity_id;
+                      const aid = typeof rawId === 'number' ? rawId
+                        : (typeof rawId === 'string' && /^\d+$/.test(rawId)) ? Number(rawId)
+                        : null;
+                      if (!aid) { setToast('미팅을 식별할 수 없습니다.'); return; }
+                      const typeMap: Record<string, EventCategory> = { MEETING: '미팅', CALL: '전화', EMAIL: '이메일', MEMO: '업무' };
+                      const rawType = typeof match.type === 'string' ? match.type : '';
+                      // 캘린더 EventDetailPanel 이 사용하는 CalendarEvent 형태로 변환.
+                      // 자체적으로 GET /activities/{id} 를 호출해 메모/요약/녹음까지 풍부하게 표시한다.
+                      setSelectedMeetingEvent({
+                        eventId: `act-${aid}`,
+                        source: 'FINT',
+                        title: typeof match.title === 'string' ? match.title : '',
+                        startAt: typeof match.startAt === 'string' ? match.startAt : '',
+                        endAt: typeof match.endAt === 'string' ? match.endAt : '',
+                        category: typeMap[rawType] ?? '미팅',
+                        accountName: acc?.name,
+                        accountId: id ? Number(id) : undefined,
+                        memo: typeof match.memo === 'string' ? match.memo : undefined,
+                      });
+                    } catch {
+                      setToast('미팅 정보를 불러오지 못했습니다.');
+                    }
                   }}
                 />
               ))}
@@ -356,6 +545,54 @@ export default function CustomerDetailPage() {
         defaultAccountName={accounts.find((a) => String(a.accountId) === id)?.name}
         onSaved={() => { setAddEventOpen(false); setAddEventDefaults({}); }}
       />
+
+      {/* 회사 정보 시그널 전체 보기 모달 */}
+      <AllSignalsModal
+        open={showAllSignals}
+        onClose={() => setShowAllSignals(false)}
+        signals={signals}
+        accountName={acc?.name}
+      />
+
+      {/* NextAction CRM 근거 항목 클릭 시 그 미팅 상세 (캘린더 일정 화면 그대로 재사용) */}
+      <EventDetailPanel
+        event={selectedMeetingEvent}
+        onClose={() => setSelectedMeetingEvent(null)}
+        onDeleted={() => setSelectedMeetingEvent(null)}
+      />
+
+      {/* 삭제/수정 후 사용자 피드백 토스트 (자동 2.5초 후 사라짐) */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 80,
+            right: 24,
+            zIndex: 1300,
+            padding: '10px 16px',
+            borderRadius: 8,
+            backgroundColor: '#1e293b',
+            color: '#fff',
+            fontFamily: F,
+            fontSize: 13,
+            fontWeight: 500,
+            boxShadow: '0 6px 16px rgba(0,0,0,0.18)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            animation: 'fintToastIn 180ms ease-out',
+          }}
+        >
+          <span style={{ color: '#22c55e' }}>✓</span>
+          <span>{toast}</span>
+        </div>
+      )}
+      <style jsx global>{`
+        @keyframes fintToastIn {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </>
   );
 }

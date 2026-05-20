@@ -108,11 +108,29 @@ async def _analyze_and_callback(
             request.activity_id,
             e.detail,
         )
+        await _notify_failure(spring, request.activity_id, request.tenant_id, str(e.detail))
     except Exception as e:
         logger.exception(
             "[MoodAnalysis] 예외 activityId=%d error=%s",
             request.activity_id,
             str(e),
+        )
+        await _notify_failure(spring, request.activity_id, request.tenant_id, str(e))
+
+
+async def _notify_failure(
+    spring: SpringClient,
+    activity_id: int,
+    tenant_id: int,
+    reason: str,
+) -> None:
+    try:
+        await spring.send_mood_failure(activity_id, tenant_id, reason)
+    except Exception as cb_e:
+        logger.error(
+            "[MoodAnalysis] failure callback 전송 실패 activityId=%d error=%s",
+            activity_id,
+            str(cb_e),
         )
 
 

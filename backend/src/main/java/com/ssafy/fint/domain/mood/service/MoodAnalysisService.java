@@ -99,4 +99,14 @@ public class MoodAnalysisService {
                     accountId, activityId, e);
         }
     }
+
+    @Transactional
+    public void markFailed(Long activityId, String reason) {
+        Activity activity = activityRepository.findById(activityId)
+            .orElseThrow(() -> new BusinessException(ActivityErrorCode.ACTIVITY_NOT_FOUND));
+
+        activity.changeMoodStatus(MoodStatus.FAILED);
+
+        log.warn("[MoodCallback] markFailed activityId={} reason={}", activityId, reason);
+    }
 }
