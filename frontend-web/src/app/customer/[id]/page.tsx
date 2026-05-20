@@ -8,7 +8,7 @@ import DealCard from '@/components/customer/DealCard';
 import DealDetailPanel from '@/components/customer/DealDetailPanel';
 import WeatherPanel from '@/components/customer/WeatherPanel';
 import AddEventModal from '@/components/calendar/AddEventModal';
-import { useAccountList, useAccountDetail } from '@/hooks/useCustomer';
+import { useAccountList, useAccountDetail, useAccountDeals } from '@/hooks/useCustomer';
 import { useCustomer } from '../CustomerContext';
 import { useDeleteContact, useUpdateContact } from '@/hooks/useContact';
 import { useCreateDeal } from '@/hooks/useDeal';
@@ -50,6 +50,8 @@ export default function CustomerDetailPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { accounts } = useAccountList();
   const { signals, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
+  const { deals: pagedDeals, hasNext: hasMoreDeals, loading: dealsLoading, loadMore: loadMoreDeals, refetch: refDeals } = useAccountDeals(id ?? null, 10);
+  const allDealsScrollRef = useRef<HTMLDivElement>(null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
   const { remove: delContact } = useDeleteContact();
   const { update: updContact } = useUpdateContact();
@@ -115,6 +117,14 @@ export default function CustomerDetailPage() {
     }
   }, [deals, dealParam, id, router]);
 
+  // 전체 딜: 스크롤이 없으면 (화면이 넓어서 카드가 다 보이면) 자동으로 다음 페이지 로딩
+  useEffect(() => {
+    if (!allDeals || selContact || dealsLoading || !hasMoreDeals) return;
+    const el = allDealsScrollRef.current;
+    if (!el) return;
+    if (el.scrollWidth <= el.clientWidth) loadMoreDeals();
+  }, [allDeals, selContact, dealsLoading, hasMoreDeals, pagedDeals.length, loadMoreDeals]);
+
   const visDeal = cDealIds ? deals.filter(d => cDealIds.has(d.dealId)) : deals;
   const acc = accounts.find(a => String(a.accountId) === String(id)) ?? accounts[0];
 
@@ -141,7 +151,7 @@ export default function CustomerDetailPage() {
           {/* 모바일 뒤로가기 */}
           {isCompact && (
             <button
-              onClick={() => router.push('/customer')}
+              onClick={() => { setSelContact(null); router.push('/customer'); }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: F, fontSize: 14, color: '#06b6d4', fontWeight: 500 }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -173,14 +183,26 @@ export default function CustomerDetailPage() {
             {allDeals ? (
               <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: F, fontWeight: 600, fontSize: 15, color: '#1e293b' }}>{selContact ? `${selContact.name} 관련 딜` : '전체 딜'} ({visDeal.length})</span>
+                  <span style={{ fontFamily: F, fontWeight: 600, fontSize: 15, color: '#1e293b' }}>{selContact ? `${selContact.name} 관련 딜` : '전체 딜'}</span>
                   <button onClick={() => setAllDeals(false)} style={{ fontFamily: F, fontSize: 12, color: '#06b6d4', cursor: 'pointer', background: 'none', border: 'none' }}>접기</button>
                 </div>
-                {visDeal.length > 0 ? (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 16 }}>
-                    {visDeal.map(d => (
-                      <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} isCompact={isCompact} />
+                {(selContact ? visDeal : pagedDeals).length > 0 ? (
+                  <div
+                    ref={selContact ? undefined : allDealsScrollRef}
+                    style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', gap: 16, paddingBottom: 4 }}
+                    onScroll={selContact ? undefined : (e) => {
+                      const el = e.currentTarget;
+                      if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 50) loadMoreDeals();
+                    }}
+                  >
+                    {(selContact ? visDeal : pagedDeals).map(d => (
+                      <DealCard key={d.dealId} deal={d} selected={selDeal?.dealId === d.dealId} onClick={() => setSelDeal(selDeal?.dealId === d.dealId ? null : d)} fixedWidth />
                     ))}
+                    {!selContact && dealsLoading && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 80, flexShrink: 0 }}>
+                        <span style={{ fontFamily: F, fontSize: 12, color: '#94a3b8' }}>로딩 중...</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -273,7 +295,7 @@ export default function CustomerDetailPage() {
                       <button onClick={async () => {
                         if (!ndTitle.trim() || !acc || addingD) return;
                         await addDeal({ accountId: acc.accountId, title: ndTitle.trim(), amount: ndAmount ? Number(ndAmount) : undefined, expectedClose: ndDate || undefined });
-                        setShowAddDeal(false); setNdTitle(''); setNdAmount(''); setNdDate(''); refDetail();
+                        setShowAddDeal(false); setNdTitle(''); setNdAmount(''); setNdDate(''); refDetail(); refDeals();
                       }} disabled={!ndTitle.trim() || addingD}
                         style={{ alignSelf: 'flex-end', padding: '5px 14px', borderRadius: 6, border: 'none', backgroundColor: ndTitle.trim() ? '#06b6d4' : '#cbd5e1', color: '#fff', fontSize: 12, fontWeight: 600, cursor: ndTitle.trim() ? 'pointer' : 'default', fontFamily: F }}>
                         {addingD ? '등록 중...' : '등록'}
@@ -299,7 +321,7 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* 딜 상세 */}
-          {selDeal && <DealDetailPanel deal={selDeal} onDealChanged={() => refDetail()} />}
+          {selDeal && <DealDetailPanel deal={selDeal} onDealChanged={() => { refDetail(); refDeals(); }} />}
 
           {/* AI 추천 전략 — 데이터 있을 때만 */}
           {!selDeal && strats.length > 0 && (

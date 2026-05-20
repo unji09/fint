@@ -1524,8 +1524,8 @@ export default function CalendarPage() {
                 onNotificationDrop={handleNotificationDrop}
               />
             )}
-            {/* FAB */}
-            <button
+            {/* FAB — 모바일에서는 미노출 */}
+            {!isCompact && <button
               onClick={() => openAdd(selectedDate)}
               aria-label="일정 추가"
               style={{
@@ -1555,7 +1555,7 @@ export default function CalendarPage() {
               }}
             >
               +
-            </button>
+            </button>}
           </div>
         </div>
       </div>
