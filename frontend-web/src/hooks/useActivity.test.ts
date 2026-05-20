@@ -14,6 +14,13 @@ import { fetchWithAuth } from './useAuth';
 
 const mockFetch = fetchWithAuth as unknown as ReturnType<typeof vi.fn>;
 
+type FetchSpy = {
+  mock: { calls: [RequestInfo | URL, RequestInit?][] };
+  mockImplementation: (fn: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) => unknown;
+  mockResolvedValue: (value: Response) => unknown;
+  mockRestore: () => void;
+};
+
 function makeResponse(data: unknown) {
   return {
     ok: true,
@@ -152,11 +159,11 @@ describe('useUploadRecording — multipart 3단계 흐름', () => {
   // 11 MB → 3 파트 (5 MB + 5 MB + 1 MB)
   const BLOB_11MB = new Blob([new Uint8Array(11 * 1024 * 1024)], { type: 'audio/m4a' });
 
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: FetchSpy;
 
   beforeEach(() => {
     mockFetch.mockReset();
-    fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy = vi.spyOn(globalThis, 'fetch') as unknown as FetchSpy;
   });
 
   afterEach(() => {

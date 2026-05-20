@@ -58,7 +58,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
               and u.isDeleted = false
               and lower(a.name) like lower(concat('%', cast(:keyword as string), '%'))
             """)
-    List<Account> searchInTeam(
+    Page<Account> searchInTeam(
             @Param("keyword") String keyword,
             @Param("callerTeamId") Long callerTeamId,
             @Param("tenantId") Long tenantId,

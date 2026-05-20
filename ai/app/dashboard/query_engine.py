@@ -85,6 +85,10 @@ _BASE_RULES = """## 규칙
     - column에 SQL 별칭 사용 금지: d.current_pipeline(×) → current_pipeline(○), a.name(×) → accounts.name(○)
   - 위 모든 경우에 query_structured_data를 호출하고, reject_query는 절대 사용하지 마세요.
 - 위젯 수정 요청을 절대 reject_query로 거절하지 마세요. 데이터 조회로 해결할 수 없는 경우에만 reject를 사용하세요.
+- 날짜 연산(N일 전/후, 정체 기간 등): EXTRACT()·NOW()·interval 함수를 컬럼명에 절대 사용하지 마세요.
+  대신 오늘 날짜({today})에서 직접 날짜 문자열을 계산해 GTE/LTE 필터 value에 넣으세요.
+  예: "7일 이상 업데이트 없는 딜" → filters=[{{column="updated_at", operator="LTE", value="<today - 7일 ISO 날짜>"}}]
+  예: "30일 이상 활동 없는 고객사" → filters=[{{column="updated_at", operator="LTE", value="<today - 30일 ISO 날짜>"}}]
 - 무드(날씨) 분석은 temperature_history 테이블 사용:
   - 컬럼: mood (VARCHAR: RAINBOW/SUNNY/CLOUDY/RAINY/THUNDER, 텍스트 열거형), mood_score (INTEGER 0-100, 수치)
   - mood 컬럼은 텍스트이므로 차트 value_field로 절대 사용 금지. 반드시 mood_score(숫자)를 집계(AVG/MAX)하여 사용.
@@ -148,6 +152,14 @@ _FC_EXAMPLES = """## 예시
   group_by=["accounts.name"], order_by=[column="AVG(mood_score)", direction="DESC"]
   ※ mood 문자열(RAINBOW/SUNNY...)은 valueField 금지. 반드시 mood_score(숫자) AVG/MAX 사용.
 
+질의: "정체 딜 목록" / "오래된 딜" / "업데이트 없는 딜" / "멈춘 딜"
+→ query_structured_data: table="deals", columns=["accounts.name", "title", "current_pipeline", "updated_at"],
+  joins=[table="accounts", on_self="account_id", on_other="account_id"],
+  filters=[{column="updated_at", operator="LTE", value="<today - 7일 ISO 날짜 문자열>"}],
+  order_by=[column="updated_at", direction="ASC"]
+  ※ EXTRACT()·NOW()·interval 등 SQL 함수를 컬럼명에 절대 사용 금지. updated_at에 직접 날짜 문자열 비교.
+  ※ 오늘이 2026-05-20이면 value="2026-05-13" (7일 전).
+
 질의: "오늘 날씨"
 → reject_query: reason="날씨 정보는 CRM에서 조회할 수 없습니다."
 """
@@ -179,6 +191,14 @@ _INSTRUCTOR_EXAMPLES = """## 예시
 → search_type: "STRUCTURED", query_spec: table="activities", columns=["type", "COUNT(*)"],
   filters=[{column="start_at", operator="GTE", value="<이번달 1일 ISO>"}, {column="start_at", operator="LT", value="<다음달 1일 ISO>"}],
   group_by=["type"], order_by=[column="COUNT(*)", direction="DESC"], suggested_title="이번달 활동 현황"
+
+질의: "정체 딜 목록" / "오래된 딜" / "업데이트 없는 딜" / "멈춘 딜"
+→ search_type: "STRUCTURED", query_spec: table="deals", columns=["accounts.name", "title", "current_pipeline", "updated_at"],
+  joins=[table="accounts", on_self="account_id", on_other="account_id"],
+  filters=[{column="updated_at", operator="LTE", value="<today - 7일 ISO 날짜 문자열>"}],
+  order_by=[column="updated_at", direction="ASC"], suggested_title="정체 딜 목록"
+  ※ EXTRACT()·NOW()·interval 등 SQL 함수를 컬럼명에 절대 사용 금지. updated_at에 직접 날짜 문자열 비교.
+  ※ 오늘이 2026-05-20이면 value="2026-05-13" (7일 전).
 
 질의: "협상 이전 단계 고객사" / "초기 단계 딜"
 → search_type: "STRUCTURED", query_spec: table="deals", filters=[{column="current_pipeline", operator="IN", value=["발굴","가치 제안","솔루션 설계","제안 제출"]}], suggested_title="협상 이전 단계 고객사"
