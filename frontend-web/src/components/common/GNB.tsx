@@ -197,12 +197,21 @@ export default function GNB() {
       `}</style>
       <header className="gnb-header" style={{ height: 64, flexShrink: 0, backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', padding: isMobile ? '0 12px' : '0 20px 0 0', zIndex: 50, position: 'sticky', top: 0, fontFamily: F }}>
         {/* 로고 */}
-        <div className="gnb-logo" onClick={() => router.push('/calendar')} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', cursor: 'pointer', height: '100%', padding: isMobile ? '0 8px' : '0 20px' }}>
+        <div
+          className="gnb-logo"
+          onClick={() => {
+            // 같은 캘린더 경로에서는 router.push 가 navigate 효과가 없어 viewMode 가 그대로 남는다.
+            // custom event 로 캘린더 페이지가 월 뷰로 리셋하도록 신호를 보낸다.
+            if (pathname === '/calendar') window.dispatchEvent(new CustomEvent('fint:goHome'));
+            else router.push('/calendar');
+          }}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', cursor: 'pointer', height: '100%', padding: isMobile ? '0 8px' : '0 20px' }}
+        >
           <img src="/logo.png" alt="F!NT" style={{ maxHeight: isMobile ? 32 : 44, maxWidth: isMobile ? 80 : 200, objectFit: 'contain' }} />
         </div>
 
-        {/* 네비게이션 */}
-        <nav className="gnb-nav" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 4, height: '100%' }}>
+        {/* 네비게이션 — 데스크톱/태블릿에선 캘린더 페이지의 '5월 2026' 가로 위치(aside 300 + padding 20)와 정렬되도록 absolute 배치 */}
+        <nav className="gnb-nav" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 4, height: '100%', ...(isMobile ? { marginLeft: 0 } : { position: 'absolute', left: 320, top: 0 }) }}>
           {NAV.map(({ label, href }) => {
             const active = pathname === href || pathname.startsWith(href + '/');
             return (
