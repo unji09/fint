@@ -89,6 +89,14 @@ export default function DashboardDetailPage() {
   const [pendingType, setPendingType] = useState('BAR_CHART');
   /* SSE complete 시 받아둔 위젯 데이터 */
   const [pendingWidget, setPendingWidget] = useState<CanvasWidget | null>(null);
+  /* MODIFY 완료 후 채팅 패널에 미리보기로 표시할 위젯 (드래그 없음) */
+  const [modifyResultWidget, setModifyResultWidget] = useState<{
+    widgetType: string;
+    title: string;
+    config: Record<string, unknown>;
+    data: Record<string, unknown>[] | null;
+    insightText: string;
+  } | null>(null);
 
   /* 채팅 내역 */
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -98,7 +106,143 @@ export default function DashboardDetailPage() {
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
   const dragOrigin = useRef({ ox: 0, oy: 0 });
 
-  /* 채팅창 위치 — 좌측 하단 고정 (드래그 불가) */
+  /* 모바일 캔버스 핀치 줌 */
+  const [canvasScale, setCanvasScale] = useState(1);
+  const canvasScaleRef = useRef(1);
+  canvasScaleRef.current = canvasScale;
+  const pinchRef = useRef<{ dist: number; scale: number } | null>(null);
+
+  /* 위젯 선택 상태 */
+  const [selectedWidgetId, setSelectedWidgetId] = useState<number | null>(null);
+  const [chatInputFocusTrigger, setChatInputFocusTrigger] = useState(0);
+
+  // 위젯 선택 시 채팅 패널 열기 + 입력창 포커스
+  useEffect(() => {
+    if (selectedWidgetId !== null) {
+      setChatOpen(true);
+      setChatInputFocusTrigger((t) => t + 1);
+    }
+  }, [selectedWidgetId]);
+
+  /* 채팅 패널 너비 동기화 (FintChatPanel ↔ QueryBar) */
+  const [chatPanelWidth, setChatPanelWidth] = useState(() => {
+    if (typeof window === 'undefined') return 390;
+    try {
+      const saved = JSON.parse(localStorage.getItem('fint:chatPanelSize') ?? '{}') as { w?: number };
+      if (saved.w) return Math.max(320, Math.min(700, saved.w));
+    } catch { /* ignore */ }
+    return 390;
+  });
+
+  /* 채팅 패널 위치 (데스크탑 드래그 가능) */
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number }>(() => {
+    if (typeof window === 'undefined') return { x: 20, y: 28 };
+    try {
+      const saved = JSON.parse(localStorage.getItem('fint:chatPanelPos') ?? '{}') as { x?: number; y?: number };
+      if (typeof saved.x === 'number' && typeof saved.y === 'number') return saved;
+    } catch { /* ignore */ }
+    return { x: 20, y: 28 };
+  });
+  const panelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  // 항상 최신 panelPos를 참조 (closure stale 방지)
+  const panelPosRef = useRef(panelPos);
+  panelPosRef.current = panelPos;
+  // 채팅 패널 DOM 참조 — 드래그 상단 경계 계산에 사용
+  const chatPanelContainerRef = useRef<HTMLDivElement>(null);
+  // 헤더 높이 (상단 nav + 탭바 합계, 채팅 패널이 넘어가지 않을 기준선)
+  const HEADER_HEIGHT = 100; // top nav (~52px) + tab bar (~44px) + margin
+
+  const handlePanelHeaderDragStart = useCallback((e: React.MouseEvent) => {
+    if (isMobile) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const pos = panelPosRef.current;
+    panelDragRef.current = { startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+    let moved = false;
+    const onMove = (ev: MouseEvent) => {
+      if (!panelDragRef.current) return;
+      const dx = ev.clientX - panelDragRef.current.startX;
+      const dy = ev.clientY - panelDragRef.current.startY;
+      if (!moved) {
+        if (Math.hypot(dx, dy) < 5) return;
+        moved = true;
+      }
+      const panelH = chatPanelContainerRef.current?.offsetHeight ?? 420;
+      const maxY = Math.max(12, window.innerHeight - HEADER_HEIGHT - panelH);
+      const newX = Math.max(12, panelDragRef.current.origX + dx);
+      const newY = Math.max(12, Math.min(maxY, panelDragRef.current.origY - dy));
+      setPanelPos({ x: newX, y: newY });
+    };
+    const onUp = () => {
+      if (!panelDragRef.current) return;
+      panelDragRef.current = null;
+      setPanelPos((p) => {
+        try { localStorage.setItem('fint:chatPanelPos', JSON.stringify(p)); } catch { /* ignore */ }
+        return p;
+      });
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [isMobile]);
+
+  /* 모바일 핀치 줌 — canvasRef의 비패시브 touchmove로 preventDefault 호출 */
+  useEffect(() => {
+    if (!isMobile || !canvasRef.current) return;
+    const el = canvasRef.current;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        pinchRef.current = {
+          dist: Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
+          scale: canvasScaleRef.current,
+        };
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        const ratio = dist / pinchRef.current.dist;
+        const next = Math.min(3, Math.max(0.25, pinchRef.current.scale * ratio));
+        setCanvasScale(next);
+        canvasScaleRef.current = next;
+      }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchRef.current = null;
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [isMobile]);
+
+  /* 탭 숨기기 (삭제 아님) */
+  const [hiddenTabs, setHiddenTabs] = useState<number[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem('fint:hiddenTabs') ?? '[]') as number[]; } catch { return []; }
+  });
+  const hideTab = useCallback((tabId: number) => {
+    setHiddenTabs((prev) => {
+      const next = [...prev, tabId];
+      try { localStorage.setItem('fint:hiddenTabs', JSON.stringify(next)); } catch { /* ignore */ }
+      if (String(tabId) === String(id)) {
+        const visible = allDashboards.filter((d) => !next.includes(d.dashboardId));
+        if (visible.length > 0) router.push(`/dashboard/${visible[0].dashboardId}`);
+        else router.push('/dashboard');
+      }
+      return next;
+    });
+  }, [id, allDashboards, router]);
 
   /* 대시보드 탭 삭제 */
   const { remove: deleteDashboard, loading: deletingDashboard } = useDeleteDashboard();
@@ -246,14 +390,21 @@ export default function DashboardDetailPage() {
           // assistant message
           const isError = q.status === 'ERROR' || q.status === 'FAILED';
           const resultObj = (q.result ?? {}) as Record<string, unknown>;
+          // q.result is raw FastAPI JSON: insight_text (snake_case), data: {rows, columns, ...}
+          const rawData = resultObj.data as ({ rows?: unknown[] } & Record<string, unknown>) | unknown[] | null | undefined;
+          const dataRows: Record<string, unknown>[] | null = Array.isArray(rawData)
+            ? (rawData as Record<string, unknown>[])
+            : Array.isArray((rawData as { rows?: unknown[] } | null)?.rows)
+              ? ((rawData as { rows: unknown[] }).rows as Record<string, unknown>[])
+              : null;
           msgs.push({
             id: `assistant-${q.queryId ?? Date.now()}-${msgs.length}`,
             role: 'assistant',
-            content: q.result?.insightText ?? (isError ? '' : ''),
+            content: (resultObj.insight_text as string) ?? (isError ? '' : ''),
             widget: isError ? null : {
               widgetType: q.widgetType ?? (resultObj.widget_type as string) ?? 'BAR_CHART',
               title: q.title ?? (resultObj.title as string) ?? '',
-              data: q.result?.data ?? {},
+              data: dataRows,
               config: q.config ?? (resultObj.config as Record<string, unknown>) ?? {},
             },
             timestamp: ts,
@@ -351,6 +502,11 @@ export default function DashboardDetailPage() {
       return next;
     });
   }, [schedulePersist, cacheWidgets]);
+  // 항상 최신 updateWidget 참조 (handleQuery 클로저 stale 방지)
+  const updateWidgetRef = useRef(updateWidget);
+  updateWidgetRef.current = updateWidget;
+  // 진행 중인 쿼리가 수정 대상 위젯 ID (null이면 새 위젯 추가)
+  const modifyWidgetIdRef = useRef<number | null>(null);
 
   const updateTitle = useCallback((wid: number, t: string) => {
     setCanvasWidgets((prev) => {
@@ -382,6 +538,31 @@ export default function DashboardDetailPage() {
     }
   }, [canvasWidgets, deleteWidgetApi, id, cacheWidgets, captureAndUpload]);
 
+
+  /* 미들클릭 스크롤 */
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startLeft = canvas.scrollLeft;
+    const startTop = canvas.scrollTop;
+    const onMove = (ev: MouseEvent) => {
+      canvas.scrollLeft = startLeft - (ev.clientX - startX);
+      canvas.scrollTop = startTop - (ev.clientY - startY);
+    };
+    const origCursor = canvas.style.cursor;
+    canvas.style.cursor = 'grabbing';
+    const onUp = () => {
+      canvas.style.cursor = origCursor;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -472,6 +653,20 @@ export default function DashboardDetailPage() {
   const handleQuery = useCallback(
     async (text: string) => {
       if (!text.trim() || querying) return;
+
+      // [widgetId:N] 접두사가 있으면 MODIFY 모드 — widgetId를 백엔드에 전달
+      const widgetPrefixMatch = text.match(/^\[widgetId:(\d+)\]\s*/);
+      const modifyWid = widgetPrefixMatch ? Number(widgetPrefixMatch[1]) : null;
+      modifyWidgetIdRef.current = modifyWid;
+      let aiInputText = text;
+      if (modifyWid !== null) {
+        // 접두사 제거 후 위젯 제목 컨텍스트 추가
+        const plainText = text.slice(widgetPrefixMatch![0].length);
+        const ctxWidget = canvasWidgets.find((cw) => cw.widgetId === modifyWid);
+        const widgetContext = ctxWidget ? `[${ctxWidget.title}] ` : '';
+        aiInputText = `${widgetContext}${plainText}`;
+      }
+
       setUserQuery(text);
       setQuerying(true);
       setChatOpen(true);
@@ -479,6 +674,7 @@ export default function DashboardDetailPage() {
       setQueryErrorMsg(null);
       setQueryInput('');
       setPendingWidget(null);
+      setModifyResultWidget(null);
 
       const autoTitle = text.replace(/어때\?*|보여줘|분석해줘|알려줘|\?\?*/g, '').trim() || text;
       setWidgetTitle(autoTitle);
@@ -504,7 +700,10 @@ export default function DashboardDetailPage() {
             'Content-Type': 'application/json',
             ...(authHeader() as Record<string, string>),
           },
-          body: JSON.stringify({ inputText: text }),
+          body: JSON.stringify({
+            inputText: aiInputText,
+            ...(modifyWid !== null ? { widgetId: modifyWid } : {}),
+          }),
         });
         if (!startRes.ok) throw new Error(`HTTP ${startRes.status}`);
         const startJson = await startRes.json();
@@ -531,27 +730,11 @@ export default function DashboardDetailPage() {
                 return;
               }
               if (ev.event === 'complete') {
-                setWidgetTitle(data.title ?? autoTitle);
-                setPendingType(data.widgetType ?? 'BAR_CHART');
-                setPendingWidget({
-                  widgetId: data.widgetId ?? Date.now(),
-                  widgetType: data.widgetType ?? 'BAR_CHART',
-                  title: data.title ?? autoTitle,
-                  config: data.config ?? {},
-                  position: data.position ?? { x: 0, y: 0, w: 6, h: 4 },
-                  queryId: data.queryId ?? null,
-                  inputText: text,
-                  result: data.result ?? { data: {}, insightText: '' },
-                  data: Array.isArray(data.result?.data)
-                    ? data.result.data
-                    : Array.isArray(data.result?.data?.rows)
-                      ? data.result.data.rows
-                      : null,
-                  px: 0,
-                  py: 0,
-                  pw: 400,
-                  ph: 260,
-                });
+                const newData = Array.isArray(data.result?.data)
+                  ? data.result.data
+                  : Array.isArray(data.result?.data?.rows)
+                    ? data.result.data.rows
+                    : null;
                 setSteps(STEP_LABELS.map((l) => ({ label: l, done: true, active: false })));
                 setQuerying(false);
                 setChatDone(true);
@@ -571,6 +754,46 @@ export default function DashboardDetailPage() {
                   status: 'done',
                 };
                 setChatHistory((prev) => [...prev, assistantMsg]);
+
+                const targetModifyWid = modifyWidgetIdRef.current;
+                if (targetModifyWid !== null) {
+                  // 기존 위젯 업데이트 (새 위젯 추가 아님)
+                  modifyWidgetIdRef.current = null;
+                  updateWidgetRef.current(targetModifyWid, {
+                    widgetType: data.widgetType ?? 'BAR_CHART',
+                    title: data.title ?? autoTitle,
+                    config: data.config ?? {},
+                    result: data.result ?? { data: {}, insightText: '' },
+                    data: newData,
+                    queryId: data.queryId ?? null,
+                  });
+                  // 채팅 패널에 미리보기 위젯 표시 (드래그 없음)
+                  setModifyResultWidget({
+                    widgetType: data.widgetType ?? 'BAR_CHART',
+                    title: data.title ?? autoTitle,
+                    config: (data.config ?? {}) as Record<string, unknown>,
+                    data: newData,
+                    insightText: data.result?.insightText ?? '',
+                  });
+                } else {
+                  setWidgetTitle(data.title ?? autoTitle);
+                  setPendingType(data.widgetType ?? 'BAR_CHART');
+                  setPendingWidget({
+                    widgetId: data.widgetId ?? Date.now(),
+                    widgetType: data.widgetType ?? 'BAR_CHART',
+                    title: data.title ?? autoTitle,
+                    config: data.config ?? {},
+                    position: data.position ?? { x: 0, y: 0, w: 6, h: 4 },
+                    queryId: data.queryId ?? null,
+                    inputText: text,
+                    result: data.result ?? { data: {}, insightText: '' },
+                    data: newData,
+                    px: 0,
+                    py: 0,
+                    pw: 400,
+                    ph: 260,
+                  });
+                }
 
                 ctrl.abort();
                 return;
@@ -612,11 +835,25 @@ export default function DashboardDetailPage() {
         });
       } catch (err) {
         console.error('Query start failed:', err);
+        const errMsg = err instanceof Error ? err.message : '요청을 처리하지 못했어요. 잠시 후 다시 시도해 보세요.';
+        setQueryErrorMsg(errMsg);
         setQuerying(false);
         setChatDone(true);
+        setChatHistory((prev) => [
+          ...prev,
+          {
+            id: `assistant-err-${Date.now()}`,
+            role: 'assistant',
+            content: '',
+            widget: null,
+            timestamp: new Date().toISOString(),
+            status: 'error',
+            errorMessage: errMsg,
+          } as ChatMessage,
+        ]);
       }
     },
-    [querying, id],
+    [querying, id, canvasWidgets],
   );
 
   // 처음 화면(/dashboard) 검색바·칩에서 인계된 질문을 마운트 후 1회 자동 실행.
@@ -734,20 +971,27 @@ export default function DashboardDetailPage() {
             }}
           >
             {allDashboards.length === 0 ? (
-              <div style={{ height: 24, width: 60, background: '#f1f5f9', borderRadius: 4 }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '2px 4px 2px 10px', borderRadius: 4, background: '#06b6d4' }}>
+                <span style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 600, fontSize: 13, color: 'white', padding: '2px 2px', whiteSpace: 'nowrap' }}>
+                  로딩 중...
+                </span>
+              </div>
             ) : (
-              allDashboards.map((d) => {
+              allDashboards.filter((d) => !hiddenTabs.includes(d.dashboardId) || String(d.dashboardId) === String(id)).map((d) => {
                 const active = String(d.dashboardId) === String(id);
                 return (
                   <div
                     key={d.dashboardId}
                     onMouseEnter={() => { if (!active) router.prefetch(`/dashboard/${d.dashboardId}`); }}
+                    className="fint-tab"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 2,
                       padding: '2px 4px 2px 10px',
                       borderRadius: 4,
+                      minWidth: 80,
+                      maxWidth: 160,
                       background: active ? '#06b6d4' : 'transparent',
                       transition: 'background-color 0.15s',
                     }}
@@ -796,12 +1040,13 @@ export default function DashboardDetailPage() {
                         {d.title.length > 6 ? d.title.slice(0, 6) + '..' : d.title}
                       </button>
                     )}
+                    {/* X 버튼: 탭에서 숨기기 (삭제 아님) */}
                     <button
                       type="button"
-                      onClick={() => handleDeleteDashboard(d.dashboardId, d.title)}
-                      aria-label={`${d.title} 대시보드 삭제`}
-                      title="이 대시보드 삭제"
-                      disabled={deletingDashboard}
+                      onClick={() => hideTab(d.dashboardId)}
+                      aria-label={`${d.title} 탭 숨기기`}
+                      title="탭에서 숨기기 (대시보드는 유지됩니다)"
+                      className="fint-tab-close"
                       style={{
                         width: 18,
                         height: 18,
@@ -809,20 +1054,23 @@ export default function DashboardDetailPage() {
                         border: 'none',
                         background: 'transparent',
                         color: active ? 'rgba(255,255,255,0.85)' : '#94a3b8',
-                        cursor: deletingDashboard ? 'wait' : 'pointer',
+                        cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         padding: 0,
-                        transition: 'background-color 0.12s, color 0.12s',
+                        opacity: 0,
+                        transition: 'opacity 0.15s, background-color 0.12s, color 0.12s',
                       }}
                       onMouseOver={(e) => {
-                        e.currentTarget.style.background = active ? 'rgba(255,255,255,0.18)' : 'rgba(239,68,68,0.10)';
-                        e.currentTarget.style.color = active ? '#fff' : '#ef4444';
+                        e.currentTarget.style.background = active ? 'rgba(255,255,255,0.18)' : 'rgba(100,116,139,0.12)';
+                        e.currentTarget.style.color = active ? '#fff' : '#475569';
+                        e.currentTarget.style.opacity = '1';
                       }}
                       onMouseOut={(e) => {
                         e.currentTarget.style.background = 'transparent';
                         e.currentTarget.style.color = active ? 'rgba(255,255,255,0.85)' : '#94a3b8';
+                        e.currentTarget.style.opacity = '0';
                       }}
                     >
                       <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
@@ -871,6 +1119,13 @@ export default function DashboardDetailPage() {
         {/* 캔버스 */}
         <div
           ref={canvasRef}
+          onMouseDown={handleCanvasMouseDown}
+          onClick={(e) => {
+            // 캔버스 빈 공간 클릭 시 위젯 선택 해제
+            if ((e.target as HTMLElement).closest('[data-widget-card]') === null) {
+              setSelectedWidgetId(null);
+            }
+          }}
           style={{
             flex: 1,
             position: 'relative',
@@ -881,11 +1136,13 @@ export default function DashboardDetailPage() {
             backgroundSize: '20px 20px',
           }}
         >
-          <div style={{ position: 'relative', minWidth: 3000, minHeight: 3000 }}>
+          <div style={{ position: 'relative', minWidth: 3000, minHeight: 3000, ...(isMobile && canvasScale !== 1 ? { transform: `scale(${canvasScale})`, transformOrigin: '0 0' } : {}) }}>
             {canvasWidgets.map((w) => (
               <CanvasWidgetCard
                 key={w.widgetId}
                 w={w}
+                isSelected={selectedWidgetId === w.widgetId}
+                onSelect={(wid) => setSelectedWidgetId(wid)}
                 onUpdate={updateWidget}
                 onTitleChange={updateTitle}
                 onRemove={removeWidget}
@@ -894,19 +1151,22 @@ export default function DashboardDetailPage() {
             ))}
           </div>
 
-          {/* FINT 채팅 + 검색바 (좌측 하단 고정) */}
+          {/* FINT 채팅 패널 (데스크탑: 드래그 가능, 모바일: 고정) */}
           <div
+            ref={chatPanelContainerRef}
             style={{
               position: 'fixed',
               zIndex: 20,
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'flex-start',
-              bottom: isMobile ? 8 : 20,
-              left: isMobile ? 8 : 20,
-              right: isMobile ? 8 : undefined,
+              gap: 8,
+              alignItems: (isMobile && chatOpen) ? 'stretch' : 'flex-start',
+              ...(isMobile
+                ? { bottom: 16, left: 8, right: 8 }
+                : { bottom: panelPos.y, left: panelPos.x }),
             }}
           >
+            {/* 채팅 패널 — 닫혀도 DOM 유지(애니메이션용), maxHeight:0으로 공간 차지 않음 */}
             <div
               style={{
                 transition: 'opacity 0.25s ease, transform 0.25s ease',
@@ -915,8 +1175,16 @@ export default function DashboardDetailPage() {
                 pointerEvents: chatOpen ? 'auto' : 'none',
                 maxHeight: chatOpen ? 'none' : 0,
                 overflow: chatOpen ? 'visible' : 'hidden',
+                ...(isMobile ? { width: '100%' } : {}),
               }}
             >
+              {/* 드래그 핸들 오버레이 — 헤더 위에 투명하게 위치, 닫기버튼(우측 44px) 제외 */}
+              {!isMobile && (
+                <div
+                  onMouseDown={handlePanelHeaderDragStart}
+                  style={{ position: 'absolute', top: 0, left: 0, right: 44, height: 44, zIndex: 30, cursor: 'grab', borderRadius: '20px 20px 0 0' }}
+                />
+              )}
               <FintChatPanel
                 steps={steps}
                 query={userQuery}
@@ -928,13 +1196,26 @@ export default function DashboardDetailPage() {
                 result={pendingWidget?.result}
                 config={pendingWidget?.config ?? {}}
                 data={pendingWidget?.data ?? null}
+                modifyWidget={modifyResultWidget}
                 onTitleChange={setWidgetTitle}
                 onCollapse={() => setChatOpen(false)}
                 onDragStart={handleDragStart}
+                onSubmit={handleQuery}
                 chatHistory={chatHistory}
+                selectedWidget={selectedWidgetId != null ? (() => { const sw = canvasWidgets.find(w => w.widgetId === selectedWidgetId); return sw ? { id: sw.widgetId, title: sw.title, type: sw.widgetType } : null; })() : null}
+                onClearSelectedWidget={() => setSelectedWidgetId(null)}
+                onWidthChange={setChatPanelWidth}
+                panelPosX={panelPos.x}
+                panelPosY={panelPos.y}
+                onPosChange={(x, y) => {
+                  setPanelPos({ x, y });
+                  try { localStorage.setItem('fint:chatPanelPos', JSON.stringify({ x, y })); } catch { /* ignore */ }
+                }}
               />
             </div>
-            {!chatOpen && chatHistory.length > 0 && (
+
+            {/* 패널 닫혔을 때 재열기 버튼 */}
+            {!chatOpen && (
               <button
                 onClick={() => setChatOpen(true)}
                 style={{
@@ -942,7 +1223,6 @@ export default function DashboardDetailPage() {
                   alignItems: 'center',
                   gap: 6,
                   padding: '8px 16px',
-                  marginBottom: 8,
                   background: 'rgba(255,255,255,0.9)',
                   backdropFilter: 'blur(12px)',
                   border: '1px solid rgba(6,182,212,0.3)',
@@ -953,7 +1233,6 @@ export default function DashboardDetailPage() {
                   fontWeight: 500,
                   color: '#1d1a24',
                   boxShadow: '0 2px 8px rgba(15,23,42,0.08)',
-                  transition: 'opacity 0.2s ease',
                 }}
               >
                 <span style={{ color: '#06b6d4', fontSize: 14 }}>✦</span>
@@ -963,13 +1242,21 @@ export default function DashboardDetailPage() {
                 </svg>
               </button>
             )}
+
+            {/* QueryBar — 항상 표시 (패널 아래 분리된 입력창) */}
             <QueryBar
               value={queryInput}
               onChange={setQueryInput}
-              onSubmit={handleQuery}
+              onSubmit={(text) => {
+                const prefixed = selectedWidgetId != null
+                  ? `[widgetId:${selectedWidgetId}] ${text}`
+                  : text;
+                handleQuery(prefixed);
+              }}
               loading={querying}
+              focusTrigger={chatInputFocusTrigger}
+              width={isMobile ? undefined : chatPanelWidth}
             />
-
           </div>
         </div>
       </div>
@@ -1008,7 +1295,12 @@ export default function DashboardDetailPage() {
           <BarChartSvg size="mini" />
         </div>
       )}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        * { box-sizing: border-box; }
+        .fint-tab:hover .fint-tab-close { opacity: 1 !important; }
+        .fint-tab:hover { background: rgba(6,182,212,0.08); }
+      `}</style>
     </>
   );
 }

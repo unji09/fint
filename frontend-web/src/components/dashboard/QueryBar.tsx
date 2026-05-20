@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import useBreakpoint from '@/hooks/useBreakpoint';
 
 interface Props {
@@ -7,12 +8,19 @@ interface Props {
   onChange: (v: string) => void;
   onSubmit: (v: string) => void;
   loading: boolean;
+  focusTrigger?: number;
+  width?: number;
 }
 
-export default function QueryBar({ value, onChange, onSubmit, loading }: Props) {
+export default function QueryBar({ value, onChange, onSubmit, loading, focusTrigger, width }: Props) {
   const isMobile = useBreakpoint() === 'mobile';
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusTrigger && inputRef.current) inputRef.current.focus();
+  }, [focusTrigger]);
   return (
-    <div style={{ position: 'relative', width: isMobile ? '100%' : 390 }}>
+    <div style={{ position: 'relative', width: isMobile ? '100%' : (width ?? 390) }}>
       <div
         style={{
           position: 'absolute',
@@ -51,6 +59,7 @@ export default function QueryBar({ value, onChange, onSubmit, loading }: Props) 
           </svg>
         </div>
         <input
+          ref={inputRef}
           style={{
             flex: 1,
             height: 38,
