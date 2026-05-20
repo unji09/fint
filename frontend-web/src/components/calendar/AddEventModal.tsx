@@ -167,6 +167,9 @@ export default function AddEventModal({
   const [accountQuery, setAccountQuery] = useState('');
   const [accountResults, setAccountResults] = useState<AccountItem[]>([]);
   const [accountDropOpen, setAccountDropOpen] = useState(false);
+  const [accountPage, setAccountPage] = useState(0);
+  const [accountHasNext, setAccountHasNext] = useState(false);
+  const [accountLoadingMore, setAccountLoadingMore] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<AccountItem | null>(null);
 
   // ── 고객사 선택 시 자동 로드되는 목록 ──
@@ -223,6 +226,9 @@ export default function AddEventModal({
     setAccountQuery('');
     setAccountResults([]);
     setAccountDropOpen(false);
+    setAccountPage(0);
+    setAccountHasNext(false);
+    setAccountLoadingMore(false);
     setDealQuery('');
     setDealResults([]);
     setDealDropOpen(false);
@@ -326,19 +332,48 @@ export default function AddEventModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // ── 고객사 검색 ──
+  // ── 고객사 검색: 쿼리 변경 또는 드롭다운 열림 시 page 0 부터 재검색 ──
   useEffect(() => {
-    if (!accountQuery.trim()) { setAccountResults([]); return; }
+    if (!accountDropOpen) return;
+    setAccountPage(0);
+    setAccountHasNext(false);
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_BASE}/accounts/searchable?keyword=${encodeURIComponent(accountQuery)}&size=10`, { headers: authHeader() });
+        const qs = new URLSearchParams();
+        if (accountQuery.trim()) qs.set('keyword', accountQuery.trim());
+        qs.set('page', '0');
+        qs.set('size', '15');
+        const res = await fetch(`${API_BASE}/accounts/searchable?${qs.toString()}`, { headers: authHeader() });
         const json = await res.json();
-        setAccountResults(json.data ?? []);
-        setAccountDropOpen(true);
+        const data = json.data ?? {};
+        setAccountResults((data.content ?? []) as AccountItem[]);
+        setAccountHasNext(data.hasNext ?? false);
       } catch { setAccountResults([]); }
     }, 250);
     return () => clearTimeout(t);
-  }, [accountQuery]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountQuery, accountDropOpen]);
+
+  // ── 고객사 무한 스크롤: page > 0 일 때 결과 append ──
+  useEffect(() => {
+    if (accountPage === 0 || !accountHasNext || accountLoadingMore) return;
+    setAccountLoadingMore(true);
+    const qs = new URLSearchParams();
+    if (accountQuery.trim()) qs.set('keyword', accountQuery.trim());
+    qs.set('page', String(accountPage));
+    qs.set('size', '15');
+    fetch(`${API_BASE}/accounts/searchable?${qs.toString()}`, { headers: authHeader() })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!json) return;
+        const data = json.data ?? {};
+        setAccountResults(prev => [...prev, ...(data.content ?? []) as AccountItem[]]);
+        setAccountHasNext(data.hasNext ?? false);
+      })
+      .catch(() => {})
+      .finally(() => setAccountLoadingMore(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountPage, accountHasNext, accountLoadingMore]);
 
   // ── 딜 검색: 드롭다운 열림 / 쿼리 / 고객사 변경 → page 0부터 새로 로드 ──
   useEffect(() => {
@@ -465,6 +500,14 @@ export default function AddEventModal({
   // ── 저장 ──
   const handleSave = async () => {
     if (!title.trim() || saving) return;
+    const startDt = new Date(`${startD}T${startT}:00+09:00`);
+    const endDt   = new Date(`${endD}T${endT}:00+09:00`);
+    if (isNaN(startDt.getTime()) || isNaN(endDt.getTime())) {
+      alert('날짜/시간을 올바르게 입력해주세요.'); return;
+    }
+    if (startDt >= endDt) {
+      alert('종료 시간은 시작 시간보다 늦어야 합니다.'); return;
+    }
     setSaving(true);
     try {
       let dealId: number | null = selectedDeal?.dealId ?? null;
@@ -499,7 +542,12 @@ export default function AddEventModal({
         endAt: `${endD}T${endT}:00+09:00`,
         memo: memo.trim() || null,
       };
-      if (dealId && dealId > 0) actBody.dealId = dealId;
+      if (isEdit) {
+        actBody.dealId = (dealId && dealId > 0) ? dealId : null;
+      } else {
+        if (dealId && dealId > 0) actBody.dealId = dealId;
+      }
+      if (selectedAccount) actBody.accountId = selectedAccount.accountId;
       if (pipe) {
         const stage = PIPELINE_STAGES.find((s) => s.label === pipe);
         if (stage) actBody.pipelineStageId = stage.id;
@@ -574,12 +622,21 @@ export default function AddEventModal({
                   <IconSearch />
                   <input placeholder="고객사 이름으로 검색..." value={accountQuery}
                     onChange={(e) => { setAccountQuery(e.target.value); setAccountDropOpen(true); }}
+                    onFocus={() => setAccountDropOpen(true)}
                     onBlur={() => setTimeout(() => setAccountDropOpen(false), 150)}
                     style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, color: '#16180F', outline: 'none', fontFamily: 'inherit' }} />
                 </div>
-                {accountDropOpen && accountQuery.trim() && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, backgroundColor: '#fff', border: '1px solid #E5E6DE', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: 4, maxHeight: 160, overflowY: 'auto' }}>
-                    {accountResults.length === 0 && <div style={{ padding: '10px 12px', fontSize: 13, color: '#9CA3AF' }}>결과 없음</div>}
+                {accountDropOpen && (
+                  <div
+                    style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, backgroundColor: '#fff', border: '1px solid #E5E6DE', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: 4, maxHeight: 160, overflowY: 'auto' }}
+                    onScroll={(e) => {
+                      const el = e.currentTarget;
+                      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 30 && accountHasNext && !accountLoadingMore) {
+                        setAccountPage(prev => prev + 1);
+                      }
+                    }}
+                  >
+                    {accountResults.length === 0 && !accountLoadingMore && <div style={{ padding: '10px 12px', fontSize: 13, color: '#9CA3AF' }}>결과 없음</div>}
                     {accountResults.map((a) => (
                       <button key={a.accountId} onClick={() => handleSelectAccount(a)}
                         style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#16180F', borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'center', gap: 8 }}
@@ -589,6 +646,7 @@ export default function AddEventModal({
                         <span style={{ fontSize: 11, color: '#6B7280' }}>{a.industry}</span>
                       </button>
                     ))}
+                    {accountLoadingMore && <div style={{ padding: '10px 12px', fontSize: 12, color: '#9CA193', textAlign: 'center' }}>로딩 중...</div>}
                   </div>
                 )}
               </div>
