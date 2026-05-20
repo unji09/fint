@@ -11,7 +11,6 @@ import { BarChartSvg } from '@/components/dashboard/ChartWidgets';
 import useBreakpoint from '@/hooks/useBreakpoint';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import {
-  useDeleteDashboard,
   useCreateDashboard,
   useRenameDashboard,
   useUpdateWidget,
@@ -244,8 +243,6 @@ export default function DashboardDetailPage() {
     });
   }, [id, allDashboards, router]);
 
-  /* 대시보드 탭 삭제 */
-  const { remove: deleteDashboard, loading: deletingDashboard } = useDeleteDashboard();
   /* 대시보드 이름 변경 (탭 더블클릭) */
   const { rename: renameDashboard } = useRenameDashboard();
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -292,34 +289,6 @@ export default function DashboardDetailPage() {
       await alert('새 대시보드를 만들지 못했습니다.\n잠시 후 다시 시도해 주세요.');
     }
   }, [createDashboard, creatingDashboard]);
-
-  const handleDeleteDashboard = useCallback(
-    async (targetId: number, title: string) => {
-      if (deletingDashboard) return;
-      const proceed = await confirm({
-        message: `'${title}' 대시보드를 삭제할까요?\n\n이 대시보드 안의 위젯과 분석 내용이 모두 사라지며,\n한 번 삭제하면 복구할 수 없습니다.`,
-        variant: 'danger',
-        confirmText: '삭제',
-      });
-      if (!proceed) return;
-      const ok = await deleteDashboard(targetId);
-      if (!ok) {
-        await alert(`'${title}' 대시보드를 삭제하지 못했습니다.\n잠시 후 다시 시도해 주세요.`);
-        return;
-      }
-      setAllDashboards((prev) => {
-        const next = prev.filter((d) => d.dashboardId !== targetId);
-        try { sessionStorage.setItem('fint:allDashboards', JSON.stringify(next)); } catch { /* ignore */ }
-        if (String(targetId) === String(id)) {
-          if (next.length > 0) router.push(`/dashboard/${next[0].dashboardId}`);
-          else router.push('/dashboard');
-        }
-        return next;
-      });
-      await alert(`'${title}' 대시보드를 삭제했어요.`);
-    },
-    [deleteDashboard, deletingDashboard, id, router],
-  );
 
   useEffect(() => {
     // 1) localStorage 캐시 먼저 보여줌 (백엔드 응답 늦더라도 새로고침 후 즉시 보이게)
