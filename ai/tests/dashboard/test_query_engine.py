@@ -315,8 +315,8 @@ class TestQueryEngine:
         ))
 
         messages_text = str(llm.calls[0]["messages"])
-        assert "수정 의도" in messages_text
-        assert "source_query" in messages_text
+        assert "수정 대상 위젯" in messages_text
+        assert "source_query" in messages_text or "기존 쿼리 구조" in messages_text
 
     async def test_modify_action_returns_completed(self):
         result = await _make_engine().run(_make_request(

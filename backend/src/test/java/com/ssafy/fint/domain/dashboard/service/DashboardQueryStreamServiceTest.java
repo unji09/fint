@@ -193,16 +193,17 @@ class DashboardQueryStreamServiceTest {
         payload.put("status", "COMPLETED");
         payload.put("dashboardId", 5);
         payload.put("tenantId", TENANT_ID);
+        payload.put("userId", USER_ID);
         payload.put("inputText", "주간 매출 추이");
         payload.put("result", result);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(REDIS_KEY)).thenReturn(objectMapper.writeValueAsString(payload));
-        when(resultWriter.persist(eq(TENANT_ID), eq(5L), eq("주간 매출 추이"), any()))
+        when(resultWriter.persist(eq(TENANT_ID), eq(USER_ID), eq(5L), eq("주간 매출 추이"), any(), any()))
                 .thenReturn(new DashboardQueryResultWriter.InsertedIds(20L, 10L));
 
         invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);
 
-        verify(resultWriter).persist(eq(TENANT_ID), eq(5L), eq("주간 매출 추이"), any());
+        verify(resultWriter).persist(eq(TENANT_ID), eq(USER_ID), eq(5L), eq("주간 매출 추이"), any(), any());
         verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
         verify(emitter).complete();
         verify(future).cancel(false);
@@ -267,11 +268,12 @@ class DashboardQueryStreamServiceTest {
         payload.put("status", "COMPLETED");
         payload.put("dashboardId", 5);
         payload.put("tenantId", TENANT_ID);
+        payload.put("userId", USER_ID);
         payload.put("inputText", "test");
         payload.put("result", result);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(REDIS_KEY)).thenReturn(objectMapper.writeValueAsString(payload));
-        when(resultWriter.persist(eq(TENANT_ID), eq(5L), eq("test"), any()))
+        when(resultWriter.persist(eq(TENANT_ID), eq(USER_ID), eq(5L), eq("test"), any(), any()))
                 .thenReturn(new DashboardQueryResultWriter.InsertedIds(1L, 1L));
 
         invokeTick(emitter, lastStatus, futureRef, DEADLINE_NEVER);

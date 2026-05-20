@@ -97,7 +97,7 @@ class DashboardQueryServiceStartTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
         QueryStartResponse res = dashboardQueryService.start(
-                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT));
+                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT, null));
 
         assertThat(res.traceId()).isNotBlank();
         assertThat(UUID.fromString(res.traceId())).isNotNull();
@@ -150,7 +150,7 @@ class DashboardQueryServiceStartTest {
                 .thenReturn(List.of(widget));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
-        dashboardQueryService.start(owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT));
+        dashboardQueryService.start(owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT, null));
 
         ArgumentCaptor<DashboardQueryDispatchCommand> commandCaptor =
                 ArgumentCaptor.forClass(DashboardQueryDispatchCommand.class);
@@ -177,7 +177,7 @@ class DashboardQueryServiceStartTest {
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> dashboardQueryService.start(
-                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT)))
+                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_NOT_FOUND);
@@ -199,7 +199,7 @@ class DashboardQueryServiceStartTest {
                 dashboardRepository, dashboardWidgetRepository, redisTemplate, queryDispatcher, failingMapper);
 
         assertThatThrownBy(() -> failingService.start(
-                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT)))
+                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.INTERNAL_SERVER_ERROR);
@@ -219,7 +219,7 @@ class DashboardQueryServiceStartTest {
                 .when(queryDispatcher).dispatch(any());
 
         assertThatThrownBy(() -> dashboardQueryService.start(
-                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT)))
+                owner, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(CommonErrorCode.EXTERNAL_API_FAILED);
@@ -244,7 +244,7 @@ class DashboardQueryServiceStartTest {
         when(dashboardRepository.findById(DASHBOARD_ID)).thenReturn(Optional.of(dashboard));
 
         assertThatThrownBy(() -> dashboardQueryService.start(
-                stranger, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT)))
+                stranger, DASHBOARD_ID, new QueryStartRequest(INPUT_TEXT, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
