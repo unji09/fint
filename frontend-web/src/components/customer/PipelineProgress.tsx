@@ -6,14 +6,22 @@ interface Props {
 }
 
 export default function PipelineProgress({ current, onStageClick }: Props) {
+  const n = STAGES.length;
+  // 각 stage div는 flex:1이므로 너비 = 1/n. stage i 중심 = (i + 0.5) / n * 100% from left.
+  // 회색 바: stage 0 중심 ~ stage n-1 중심
+  const grayLeft  = `${(0.5 / n) * 100}%`;
+  const grayRight = `${(0.5 / n) * 100}%`;
+  // 파란 바: left:10(회색과 동일 기준) ~ stage current 중심
+  // right = (1 - (current+0.5)/n) * 100
+  const blueRight = `${((n - current - 0.5) / n) * 100}%`;
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 0 30px' }}>
-      <div style={{ position: 'absolute', top: 18, left: 10, right: 10, height: 4, background: '#f3f4f6', borderRadius: 9999 }} />
-      <div style={{ position: 'absolute', top: 18, left: 10, right: `${(1 - current / (STAGES.length - 1)) * 100}%`, height: 4, background: '#06b6d4', borderRadius: 9999 }} />
+      <div style={{ position: 'absolute', top: 18, left: grayLeft, right: grayRight, height: 4, background: '#f3f4f6', borderRadius: 9999 }} />
+      <div style={{ position: 'absolute', top: 18, left: grayLeft, right: blueRight, height: 4, background: '#06b6d4', borderRadius: 9999 }} />
       {STAGES.map((s, i) => (
         <div key={s}
           onClick={onStageClick ? () => onStageClick(i, s) : undefined}
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, zIndex: 1, flex: 1, cursor: onStageClick ? 'pointer' : 'default' }}>
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, zIndex: 1, flex: 1, minHeight: 44, cursor: onStageClick ? 'pointer' : 'default' }}>
           <div style={{
             width: 20, height: 20, borderRadius: '50%',
             background: i <= current ? '#06b6d4' : 'white',

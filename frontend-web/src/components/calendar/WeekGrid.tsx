@@ -59,7 +59,6 @@ const DAY_FULL = ['일요일', '월요일', '화요일', '수요일', '목요일
 const DAY_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
 const DAY_COLOR = (i: number) => (i === 0 || i === 6 ? RED : '#888888');
 
-const NEAR_MS = 60 * 60_000;
 const OVERLAP_OFFSET = 10;
 
 interface OverlapLayout {
@@ -80,14 +79,17 @@ function computeOverlapLayout(evs: CalendarEvent[]): Map<string, OverlapLayout> 
 
   const groups: CalendarEvent[][] = [];
   let group: CalendarEvent[] = [sorted[0]];
+  let groupMaxEnd = new Date(sorted[0].endAt).getTime();
+
   for (let i = 1; i < sorted.length; i++) {
-    const prevStart = new Date(sorted[i - 1].startAt).getTime();
     const curStart = new Date(sorted[i].startAt).getTime();
-    if (curStart - prevStart <= NEAR_MS) {
+    if (curStart < groupMaxEnd) {
       group.push(sorted[i]);
+      groupMaxEnd = Math.max(groupMaxEnd, new Date(sorted[i].endAt).getTime());
     } else {
       groups.push(group);
       group = [sorted[i]];
+      groupMaxEnd = new Date(sorted[i].endAt).getTime();
     }
   }
   groups.push(group);
@@ -159,6 +161,7 @@ function WeekCard({
   selected,
   narrow,
   compact,
+  height,
   onResizeStartTop,
   onResizeStartBottom,
 }: {
@@ -167,11 +170,14 @@ function WeekCard({
   selected: boolean;
   narrow?: boolean;
   compact?: boolean;
+  height?: number;
   onResizeStartTop?: (e: React.MouseEvent) => void;
   onResizeStartBottom?: (e: React.MouseEvent) => void;
 }) {
   const { color: col, bg } = getEventColor(event);
   const useVertical = narrow || compact;
+  const showTime = height === undefined || height >= 30;
+  const showBadge = height === undefined || height >= 60;
   return (
     <button
       data-event="true"
@@ -208,17 +214,19 @@ function WeekCard({
       }}
     >
       <div style={{ display: 'flex', flexDirection: useVertical ? 'column' : 'row', alignItems: useVertical ? 'flex-start' : 'center', gap: useVertical ? 0 : 5, overflow: 'hidden' }}>
-        <span
-          style={{
-            fontSize: compact ? 9 : 10,
-            color: col,
-            fontWeight: 600,
-            flexShrink: 0,
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {fmtTime(event.startAt)}
-        </span>
+        {showTime && (
+          <span
+            style={{
+              fontSize: compact ? 9 : 10,
+              color: col,
+              fontWeight: 600,
+              flexShrink: 0,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {fmtTime(event.startAt)}
+          </span>
+        )}
         <span
           style={{
             fontSize: compact ? 10 : 12,
@@ -227,14 +235,13 @@ function WeekCard({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             minWidth: 0,
-            ...(compact
-              ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, whiteSpace: 'normal' as const, wordBreak: 'break-all' as const, lineHeight: '1.2' }
-              : { whiteSpace: 'nowrap' as const }),
+            whiteSpace: 'nowrap' as const,
           }}
         >
           {event.title}
         </span>
       </div>
+      {showBadge && (
       <div
         style={{
           display: 'flex',
@@ -296,6 +303,7 @@ function WeekCard({
           </span>
         )}
       </div>
+      )}
       {/* 리사이즈 핸들 — 카드 상단(startAt) / 하단(endAt). 평소 투명, 호버 시만 옅게. */}
       {onResizeStartTop && (
         <div
@@ -966,6 +974,7 @@ export default function WeekGrid({
                       selected={selectedEvent?.eventId === ev.eventId}
                       narrow={layout.mode === 'side' && layout.totalCols > 1}
                       compact={isCompact}
+                      height={hPx}
                       onResizeStartTop={
                         ev.eventId.startsWith('act-')
                           ? (e) => handleResizeStart(ev, colIdx, day, 'start', e)

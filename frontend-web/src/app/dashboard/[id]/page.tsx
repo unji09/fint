@@ -148,8 +148,7 @@ export default function DashboardDetailPage() {
   panelPosRef.current = panelPos;
   // 채팅 패널 DOM 참조 — 드래그 상단 경계 계산에 사용
   const chatPanelContainerRef = useRef<HTMLDivElement>(null);
-  // 헤더 높이 (상단 nav + 탭바 합계, 채팅 패널이 넘어가지 않을 기준선)
-  const HEADER_HEIGHT = 100; // top nav (~52px) + tab bar (~44px) + margin
+
 
   const handlePanelHeaderDragStart = useCallback((e: React.MouseEvent) => {
     if (isMobile) return;
@@ -166,9 +165,10 @@ export default function DashboardDetailPage() {
         if (Math.hypot(dx, dy) < 5) return;
         moved = true;
       }
-      const panelH = chatPanelContainerRef.current?.offsetHeight ?? 420;
-      const maxY = Math.max(12, window.innerHeight - HEADER_HEIGHT - panelH);
       const newX = Math.max(12, panelDragRef.current.origX + dx);
+      // 탭바(GNB 64px + 탭바 36px = 100px) 위로 올라가지 않도록 maxY 제한
+      const panelH = chatPanelContainerRef.current?.offsetHeight ?? 500;
+      const maxY = Math.max(12, window.innerHeight - 100 - panelH);
       const newY = Math.max(12, Math.min(maxY, panelDragRef.current.origY - dy));
       setPanelPos({ x: newX, y: newY });
     };
@@ -292,15 +292,20 @@ export default function DashboardDetailPage() {
 
   useEffect(() => {
     // 1) localStorage 캐시 먼저 보여줌 (백엔드 응답 늦더라도 새로고침 후 즉시 보이게)
+    let cachedList: CanvasWidget[] = [];
     try {
       const cached = localStorage.getItem(`fint:widgets:${id}`);
       if (cached) {
         const list = JSON.parse(cached) as CanvasWidget[];
-        if (Array.isArray(list) && list.length > 0) setCanvasWidgets(list);
+        if (Array.isArray(list) && list.length > 0) {
+          cachedList = list;
+          setCanvasWidgets(list);
+        }
       }
     } catch { /* ignore */ }
 
-    // 2) 백엔드 응답으로 덮어쓰기 (성공한 경우에만)
+    // 2) 백엔드 응답으로 갱신 — 사용자가 드래그해서 배치한 위젯만 표시
+    // (SSE 완료 시 백엔드가 위젯을 생성하지만, 드래그 전까지는 캔버스에 올리지 않음)
     fetch(`${API_BASE}/dashboards/${id}`, { headers: authHeader() as HeadersInit })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
@@ -311,15 +316,22 @@ export default function DashboardDetailPage() {
         const GRID_COL = 100;
         const GRID_ROW = 80;
         const PAD = 28;
-        const next = serverWidgets.map((w, i) => {
+        // 캐시가 있으면 사용자가 배치한 위젯 ID만 허용 (미배치 위젯 제외)
+        const cachedIds = new Set(cachedList.map((w) => w.widgetId));
+        const placedWidgets = cachedIds.size > 0
+          ? serverWidgets.filter((w) => cachedIds.has(w.widgetId))
+          : serverWidgets; // 최초 로드(캐시 없음)는 전체 표시
+        if (placedWidgets.length === 0) return; // 배치된 위젯 없으면 캐시 유지
+        const next = placedWidgets.map((w, i) => {
+          const cached = cachedList.find((c) => c.widgetId === w.widgetId);
           const pos = w.position;
           const isGrid = pos && pos.w <= 12 && pos.h <= 16;
           return {
             ...w,
-            px: isGrid ? PAD + pos.x * GRID_COL : (pos?.x ?? (28 + i * 30)),
-            py: isGrid ? PAD + pos.y * GRID_ROW : (pos?.y ?? (28 + i * 20)),
-            pw: isGrid ? pos.w * GRID_COL : (pos?.w ?? 400),
-            ph: isGrid ? pos.h * GRID_ROW : (pos?.h ?? 260),
+            px: cached?.px ?? (isGrid ? PAD + pos.x * GRID_COL : (pos?.x ?? (28 + i * 30))),
+            py: cached?.py ?? (isGrid ? PAD + pos.y * GRID_ROW : (pos?.y ?? (28 + i * 20))),
+            pw: cached?.pw ?? (isGrid ? pos.w * GRID_COL : (pos?.w ?? 400)),
+            ph: cached?.ph ?? (isGrid ? pos.h * GRID_ROW : (pos?.h ?? 260)),
           };
         });
         setCanvasWidgets(next);
@@ -888,6 +900,8 @@ export default function DashboardDetailPage() {
             backdropFilter: 'blur(8px)',
             borderBottom: '1px solid #e2e8f0',
             overflowX: 'auto',
+            position: 'relative',
+            zIndex: 30,
           }}
         >
           {/* 대시보드 목록·템플릿 화면으로 돌아가기 — 아이콘 단독 */}
@@ -1083,6 +1097,7 @@ export default function DashboardDetailPage() {
               +
             </button>
           </div>
+
         </div>
 
         {/* 캔버스 */}
@@ -1097,6 +1112,7 @@ export default function DashboardDetailPage() {
           }}
           style={{
             flex: 1,
+            minHeight: 0,
             position: 'relative',
             overflow: 'auto',
             backgroundImage:
@@ -1138,9 +1154,9 @@ export default function DashboardDetailPage() {
             {/* 채팅 패널 — 닫혀도 DOM 유지(애니메이션용), maxHeight:0으로 공간 차지 않음 */}
             <div
               style={{
-                transition: 'opacity 0.25s ease, transform 0.25s ease',
+                transition: 'opacity 0.22s ease, transform 0.22s ease',
                 opacity: chatOpen ? 1 : 0,
-                transform: chatOpen ? 'translateY(0)' : 'translateY(12px)',
+                transform: chatOpen ? 'translateY(0)' : 'translateY(10px)',
                 pointerEvents: chatOpen ? 'auto' : 'none',
                 maxHeight: chatOpen ? 'none' : 0,
                 overflow: chatOpen ? 'visible' : 'hidden',

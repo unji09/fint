@@ -147,7 +147,7 @@ export function useCreateDeal() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      return json.data as { dealId: number };
+      return json.data as Record<string, unknown>;
     } finally {
       setLoading(false);
     }

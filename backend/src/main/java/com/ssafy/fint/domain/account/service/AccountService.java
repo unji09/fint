@@ -9,6 +9,7 @@ import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
+import com.ssafy.fint.domain.account.dto.AccountSearchablePageResponse;
 import com.ssafy.fint.domain.account.dto.AccountSearchableResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
@@ -267,11 +268,7 @@ public class AccountService {
                 .toList();
     }
 
-    public List<AccountSearchableResponse> searchInTeam(String keyword, Integer size) {
-        if (keyword == null || keyword.isBlank()) {
-            return List.of();
-        }
-
+    public AccountSearchablePageResponse searchInTeam(String keyword, int page, Integer size) {
         Long userId = currentUserId();
         Long tenantId = currentTenantId();
 
@@ -280,22 +277,21 @@ public class AccountService {
         Long callerTeamId = caller.getTeam() != null ? caller.getTeam().getTeamId() : null;
 
         int limit = size != null ? size : DEFAULT_SEARCHABLE_SIZE;
-        List<Account> accounts = accountRepository.searchInTeam(
-                keyword, callerTeamId, tenantId, PageRequest.of(0, limit));
+        // 빈 keyword → LIKE '%%' 로 전체 조회
+        String kw = (keyword == null || keyword.isBlank()) ? "" : keyword;
+        Page<Account> accountPage = accountRepository.searchInTeam(
+                kw, callerTeamId, tenantId, PageRequest.of(page, limit));
 
-        if (accounts.isEmpty()) {
-            return List.of();
-        }
+        List<Long> accountIds = accountPage.getContent().stream().map(Account::getAccountId).toList();
+        Set<Long> myAssignedIds = accountIds.isEmpty() ? Set.of() :
+                new HashSet<>(accountUserAssignmentRepository.findAccountIdsByUserIdAndAccountIdIn(userId, accountIds));
 
-        List<Long> accountIds = accounts.stream().map(Account::getAccountId).toList();
-        Set<Long> myAssignedIds = new HashSet<>(
-                accountUserAssignmentRepository.findAccountIdsByUserIdAndAccountIdIn(userId, accountIds));
-
-        return accounts.stream()
+        List<AccountSearchableResponse> content = accountPage.getContent().stream()
                 .map(a -> new AccountSearchableResponse(
                         a.getAccountId(), a.getName(), a.getIndustry(), a.getBizNo(),
                         myAssignedIds.contains(a.getAccountId())))
                 .toList();
+        return new AccountSearchablePageResponse(content, accountPage.hasNext(), accountPage.getTotalElements());
     }
 
     public AccountListResponse findMine(String keyword, String industry, Pageable pageable) {
