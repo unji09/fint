@@ -68,7 +68,6 @@ export default function CustomerDetailPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { accounts } = useAccountList();
   const { signals, contacts, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
-  const { signals, deals, latestMood, latestMoodReason, refetch: refDetail } = useAccountDetail(id ?? null);
   const { deals: pagedDeals, hasNext: hasMoreDeals, loading: dealsLoading, loadMore: loadMoreDeals, refetch: refDeals } = useAccountDeals(id ?? null, 10);
   const allDealsScrollRef = useRef<HTMLDivElement>(null);
   const { actions: nextActions, loading: aiL } = useNextActions(id ?? null);
@@ -156,6 +155,26 @@ export default function CustomerDetailPage() {
 
   const visDeal = cDealIds ? deals.filter(d => cDealIds.has(d.dealId)) : deals;
   const acc = accounts.find(a => String(a.accountId) === String(id)) ?? accounts[0];
+
+  // 회사 정보 박스 대표 3건: 최신 NEWS 1 + 최신 DART 1 + 사용 안 한 것 중 최신순으로 3건 채움.
+  // 시간순으로만 자르면 한 종류에 몰려서 다양성이 사라지므로 종류별 최신을 우선 보장한다.
+  // DART 가 없으면 NEWS 로, NEWS 가 없으면 DART 로 채워 항상 가능한 만큼 3건까지 노출.
+  const repSignals = (() => {
+    const result: typeof signals = [];
+    const used = new Set<number>();
+    const pick = (predicate: (s: typeof signals[number]) => boolean) => {
+      const idx = signals.findIndex((s, i) => !used.has(i) && predicate(s));
+      if (idx >= 0) { result.push(signals[idx]); used.add(idx); }
+    };
+    pick((s) => s.type === 'NEWS');
+    pick((s) => s.type === 'DART');
+    while (result.length < 3) {
+      const before = result.length;
+      pick(() => true);
+      if (result.length === before) break;
+    }
+    return result;
+  })();
 
   // 사이드바에서 setSelContact 호출 시 — 관련 page state reset
   useEffect(() => {
@@ -425,7 +444,7 @@ export default function CustomerDetailPage() {
           {selDeal && (
             <DealDetailPanel
               deal={selDeal}
-              onDealChanged={() => refDetail()}
+              onDealChanged={() => { refDetail(); refDeals(); }}
               onMeetingDetail={(a) => {
                 // 미팅 활동 객체를 CalendarEvent 로 변환해 EventDetailPanel 모달 마운트.
                 // 캘린더 페이지로 navigation 하지 않는다.
@@ -444,7 +463,6 @@ export default function CustomerDetailPage() {
               }}
             />
           )}
-          {selDeal && <DealDetailPanel deal={selDeal} onDealChanged={() => { refDetail(); refDeals(); }} />}
 
           {/* AI 추천 전략 — 데이터 있을 때만 */}
           {!selDeal && strats.length > 0 && (
