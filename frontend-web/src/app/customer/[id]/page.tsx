@@ -556,7 +556,14 @@ export default function CustomerDetailPage() {
         defaultAccountId={id ? Number(id) : undefined}
         defaultAccountName={accounts.find((a) => String(a.accountId) === id)?.name}
         editEvent={editMeetingEvent}
-        onSaved={() => { setAddEventOpen(false); setAddEventDefaults({}); setEditMeetingEvent(null); refDetail(); }}
+        onSaved={() => {
+          // 수정 저장 시 EventDetailPanel 로 복귀. add 케이스는 selectedMeetingEvent 없음.
+          if (editMeetingEvent) setSelectedMeetingEvent(editMeetingEvent);
+          setAddEventOpen(false);
+          setAddEventDefaults({});
+          setEditMeetingEvent(null);
+          refDetail();
+        }}
       />
 
       {/* 회사 정보 시그널 전체 보기 모달 */}

@@ -1595,6 +1595,8 @@ export default function CalendarPage() {
         }}
         onSaved={() => {
           refetch();
+          // 수정 저장 시 EventDetailPanel 로 복귀. 신규 등록(editEvent 없음)은 그대로 닫는다.
+          if (editEvent) setSelectedEvent(editEvent);
           setEditEvent(null);
           setDropPrefill(null);
         }}
