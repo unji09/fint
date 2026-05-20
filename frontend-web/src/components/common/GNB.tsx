@@ -72,11 +72,11 @@ export default function GNB() {
     const t = setTimeout(async () => {
       const items: SearchResult[] = [];
       try {
-        const res = await fetchWithAuth(`/accounts/searchable?keyword=${encodeURIComponent(query)}&size=5`);
+        const res = await fetchWithAuth(`/accounts/searchable?keyword=${encodeURIComponent(query)}&size=20`);
         if (res.ok) {
           const j = await res.json();
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (j.data ?? []).forEach((a: any) => items.push({ type: 'account', id: a.accountId, label: a.name, sub: a.industry ?? '', href: `/customer/${a.accountId}` }));
+          ((j.data?.content ?? j.data) ?? []).forEach((a: any) => items.push({ type: 'account', id: a.accountId, label: a.name, sub: a.industry ?? '', href: `/customer/${a.accountId}` }));
         }
       } catch { /* */ }
       setResults(items);

@@ -67,7 +67,7 @@ function loadPanelSize(isMobile: boolean) {
   if (isMobile) return { w: 0, h: 320 };
   try {
     const saved = JSON.parse(localStorage.getItem('fint:chatPanelSize') ?? '{}') as { w?: number; h?: number };
-    if (saved.w && saved.h) return { w: Math.max(320, Math.min(700, saved.w)), h: Math.max(250, Math.min(700, saved.h)) };
+    if (saved.w && saved.h) return { w: Math.max(320, Math.min(700, saved.w)), h: Math.max(250, Math.min(550, saved.h)) };
   } catch { /* ignore */ }
   return { w: 390, h: 420 };
 }
@@ -127,10 +127,8 @@ export default function FintChatPanel({
       w: panelSize.w, h: panelSize.h,
       posX: panelPosX ?? 20, posY: panelPosY ?? 28,
     };
-    const MIN_W = 280, MAX_W = 700, MIN_H = 180, MAX_H = 700;
-    // 상단 리사이즈 시 헤더 영역(64px)을 침범하지 않도록 높이 상한 계산
-    const HEADER_H = 100; // top nav + tab bar
-    const maxNorthH = Math.max(MIN_H, (typeof window !== 'undefined' ? window.innerHeight : 800) - (panelPosY ?? 28) - HEADER_H);
+    const MIN_W = 280, MAX_W = 700, MIN_H = 180, MAX_H = 550;
+    const maxNorthH = MAX_H;
     const onMove = (ev: MouseEvent) => {
       if (!resizing.current) return;
       const { x: sx, y: sy, w: sw, h: sh, posX: spx, posY: spy } = resizeStart.current;
@@ -390,50 +388,50 @@ export default function FintChatPanel({
               {(modifyWidget?.insightText && modifyWidget.insightText.trim().length > 0) ? modifyWidget.insightText : insightText}
             </p>
           )}
-        </div>
 
-        {/* MODIFY 결과 미리보기 — 드래그 없음, 캔버스 위젯 업데이트 확인용 */}
-        {isDone && !errorMessage && modifyWidget !== null && (
-          <div style={{ margin: '0 12px 10px', background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.5)', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '7px 14px 6px', borderBottom: '1px solid rgba(241,245,249,0.8)' }}>
-              <span style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 12, color: '#64748b' }}>
-                {modifyWidget.title}
-              </span>
-              <span style={{ marginLeft: 8, fontSize: 10, color: '#06b6d4', fontFamily: 'Pretendard,sans-serif' }}>위젯 업데이트됨</span>
-            </div>
-            <div style={{ padding: '4px 10px 6px', height: 130 }}>
-              <WidgetRenderer widgetType={modifyWidget.widgetType} config={modifyWidget.config} data={modifyWidget.data} result={null} />
-            </div>
-          </div>
-        )}
-
-        {/* 드래그 위젯 — MODIFY(선택 위젯 수정)가 아닌 CREATE/ADD일 때만 표시 */}
-        {isDone && !errorMessage && widgetData !== null && (
-          <div
-            onMouseDown={(e) => { e.stopPropagation(); onDragStart(e); }}
-            style={{ margin: '0 12px 10px', background: 'rgba(255,255,255,0.85)', border: '1.5px solid rgba(6,182,212,0.4)', borderRadius: 10, overflow: 'hidden', cursor: 'grab', userSelect: 'none' }}
-            title="캔버스로 드래그하세요"
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px 8px', borderBottom: '1px solid rgba(241,245,249,0.8)' }}>
-              {editTitle ? (
-                <input autoFocus value={titleVal} onChange={(e) => setTitleVal(e.target.value)}
-                  onBlur={() => { setEditTitle(false); onTitleChange(titleVal); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { setEditTitle(false); onTitleChange(titleVal); } }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 13, border: 'none', outline: '1px solid #06b6d4', borderRadius: 3, padding: '0 4px', width: '80%' }} />
-              ) : (
-                <span style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 13, color: '#171d1e', cursor: 'text' }}
-                  onDoubleClick={(e) => { e.stopPropagation(); setEditTitle(true); }}>
-                  {titleVal}
+          {/* MODIFY 결과 미리보기 — 스크롤 컨테이너 안에서 표시 (패널 높이 증가 방지) */}
+          {isDone && !errorMessage && modifyWidget !== null && (
+            <div style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(226,232,240,0.5)', borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '7px 14px 6px', borderBottom: '1px solid rgba(241,245,249,0.8)' }}>
+                <span style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 12, color: '#64748b' }}>
+                  {modifyWidget.title}
                 </span>
-              )}
-              <span style={{ fontSize: 11, color: '#06b6d4', fontFamily: 'Pretendard,sans-serif', fontWeight: 500 }}>드래그 ↗</span>
+                <span style={{ marginLeft: 8, fontSize: 10, color: '#06b6d4', fontFamily: 'Pretendard,sans-serif' }}>위젯 업데이트됨</span>
+              </div>
+              <div style={{ padding: '4px 10px 6px', height: 130 }}>
+                <WidgetRenderer widgetType={modifyWidget.widgetType} config={modifyWidget.config} data={modifyWidget.data} result={null} />
+              </div>
             </div>
-            <div style={{ padding: '6px 12px 8px', height: 140 }}>
-              <WidgetRenderer widgetType={widgetType} config={widgetConfig} data={widgetData} result={result ?? null} />
+          )}
+
+          {/* 드래그 위젯 — 스크롤 컨테이너 안에서 표시 (패널 높이 증가 방지) */}
+          {isDone && !errorMessage && widgetData !== null && (
+            <div
+              onMouseDown={(e) => { e.stopPropagation(); onDragStart(e); }}
+              style={{ background: 'rgba(255,255,255,0.85)', border: '1.5px solid rgba(6,182,212,0.4)', borderRadius: 10, overflow: 'hidden', cursor: 'grab', userSelect: 'none', flexShrink: 0 }}
+              title="캔버스로 드래그하세요"
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px 8px', borderBottom: '1px solid rgba(241,245,249,0.8)' }}>
+                {editTitle ? (
+                  <input autoFocus value={titleVal} onChange={(e) => setTitleVal(e.target.value)}
+                    onBlur={() => { setEditTitle(false); onTitleChange(titleVal); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { setEditTitle(false); onTitleChange(titleVal); } }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 13, border: 'none', outline: '1px solid #06b6d4', borderRadius: 3, padding: '0 4px', width: '80%' }} />
+                ) : (
+                  <span style={{ fontFamily: 'Pretendard,sans-serif', fontWeight: 500, fontSize: 13, color: '#171d1e', cursor: 'text' }}
+                    onDoubleClick={(e) => { e.stopPropagation(); setEditTitle(true); }}>
+                    {titleVal}
+                  </span>
+                )}
+                <span style={{ fontSize: 11, color: '#06b6d4', fontFamily: 'Pretendard,sans-serif', fontWeight: 500 }}>드래그 ↗</span>
+              </div>
+              <div style={{ padding: '6px 12px 8px', height: 140 }}>
+                <WidgetRenderer widgetType={widgetType} config={widgetConfig} data={widgetData} result={result ?? null} />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
       </div>
 
