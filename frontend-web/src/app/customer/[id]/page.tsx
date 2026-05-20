@@ -562,8 +562,33 @@ export default function CustomerDetailPage() {
         event={selectedMeetingEvent}
         onClose={() => setSelectedMeetingEvent(null)}
         onDeleted={() => setSelectedMeetingEvent(null)}
-        onEdit={(ev) => {
-          setEditMeetingEvent(ev);
+        onEdit={async (ev) => {
+          // ev 는 DealDetailPanel 미팅 list 에서 만든 가벼운 객체라 dealId/attendees 등이 비어있다.
+          // BE GET /activities/{id} 로 풍부한 데이터를 가져와 AddEventModal 에 넘긴다.
+          const activityId = Number(ev.eventId.replace(/^act-/, ''));
+          let enriched: CalendarEvent = ev;
+          try {
+            const res = await fetchWithAuth(`/activities/${activityId}`);
+            if (res.ok) {
+              const j = await res.json();
+              const d = (j?.data ?? j) as Record<string, unknown>;
+              enriched = {
+                ...ev,
+                title: typeof d.title === 'string' ? d.title : ev.title,
+                startAt: typeof d.startAt === 'string' ? d.startAt : ev.startAt,
+                endAt: typeof d.endAt === 'string' ? d.endAt : ev.endAt,
+                memo: typeof d.memo === 'string' ? d.memo : ev.memo,
+                dealId: typeof d.dealId === 'number' ? d.dealId : ev.dealId,
+                attendees: (d.attendees && typeof d.attendees === 'object')
+                  ? (d.attendees as { internal: string[]; external: string[] })
+                  : ev.attendees,
+                pipelineStage: (d.pipelineStage && typeof d.pipelineStage === 'object')
+                  ? (d.pipelineStage as { stageId: number; stageName: string; stageCode: string })
+                  : ev.pipelineStage,
+              };
+            }
+          } catch { /* 실패해도 ev 그대로 사용 */ }
+          setEditMeetingEvent(enriched);
           setSelectedMeetingEvent(null);
         }}
       />
