@@ -210,8 +210,8 @@ export default function GNB() {
           <img src="/logo.png" alt="F!NT" style={{ maxHeight: isMobile ? 32 : 44, maxWidth: isMobile ? 80 : 200, objectFit: 'contain' }} />
         </div>
 
-        {/* 네비게이션 */}
-        <nav className="gnb-nav" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 4, height: '100%' }}>
+        {/* 네비게이션 — 데스크톱/태블릿에선 캘린더 페이지의 '5월 2026' 가로 위치(aside 300 + padding 20)와 정렬되도록 absolute 배치 */}
+        <nav className="gnb-nav" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 4, height: '100%', ...(isMobile ? { marginLeft: 0 } : { position: 'absolute', left: 320, top: 0 }) }}>
           {NAV.map(({ label, href }) => {
             const active = pathname === href || pathname.startsWith(href + '/');
             return (
