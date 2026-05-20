@@ -138,7 +138,7 @@ export default function DashboardDetailPage() {
     if (typeof window === 'undefined') return { x: 20, y: 28 };
     try {
       const saved = JSON.parse(localStorage.getItem('fint:chatPanelPos') ?? '{}') as { x?: number; y?: number };
-      if (typeof saved.x === 'number' && typeof saved.y === 'number') return saved;
+      if (typeof saved.x === 'number' && typeof saved.y === 'number') return { x: saved.x, y: saved.y };
     } catch { /* ignore */ }
     return { x: 20, y: 28 };
   });
