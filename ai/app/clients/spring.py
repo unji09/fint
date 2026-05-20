@@ -48,5 +48,32 @@ class SpringClient:
                 "Spring 서버 연결 실패",
             ) from e
 
+    async def send_mood_failure(
+        self,
+        activity_id: int,
+        tenant_id: int,
+        reason: str | None,
+    ) -> None:
+        try:
+            resp = await self._client.post(
+                f"/api/v1/internal/activities/{activity_id}/ai/mood/failure",
+                json={"reason": reason},
+                headers={
+                    "X-Internal-Secret": self._secret,
+                    "X-Tenant-Id": str(tenant_id),
+                },
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise BusinessException(
+                CommonErrorCode.EXTERNAL_API_FAILED,
+                f"Spring 실패 콜백 실패: {e.response.status_code}",
+            ) from e
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            raise BusinessException(
+                CommonErrorCode.EXTERNAL_API_FAILED,
+                "Spring 서버 연결 실패",
+            ) from e
+
     async def close(self) -> None:
         await self._client.aclose()

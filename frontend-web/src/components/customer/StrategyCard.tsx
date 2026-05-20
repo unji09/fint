@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import useBreakpoint from '@/hooks/useBreakpoint';
 import type { StrategyCard } from '@/types/customer';
 
@@ -75,20 +74,19 @@ interface StrategyCardProps {
   index: number;
   onExpand?: () => void;
   onAddToCalendar?: (card: StrategyCard) => void;
+  /** CRM 근거 데이터 항목 클릭 시 호출. summary 텍스트로 매칭되는 미팅 모달을 띄우는 용도. */
+  onCrmClick?: (summary: string) => void;
 }
 
-export default function StrategyCardComponent({ card, index, onExpand, onAddToCalendar }: StrategyCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function StrategyCardComponent({ card, index, onExpand, onAddToCalendar, onCrmClick }: StrategyCardProps) {
+  // 펼침 여부는 부모(page.tsx)의 expStrat 단일 상태에서 props 로 내려온다.
+  // 자식이 별도 useState 로 관리하면 카드마다 토글이 누적돼 두 카드가 동시에 활성화되는 버그가 생긴다.
+  const expanded = card.isExpanded ?? false;
   const bp = useBreakpoint();
   const isCompact = bp !== 'desktop';
 
   const handleToggle = () => {
-    if (onExpand) {
-      onExpand();
-      setExpanded(!expanded);
-    } else {
-      setExpanded(!expanded);
-    }
+    onExpand?.();
   };
 
   return (
@@ -211,6 +209,9 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
               const primary = d.title || d.summary || d.content || '';
               const secondary = d.title && d.summary && d.title !== d.summary ? d.summary : undefined;
               const hasUrl = !!d.url;
+              // CRM 항목은 url 이 없는 대신 클릭 시 미팅 상세 모달을 띄우도록 onCrmClick 콜백 사용.
+              const isCrmClickable = d.type === 'CRM' && !!onCrmClick && !!(d.summary || d.title || d.content);
+              const interactive = hasUrl || isCrmClickable;
               const Tag = hasUrl ? 'a' : 'div';
               return (
                 <Tag
@@ -218,7 +219,12 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
                   href={hasUrl ? d.url : undefined}
                   target={hasUrl ? '_blank' : undefined}
                   rel={hasUrl ? 'noopener noreferrer' : undefined}
-                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (!hasUrl && isCrmClickable) {
+                      onCrmClick?.(d.summary || d.title || d.content || '');
+                    }
+                  }}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -229,11 +235,11 @@ export default function StrategyCardComponent({ card, index, onExpand, onAddToCa
                     border: '1px solid #ECEDE5',
                     textDecoration: 'none',
                     color: 'inherit',
-                    cursor: hasUrl ? 'pointer' : 'default',
+                    cursor: interactive ? 'pointer' : 'default',
                     transition: 'background-color 0.12s, border-color 0.12s',
                   }}
                   onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
-                    if (hasUrl) {
+                    if (interactive) {
                       (e.currentTarget as HTMLElement).style.backgroundColor = '#fff';
                       (e.currentTarget as HTMLElement).style.borderColor = '#06B6D4';
                     }
