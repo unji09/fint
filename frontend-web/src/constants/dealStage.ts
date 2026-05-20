@@ -24,14 +24,16 @@ export interface DealStageMeta {
   colorVar: string;
 }
 
+// 라벨은 BE pipeline_stages 테이블 / DealDetailPanel 의 PIPELINE_LABELS 와 동일한 7단계 명칭을 사용.
+// (코드는 영문 식별자 그대로 유지)
 export const DEAL_STAGES: readonly DealStageMeta[] = [
-  { code: 'FIRST_MEETING', label: '첫 미팅 준비', colorVar: '--stage-first-meeting' },
-  { code: 'NEEDS', label: '니즈 파악', colorVar: '--stage-needs' },
-  { code: 'PROPOSAL_WRITE', label: '제안 작성', colorVar: '--stage-proposal-write' },
-  { code: 'PROPOSAL_PRESENT', label: '제안 발표', colorVar: '--stage-proposal-present' },
-  { code: 'NEGOTIATION', label: '협상 중', colorVar: '--stage-negotiation' },
-  { code: 'CONTRACT', label: '계약 검토', colorVar: '--stage-contract' },
-  { code: 'CLOSED', label: '성사 / 실패', colorVar: '--stage-closed' },
+  { code: 'FIRST_MEETING', label: '발굴', colorVar: '--stage-first-meeting' },
+  { code: 'NEEDS', label: '가치 제안', colorVar: '--stage-needs' },
+  { code: 'PROPOSAL_WRITE', label: '솔루션 설계', colorVar: '--stage-proposal-write' },
+  { code: 'PROPOSAL_PRESENT', label: '제안 제출', colorVar: '--stage-proposal-present' },
+  { code: 'NEGOTIATION', label: '협상', colorVar: '--stage-negotiation' },
+  { code: 'CONTRACT', label: '계약 대기', colorVar: '--stage-contract' },
+  { code: 'CLOSED', label: '수주', colorVar: '--stage-closed' },
 ] as const;
 
 const STAGE_BY_CODE = new Map<DealStageCode, DealStageMeta>(

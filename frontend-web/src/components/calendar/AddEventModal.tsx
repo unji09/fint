@@ -35,14 +35,17 @@ const CATS = [
   { id: '이메일', color: '#D85A30', bg: '#FEF0EC' },
 ];
 
+// BE pipeline_stages 테이블의 실제 stageName 과 stageId 에 맞춰 정의.
+// 이전엔 "협상 중", "첫 미팅 준비" 같은 옛 라벨이 박혀있어 BE 응답("협상", "발굴" 등)과 매칭 실패 →
+// 수정 모달에 파이프라인 선택이 빈 상태로 보이고 새로고침해도 반영 안 되던 문제 해소.
 const PIPELINE_STAGES = [
-  { id: 1, label: '첫 미팅 준비', code: 'FIRST_MEETING' },
-  { id: 2, label: '니즈 파악', code: 'NEEDS_ANALYSIS' },
-  { id: 3, label: '제안서 작성', code: 'PROPOSAL_WRITING' },
-  { id: 4, label: '제안 발표', code: 'PROPOSAL_PRESENT' },
-  { id: 5, label: '협상 중', code: 'NEGOTIATION' },
-  { id: 6, label: '계약 검토', code: 'CONTRACT_REVIEW' },
-  { id: 7, label: '성사 / 실패', code: 'CLOSED' },
+  { id: 1, label: '발굴', code: 'FIRST_MEETING' },
+  { id: 2, label: '가치 제안', code: 'NEEDS_ANALYSIS' },
+  { id: 3, label: '솔루션 설계', code: 'PROPOSAL_WRITING' },
+  { id: 4, label: '제안 제출', code: 'PROPOSAL_PRESENT' },
+  { id: 5, label: '협상', code: 'NEGOTIATION' },
+  { id: 6, label: '계약 대기', code: 'CONTRACT_REVIEW' },
+  { id: 7, label: '수주', code: 'CLOSED' },
 ];
 // 백엔드 ActivityType: MEETING("미팅") | CALL("통화") | TASK("업무") | EMAIL("이메일")
 const CAT_TO_TYPE: Record<string, string> = {
@@ -251,25 +254,38 @@ export default function AddEventModal({
       setSelectedContactId(null);
 
       // 딜 복원: dealTitle이 있으면 바로 설정, 없으면 상세 API로 조회
+      console.log('[resetForm] ev.dealId:', ev.dealId, 'ev.dealTitle:', ev.dealTitle);
       if (ev.dealId) {
         if (ev.dealTitle) {
+          console.log('[resetForm] deal from ev (no fetch):', ev.dealId, ev.dealTitle);
           setSelectedDeal({ dealId: ev.dealId, title: ev.dealTitle, amount: null, expectedClose: null });
         } else {
+          console.log('[resetForm] fetching /deals/', ev.dealId);
           fetch(`${API_BASE}/deals/${ev.dealId}`, { headers })
-            .then(r => r.ok ? r.json() : null)
+            .then(r => { console.log('[resetForm] deal fetch status:', r.status); return r.ok ? r.json() : null; })
             .then(json => {
+              console.log('[resetForm] deal response:', json);
               const detail = json?.data ?? json;
               if (detail?.dealId) {
+                console.log('[resetForm] setSelectedDeal with:', detail);
                 setSelectedDeal({
                   dealId: detail.dealId,
                   title: detail.title,
                   amount: detail.amount ?? null,
                   expectedClose: detail.expectedClose ?? null,
                 });
+              } else {
+                console.log('[resetForm] deal detail invalid, fallback to dealId only');
+                // fallback: dealId 만으로 표시 (제목 누락 시 placeholder)
+                setSelectedDeal({ dealId: ev.dealId!, title: `딜 #${ev.dealId}`, amount: null, expectedClose: null });
               }
             })
-            .catch(() => {});
+            .catch((err) => {
+              console.log('[resetForm] deal fetch error:', err);
+            });
         }
+      } else {
+        console.log('[resetForm] ev.dealId 없음 → 영업 목표 비어둠');
       }
 
       // 담당자 로드
@@ -282,8 +298,33 @@ export default function AddEventModal({
             contactId: c.contactId, name: c.name, title: c.title ?? null,
           }));
           setAccountContacts(contacts);
-          if (ev.attendees?.external?.[0]) {
-            const match = contacts.find((c: ContactItem) => c.name === ev.attendees!.external[0]);
+          console.log('[resetForm] ev.attendees:', ev.attendees);
+          console.log('[resetForm] contacts:', contacts);
+          // attendees 응답이 BE 별 DTO 에 따라 형태가 다를 수 있어 robust 하게 매칭한다.
+          // 1) Attendees object 형태: { external: ['박지수'] }
+          // 2) List<Map> 형태: [{ name: '박지수', type: 'external' }]
+          let attendeeName: string | undefined;
+          const attRaw = ev.attendees as unknown;
+          if (attRaw && typeof attRaw === 'object') {
+            const obj = attRaw as { external?: string[] };
+            if (Array.isArray(obj.external) && obj.external[0]) {
+              attendeeName = String(obj.external[0]);
+            } else if (Array.isArray(attRaw)) {
+              // List<Map> 형태인 경우 첫 external 항목 추출
+              const list = attRaw as Array<Record<string, unknown>>;
+              const ext = list.find((x) => x?.type === 'external');
+              if (ext && typeof ext.name === 'string') attendeeName = ext.name;
+            }
+          }
+          console.log('[resetForm] resolved attendeeName:', attendeeName);
+          if (attendeeName) {
+            const target = attendeeName.trim();
+            const match = contacts.find((c: ContactItem) => {
+              const n = c.name.trim();
+              // 정확 일치 우선, 그 다음 부분 일치(어느 한쪽이 다른 쪽 포함)
+              return n === target || n.includes(target) || target.includes(n);
+            });
+            console.log('[resetForm] matched contact:', match);
             if (match) setSelectedContactId(match.contactId);
           }
         })
@@ -561,12 +602,20 @@ export default function AddEventModal({
         if (c) actBody.attendees = [{ name: c.name, type: 'external' }];
       }
 
+      console.log('[handleSave] selectedContactId:', selectedContactId, 'newContactId:', newContactId);
+      console.log('[handleSave] accountContacts:', accountContacts);
+      console.log('[handleSave] actBody full:', JSON.stringify(actBody, null, 2));
+      console.log('[handleSave] actBody.attendees:', actBody.attendees);
       let res: Response;
       if (isEdit && editEvent) {
         res = await fetch(`${API_BASE}/activities/${editEvent.eventId.replace(/^act-/, '')}`, { method: 'PATCH', headers: authHeader(), body: JSON.stringify(actBody) });
       } else {
         res = await fetch(`${API_BASE}/activities`, { method: 'POST', headers: authHeader(), body: JSON.stringify(actBody) });
       }
+      console.log('[handleSave] response status:', res.status, 'ok:', res.ok);
+      const respJson = await res.clone().json().catch(() => null);
+      console.log('[handleSave] response body:', respJson);
+      console.log('[handleSave] response attendees:', respJson?.data?.attendees);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       onSaved?.();
       close();
