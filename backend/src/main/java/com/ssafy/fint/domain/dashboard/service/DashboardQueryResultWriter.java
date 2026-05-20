@@ -43,11 +43,14 @@ public class DashboardQueryResultWriter {
      * - modifyWidgetId == null (ADD/CREATE): 새 위젯을 INSERT
      */
     @Transactional
-    public InsertedIds persist(Long tenantId, Long dashboardId, String inputText, Long modifyWidgetId, Map<String, Object> result) {
+    public InsertedIds persist(Long tenantId, Long userId, Long dashboardId, String inputText, Long modifyWidgetId, Map<String, Object> result) {
         Dashboard dashboard = dashboardRepository.findById(dashboardId)
                 .orElseThrow(() -> new BusinessException(DashboardErrorCode.DASHBOARD_NOT_FOUND));
 
         if (!dashboard.getOwner().getTenant().getTenantId().equals(tenantId)) {
+            throw new BusinessException(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
+        }
+        if (!dashboard.getOwner().getUserId().equals(userId)) {
             throw new BusinessException(DashboardErrorCode.DASHBOARD_ACCESS_DENIED);
         }
 
@@ -65,8 +68,9 @@ public class DashboardQueryResultWriter {
 
         DashboardWidget widget;
         if (modifyWidgetId != null) {
-            // MODIFY: 기존 위젯 업데이트 (position 유지)
-            widget = dashboardWidgetRepository.findById(modifyWidgetId)
+            // MODIFY: 기존 위젯 업데이트 (position 유지) — dashboardId로 소유권 검증
+            widget = dashboardWidgetRepository
+                    .findByDashboardWidgetIdAndDashboard_DashboardId(modifyWidgetId, dashboardId)
                     .orElseThrow(() -> new BusinessException(DashboardErrorCode.WIDGET_NOT_FOUND));
             widget.changeWidgetType(widgetType);
             widget.changeTitle(title);

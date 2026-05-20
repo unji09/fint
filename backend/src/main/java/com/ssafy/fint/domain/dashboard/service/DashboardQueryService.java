@@ -125,7 +125,7 @@ public class DashboardQueryService {
                     .filter(w -> w.getDashboardWidgetId().equals(widgetId))
                     .findFirst()
                     .map(this::toAiPayload)
-                    .orElse(null);
+                    .orElseThrow(() -> new BusinessException(DashboardErrorCode.WIDGET_NOT_FOUND));
         } else {
             action = hasWidgets ? QueryAction.ADD : QueryAction.CREATE;
         }
