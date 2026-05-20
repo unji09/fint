@@ -262,7 +262,6 @@ export const COLUMN_KO: Record<string, string> = {
   won_at: '수주일',
   lost_at: '실주일',
   lost_reason: '실주 사유',
-  account_name: '고객사명',
   contact_name: '담당자명',
   deal_title: '딜 제목',
   activity_type: '활동 유형',
