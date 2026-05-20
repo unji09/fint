@@ -132,10 +132,23 @@ function dedupBasisData(arr: NextActionBasis[]) {
   return out;
 }
 
+// NotificationPanel 의 source 별 3개 제한과 동일한 정책. 본 화면에도 가독성 위해 적용.
+const MAX_BASIS_PER_TYPE = 3;
+
+function limitBasisPerType(arr: NextActionBasis[]): NextActionBasis[] {
+  const counts: Record<string, number> = {};
+  const out: NextActionBasis[] = [];
+  for (const item of arr) {
+    counts[item.type] = (counts[item.type] ?? 0) + 1;
+    if (counts[item.type] <= MAX_BASIS_PER_TYPE) out.push(item);
+  }
+  return out;
+}
+
 function mapDetail(r: RawNextActionDetail): NextActionDetail {
   return {
     ...mapList(r),
-    basisData: dedupBasisData(parseSources(r.sources)),
+    basisData: limitBasisPerType(dedupBasisData(parseSources(r.sources))),
     aiComment: r.recommendedScript,
     warning: r.caution,
   };

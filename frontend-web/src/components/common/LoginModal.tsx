@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { clearAuthAndCache } from '@/hooks/useAuth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
@@ -114,8 +115,10 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     window.location.href = '/login';
   };
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000 }}>
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1200 }}>
       <div
         ref={modalRef}
         style={{
@@ -254,6 +257,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

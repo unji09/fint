@@ -214,19 +214,43 @@ public class AccountService {
                     .toList();
         }
 
-        List<AccountSignalResponse> merged = new ArrayList<>();
-        merged.addAll(accountExternalInfoRepository
-                .findRecentByAccountAndOptionalSource(accountId, "NEWS", pageable)
+        // 단순 시간순 정렬로 잘라내면 최근에 한 종류(NEWS 또는 DART)가 쏟아진 경우
+        // 다른 종류가 응답에서 통째로 빠진다. 클라이언트가 종류별 필터 탭을 제공하려면
+        // 응답에 두 종류가 모두 포함되어야 하므로 종류별로 limit/2 를 먼저 보장하고
+        // 부족한 쪽은 상대 종류로 보충해 총 limit 건을 채운다.
+        int half = Math.max(1, limit / 2);
+        Pageable fullPg = PageRequest.of(0, limit);
+
+        List<AccountSignalResponse> news = accountExternalInfoRepository
+                .findRecentByAccountAndOptionalSource(accountId, "NEWS", fullPg)
                 .stream()
                 .map(AccountSignalResponse::from)
-                .toList());
-        merged.addAll(dartDisclosureRepository.findByAccountId(accountId, pageable)
+                .toList();
+        List<AccountSignalResponse> dart = dartDisclosureRepository.findByAccountId(accountId, fullPg)
                 .stream()
                 .map(AccountSignalResponse::fromDart)
-                .toList());
+                .toList();
+
+        int newsTake = Math.min(half, news.size());
+        int dartTake = Math.min(half, dart.size());
+
+        int remaining = limit - newsTake - dartTake;
+        if (remaining > 0) {
+            int extra = Math.min(remaining, news.size() - newsTake);
+            newsTake += extra;
+            remaining -= extra;
+        }
+        if (remaining > 0) {
+            int extra = Math.min(remaining, dart.size() - dartTake);
+            dartTake += extra;
+        }
+
+        List<AccountSignalResponse> merged = new ArrayList<>();
+        merged.addAll(news.subList(0, newsTake));
+        merged.addAll(dart.subList(0, dartTake));
         merged.sort(Comparator.comparing(AccountSignalResponse::occurredAt).reversed());
 
-        return merged.stream().limit(limit).toList();
+        return merged;
     }
 
     public List<AccountMoodResponse> findMoodHistory(Long accountId) {

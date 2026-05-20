@@ -7,6 +7,7 @@
 
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import CustomerSidebar from '@/components/customer/CustomerSidebar';
 import { useAccountList, useAccountDetail, useRegisterAccount, useDeleteAccount } from '@/hooks/useCustomer';
 import { CustomerProvider, useCustomer } from './CustomerContext';
@@ -81,9 +82,9 @@ function CustomerLayoutInner({ children }: { children: ReactNode }) {
         {showContent && <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>{children}</div>}
       </div>
 
-      {/* 고객사 추가 모달 — layout 에 두어 sidebar 와 함께 유지 */}
-      {addAccountOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* 고객사 추가 모달 — layout 에 두어 sidebar 와 함께 유지. portal 로 body 마운트해 GNB 까지 덮는다. */}
+      {addAccountOpen && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={closeAddAccount} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)' }} />
           <div style={{ position: 'relative', backgroundColor: '#fff', borderRadius: 12, width: isCompact ? 'calc(100% - 32px)' : 380, maxWidth: 380, padding: isCompact ? 16 : 22, boxShadow: '0 12px 40px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', gap: isCompact ? 10 : 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -110,7 +111,8 @@ function CustomerLayoutInner({ children }: { children: ReactNode }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

@@ -78,9 +78,11 @@ function pipelineIndex(stage: string | null): number {
 interface Props {
   deal: Deal;
   onDealChanged?: () => void;
+  /** 미팅 요약 "전체 보기" 클릭 시 호출. 지정되면 캘린더 페이지로 이동하지 않고 부모가 모달을 띄운다. */
+  onMeetingDetail?: (activity: Activity) => void;
 }
 
-export default function DealDetailPanel({ deal, onDealChanged }: Props) {
+export default function DealDetailPanel({ deal, onDealChanged, onMeetingDetail }: Props) {
   const router = useRouter();
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -377,6 +379,11 @@ export default function DealDetailPanel({ deal, onDealChanged }: Props) {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
+                              // 부모가 콜백 제공하면 그쪽으로 위임 (모달 띄우기). 없으면 fallback 으로 캘린더 이동.
+                              if (onMeetingDetail) {
+                                onMeetingDetail(a);
+                                return;
+                              }
                               const q = new URLSearchParams({
                                 activityId: String(a.activityId),
                                 date: a.startAt,

@@ -297,6 +297,24 @@ const detailCache: Map<string, {
   mood: MoodEntry[];
 }> = new Map();
 
+// accountId 별 구독자. layout/page 등 여러 useAccountDetail 인스턴스가
+// 같은 accountId 를 보고 있을 때 한 쪽 refetch 가 다른 쪽 state 도 끌어올리도록 한다.
+const detailSubscribers: Map<string, Set<() => void>> = new Map();
+
+function subscribeDetail(accountId: string, fn: () => void): () => void {
+  let set = detailSubscribers.get(accountId);
+  if (!set) {
+    set = new Set();
+    detailSubscribers.set(accountId, set);
+  }
+  set.add(fn);
+  return () => { set!.delete(fn); };
+}
+
+function notifyDetail(accountId: string) {
+  detailSubscribers.get(accountId)?.forEach((fn) => fn());
+}
+
 export function useAccountDetail(accountId: string | number | null) {
   const key = accountId !== null ? String(accountId) : '';
   const cached = key ? detailCache.get(key) : undefined;
@@ -305,6 +323,19 @@ export function useAccountDetail(accountId: string | number | null) {
   const [deals, setDeals] = useState<Deal[]>(cached?.deals ?? []);
   const [mood, setMood] = useState<MoodEntry[]>(cached?.mood ?? []);
   const [loading, setLoading] = useState(!cached);
+
+  // 같은 accountId 의 다른 인스턴스가 detailCache 를 갱신하면 이 인스턴스도 따라간다.
+  useEffect(() => {
+    if (!key) return;
+    return subscribeDetail(key, () => {
+      const c = detailCache.get(key);
+      if (!c) return;
+      setSignals(c.signals);
+      setContacts(c.contacts);
+      setDeals(c.deals);
+      setMood(c.mood);
+    });
+  }, [key]);
 
   const load = useCallback(async () => {
     if (!accountId) return;
@@ -385,8 +416,9 @@ export function useAccountDetail(accountId: string | number | null) {
       }
     } finally {
       setLoading(false);
-      // 새로 받은 데이터로 캐시 갱신
+      // 새로 받은 데이터로 캐시 갱신 + 같은 accountId 의 다른 인스턴스에도 알림
       detailCache.set(k, { signals: snapSignals, contacts: snapContacts, deals: snapDeals, mood: snapMood });
+      notifyDetail(k);
     }
   }, [accountId]);
 

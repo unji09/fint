@@ -2,6 +2,7 @@
 // src/components/calendar/EventDetailPanel.tsx
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import type { CalendarEvent } from './types';
 import { CATEGORY_COLOR, CATEGORY_BG, SOURCE_STYLE } from './types';
@@ -242,6 +243,7 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   }, [rightView, briefingLoaded, briefingLoading, loadBriefingFromActivity]);
 
   if (!event) return null;
+  if (typeof document === 'undefined') return null;
 
   const isFint = event.source === 'FINT';
   const catColor = event.category ? CATEGORY_COLOR[event.category] : '#7F77DD';
@@ -354,9 +356,9 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
   const p = (n: number) => String(n).padStart(2, '0');
   const recTime = `${p(Math.floor(recordSec / 60))}:${p(recordSec % 60)}`;
 
-  return (
+  return createPortal(
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,.5)', display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'center', zIndex: 1000 }}>
+      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,.5)', display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'center', zIndex: 1200 }}>
       <div
         data-testid="event-detail-modal"
         data-mobile={isMobile ? 'true' : 'false'}
@@ -853,7 +855,8 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
           <div style={{ padding: '10px 24px', borderTop: '1px solid #E5E6DE', textAlign: 'center', fontSize: 11, color: '#9CA193' }}>녹음 진행 중</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1153,6 +1156,9 @@ function RecordingCard({
 
 // ─── AI 요약 섹션 — label + string 또는 string[] 렌더링
 function SummarySection({ label, value, compact }: { label: string; value: string | string[]; compact?: boolean }) {
+  const isEmpty = Array.isArray(value) ? value.length === 0 : !value || !value.trim();
+  if (isEmpty) return null;
+
   const fontSize = compact ? 13 : 14;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

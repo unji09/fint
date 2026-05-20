@@ -176,7 +176,11 @@ export default function FintChatPanel({
     const el = scrollContainerRef.current;
     if (!el) return;
     if (instant) { el.scrollTop = el.scrollHeight; }
-    else { el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); }
+    else if (typeof el.scrollTo === 'function') {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
   };
   useEffect(() => { scrollToBottom(); }, [chatHistory.length, isLoading]);
   useEffect(() => { if (isDone) scrollToBottom(true); }, [isDone]);

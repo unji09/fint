@@ -56,7 +56,7 @@ public class AiSuggestion extends BaseEntity {
     @Column(name = "related_type", nullable = false, length = 50)
     private AiSuggestionRelatedType relatedType;
 
-    @Column(name = "category", nullable = false, length = 50)
+    @Column(name = "category", nullable = false, length = 200)
     private String category;
 
     @Column(name = "success_probability", nullable = false)
