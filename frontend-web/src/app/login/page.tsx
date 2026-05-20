@@ -77,8 +77,9 @@ export default function LoginPage() {
   return (
     <div
       style={{
-        minHeight: '100vh',
-        width: '100%',
+        height: '100vh',
+        width: '100vw',
+        overflow: 'hidden',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -90,6 +91,7 @@ export default function LoginPage() {
         `,
         fontFamily: "'Pretendard', -apple-system, sans-serif",
         padding: 24,
+        boxSizing: 'border-box',
         position: 'relative',
       }}
     >
@@ -113,8 +115,8 @@ export default function LoginPage() {
           borderRadius: 20,
           padding: '40px 36px 32px',
           boxShadow: '0 20px 60px rgba(14,116,144,0.18), 0 4px 12px rgba(15,23,42,0.06)',
-          width: 380,
-          maxWidth: '100%',
+          width: '100%',
+          maxWidth: 380,
           boxSizing: 'border-box',
         }}
       >

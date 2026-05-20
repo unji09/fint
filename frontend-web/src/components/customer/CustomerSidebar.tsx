@@ -302,24 +302,24 @@ export default function CustomerSidebar({
           : sortedAccounts.map((acc) => {
               const isSelected = acc.accountId === selectedId;
               const isExpanded = acc.accountId === expandedId;
+              const isHighlighted = isSelected || (isCompact && isExpanded);
               // 데스크톱: 선택된 고객사만, 모바일: expand된 고객사도 contacts 표시
-              const accountContacts = (isSelected || (isCompact && isExpanded)) ? contacts : [];
+              const accountContacts = isHighlighted ? contacts : [];
 
               return (
                 <div key={acc.accountId} style={{ marginBottom: 7 }}>
                   <button
                     onClick={() => handleAccountClick(acc.accountId)}
                     onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = '#f8fafc';
-                      // hover 시 다음 페이지 prefetch — 클릭 시 즉시 전환
+                      if (!isHighlighted) e.currentTarget.style.background = '#f8fafc';
                       router.prefetch(`/customer/${acc.accountId}`);
                     }}
-                    onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                    onMouseOut={(e) => { if (!isHighlighted) e.currentTarget.style.background = 'transparent'; }}
                     style={{
                       width: '100%',
-                      background: isSelected ? '#f2fcff' : 'transparent',
+                      background: isHighlighted ? '#f2fcff' : 'transparent',
                       border: 'none',
-                      borderLeft: `3px solid ${isSelected ? '#00bfff' : 'transparent'}`,
+                      borderLeft: `3px solid ${isHighlighted ? '#00bfff' : 'transparent'}`,
                       borderRadius: isExpanded ? '0 6px 0 0' : '0 6px 6px 0',
                       padding: isCompact ? '14px 16px 14px 16px' : '10px 12px 10px 13px',
                       display: 'flex',
@@ -343,7 +343,7 @@ export default function CustomerSidebar({
                           style={{
                             fontFamily: 'Pretendard,sans-serif',
                             fontSize: 15,
-                            color: isSelected ? '#06b6d4' : '#1e293b',
+                            color: isHighlighted ? '#06b6d4' : '#1e293b',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
@@ -555,7 +555,7 @@ export default function CustomerSidebar({
                       {/* 모바일: 고객사 상세보기 버튼 */}
                       {isCompact && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); router.push(`/customer/${acc.accountId}`); }}
+                          onClick={(e) => { e.stopPropagation(); onContactSelect?.(null); router.push(`/customer/${acc.accountId}`); }}
                           style={{
                             width: '100%',
                             padding: '10px 0',
