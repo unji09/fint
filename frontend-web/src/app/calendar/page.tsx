@@ -254,8 +254,8 @@ function DayTimeView({
     if (!ev.eventId.startsWith('act-')) return;
     const s = new Date(ev.startAt);
     const en = new Date(ev.endAt);
-    const startY = (s.getHours() - A_S + s.getMinutes() / 60) * A_H + 4;
-    const endY = (en.getHours() - A_S + en.getMinutes() / 60) * A_H + 4;
+    const startY = (s.getHours() - A_S + s.getMinutes() / 60) * A_H;
+    const endY = (en.getHours() - A_S + en.getMinutes() / 60) * A_H;
     let grabOffset = 0;
     if (colRef.current) {
       const rect = colRef.current.getBoundingClientRect();
@@ -374,9 +374,9 @@ function DayTimeView({
       let newEnd: Date;
       if (r.mode === 'end') {
         newStart = new Date(r.event.startAt);
-        newEnd = yToDate(r.currentY - 4);
+        newEnd = yToDate(r.currentY);
       } else {
-        newStart = yToDate(r.currentY - 4);
+        newStart = yToDate(r.currentY);
         newEnd = new Date(r.event.endAt);
       }
       const ok = await resizeActivity(
@@ -541,7 +541,7 @@ function DayTimeView({
           return events.map((ev) => {
           const s = new Date(ev.startAt);
           const en = new Date(ev.endAt);
-          const top = (s.getHours() - A_S + s.getMinutes() / 60) * A_H + 4;
+          const top = (s.getHours() - A_S + s.getMinutes() / 60) * A_H;
           if (top < 0 || top > total) return null;
           const isResizing = resize?.event.eventId === ev.eventId;
           const isMoving = move?.event.eventId === ev.eventId && move.moved;
@@ -626,7 +626,7 @@ function DayTimeView({
                   }}
                 >
                   {(() => {
-                    const t = yToDate(resize.currentY - 4);
+                    const t = yToDate(resize.currentY);
                     const f = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
                     return resize.mode === 'end' ? `~ ${f}` : `${f} ~`;
                   })()}
@@ -782,6 +782,20 @@ export default function CalendarPage() {
 
   // ── API 연동 ──────────────────────────────────────────────────
   const { events: apiEvents, refetch } = useCalendarEvents({ currentDate, viewMode });
+
+  // C-4: week 뷰에서 selectedDate가 currentDate 주 범위 밖이면 currentDate를 동기화
+  // currentDate를 deps에 포함하면 navigate 시 매번 reset되므로 의도적으로 제외
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (viewMode !== 'week') return;
+    const weekDays = getWeekDays(currentDate);
+    const wStart = weekDays[0];
+    const wEnd = new Date(weekDays[6]);
+    wEnd.setHours(23, 59, 59, 999);
+    if (selectedDate < wStart || selectedDate > wEnd) {
+      setCurrentDate(selectedDate);
+    }
+  }, [selectedDate, viewMode]);
 
   // ── 파이프라인 필터 ──────────────────────────────────────────
   const [selectedPipeline, setSelectedPipeline] = useState<string | null>(null);

@@ -85,7 +85,7 @@ function mapApiSignal(s: ApiSignal): Signal {
   };
 }
 
-function mapApiDeal(d: ApiDeal & Record<string, unknown>): Deal {
+export function mapApiDeal(d: ApiDeal & Record<string, unknown>): Deal {
   // 백엔드 DealDetailResponse: currentPipelineStage (한글 stage 이름)
   // DealListResponse: currentPipeline
   // AccountDealsResponse.DealItem: stage
@@ -284,6 +284,11 @@ export interface MoodEntry {
   reason: string | null;
 }
 
+/** 특정 accountId 의 detailCache 를 무효화. mutation 후 stale 데이터 방지용. */
+export function invalidateDetailCache(accountId: string | number): void {
+  detailCache.delete(String(accountId));
+}
+
 // accountId 별 모듈 레벨 캐시 (페이지 재마운트 시 즉시 표시용)
 const detailCache: Map<string, {
   signals: Signal[];
@@ -391,7 +396,13 @@ export function useAccountDetail(accountId: string | number | null) {
   const latestMood: MoodLevel | null = mood[0]?.mood ?? null;
   const latestMoodReason: string | null = mood[0]?.reason ?? null;
 
-  return { signals, contacts, deals, mood, latestMood, latestMoodReason, loading, refetch: load };
+  const prependDeal = useCallback((deal: Deal) => {
+    setDeals((prev) => [deal, ...prev]);
+    const c = detailCache.get(key);
+    if (c) detailCache.set(key, { ...c, deals: [deal, ...c.deals] });
+  }, [key]);
+
+  return { signals, contacts, deals, mood, latestMood, latestMoodReason, loading, refetch: load, prependDeal };
 }
 
 /**
@@ -433,5 +444,9 @@ export function useAccountDeals(accountId: string | number | null, pageSize = 10
     if (!loading && hasNext) fetchPage(page + 1, false);
   }, [loading, hasNext, page, fetchPage]);
 
-  return { deals, hasNext, loading, loadMore, refetch: () => fetchPage(0, true) };
+  const prependDeal = useCallback((deal: Deal) => {
+    setDeals((prev) => [deal, ...prev]);
+  }, []);
+
+  return { deals, hasNext, loading, loadMore, refetch: () => fetchPage(0, true), prependDeal };
 }
