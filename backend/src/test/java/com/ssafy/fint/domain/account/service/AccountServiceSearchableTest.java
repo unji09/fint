@@ -1,6 +1,6 @@
 package com.ssafy.fint.domain.account.service;
 
-import com.ssafy.fint.domain.account.dto.AccountSearchableResponse;
+import com.ssafy.fint.domain.account.dto.AccountSearchablePageResponse;
 import com.ssafy.fint.domain.account.entity.Account;
 import com.ssafy.fint.domain.account.repository.AccountExternalInfoRepository;
 import com.ssafy.fint.domain.account.repository.AccountRepository;
@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -93,17 +94,17 @@ class AccountServiceSearchableTest {
         ArgumentCaptor<Long> teamCaptor = ArgumentCaptor.forClass(Long.class);
         given(accountRepository.searchInTeam(
                 eq("삼성"), teamCaptor.capture(), eq(CURRENT_TENANT_ID), any(Pageable.class)))
-                .willReturn(List.of(a1));
+                .willReturn(new PageImpl<>(List.of(a1)));
         given(accountUserAssignmentRepository.findAccountIdsByUserIdAndAccountIdIn(
                 eq(CURRENT_USER_ID), any()))
                 .willReturn(List.of(50L));
 
-        List<AccountSearchableResponse> result = accountService.searchInTeam("삼성", null);
+        AccountSearchablePageResponse result = accountService.searchInTeam("삼성", 0, null);
 
         assertThat(teamCaptor.getValue()).isEqualTo(CURRENT_TEAM_ID);
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).accountId()).isEqualTo(50L);
-        assertThat(result.get(0).assignedToMe()).isTrue();
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).accountId()).isEqualTo(50L);
+        assertThat(result.content().get(0).assignedToMe()).isTrue();
     }
 
     @Test
@@ -116,12 +117,12 @@ class AccountServiceSearchableTest {
         ArgumentCaptor<Long> teamCaptor = ArgumentCaptor.forClass(Long.class);
         given(accountRepository.searchInTeam(
                 eq("삼성"), teamCaptor.capture(), eq(CURRENT_TENANT_ID), any(Pageable.class)))
-                .willReturn(List.of());
+                .willReturn(new PageImpl<>(List.of()));
 
-        List<AccountSearchableResponse> result = accountService.searchInTeam("삼성", null);
+        AccountSearchablePageResponse result = accountService.searchInTeam("삼성", 0, null);
 
         assertThat(teamCaptor.getValue()).isNull();
-        assertThat(result).isEmpty();
+        assertThat(result.content()).isEmpty();
     }
 
     @Test
@@ -145,15 +146,40 @@ class AccountServiceSearchableTest {
 
         given(accountRepository.searchInTeam(
                 eq("a"), any(), eq(CURRENT_TENANT_ID), any(Pageable.class)))
-                .willReturn(List.of(a1, a2));
+                .willReturn(new PageImpl<>(List.of(a1, a2)));
         given(accountUserAssignmentRepository.findAccountIdsByUserIdAndAccountIdIn(
                 eq(CURRENT_USER_ID), any()))
                 .willReturn(List.of(50L));
 
-        List<AccountSearchableResponse> result = accountService.searchInTeam("a", null);
+        AccountSearchablePageResponse result = accountService.searchInTeam("a", 0, null);
 
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).assignedToMe()).isTrue();
-        assertThat(result.get(1).assignedToMe()).isFalse();
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content().get(0).assignedToMe()).isTrue();
+        assertThat(result.content().get(1).assignedToMe()).isFalse();
+    }
+
+    @Test
+    @DisplayName("빈 keyword 로 호출하면 전체 목록을 반환한다")
+    void emptyKeywordReturnsAll() {
+        User caller = mock(User.class);
+        given(caller.getTeam()).willReturn(null);
+        given(userRepository.findById(CURRENT_USER_ID)).willReturn(Optional.of(caller));
+
+        Account a1 = mock(Account.class);
+        given(a1.getAccountId()).willReturn(50L);
+        given(a1.getName()).willReturn("삼성전자");
+        given(a1.getIndustry()).willReturn("전자");
+        given(a1.getBizNo()).willReturn(null);
+
+        given(accountRepository.searchInTeam(
+                eq(""), any(), eq(CURRENT_TENANT_ID), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(a1)));
+        given(accountUserAssignmentRepository.findAccountIdsByUserIdAndAccountIdIn(
+                eq(CURRENT_USER_ID), any()))
+                .willReturn(List.of());
+
+        AccountSearchablePageResponse result = accountService.searchInTeam(null, 0, null);
+
+        assertThat(result.content()).hasSize(1);
     }
 }

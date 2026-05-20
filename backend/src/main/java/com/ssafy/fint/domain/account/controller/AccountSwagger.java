@@ -7,7 +7,7 @@ import com.ssafy.fint.domain.account.dto.AccountListResponse;
 import com.ssafy.fint.domain.account.dto.AccountMoodResponse;
 import com.ssafy.fint.domain.account.dto.AccountRegisterRequest;
 import com.ssafy.fint.domain.account.dto.AccountRegisterResponse;
-import com.ssafy.fint.domain.account.dto.AccountSearchableResponse;
+import com.ssafy.fint.domain.account.dto.AccountSearchablePageResponse;
 import com.ssafy.fint.domain.account.dto.AccountSignalResponse;
 import com.ssafy.fint.domain.account.dto.AccountUpdateRequest;
 import com.ssafy.fint.global.ApiResponse;
@@ -38,7 +38,7 @@ public interface AccountSwagger {
 
     @Operation(summary = "고객사 검색 (팀내)",
             description = "등록 화면 자동완성용. 같은 팀 사원들 등록 account. team 미지정 호출자는 tenant 전체 fallback.")
-    ApiResponse<List<AccountSearchableResponse>> searchInTeam(String keyword, Integer size);
+    ApiResponse<AccountSearchablePageResponse> searchInTeam(String keyword, int page, Integer size);
 
     @Operation(summary = "고객사 상세 조회",
             description = "본인 책임자 + 같은 tenant 검증 후 기본 정보 + assignedUsers + latestMood + 미팅 집계 + " +
