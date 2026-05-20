@@ -709,18 +709,29 @@ export default function EventDetailPanel({ event, onClose, onDeleted, onEdit }: 
                   </div>
                 )}
 
-                {!briefingLoading && !briefingError && !briefing && briefingLoaded && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '24px 16px', backgroundColor: '#F8F8F5', borderRadius: 8, textAlign: 'center' }}>
-                    <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>아직 작성된 브리핑이 없어요.</span>
-                    <span style={{ fontSize: 11, color: '#9CA193' }}>최근 뉴스·공시·미팅 내역을 정리해 드릴게요.</span>
-                    <button
-                      onClick={generateBriefing}
-                      style={{ marginTop: 6, padding: '7px 16px', borderRadius: 6, border: 'none', backgroundColor: '#06B6D4', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                    >
-                      브리핑 생성하기
-                    </button>
-                  </div>
-                )}
+                {!briefingLoading && !briefingError && !briefing && briefingLoaded && (() => {
+                  const isMeetingType = event.category === '미팅';
+                  const hasDeal = !!event.dealId;
+                  const canGenerate = isMeetingType && hasDeal;
+                  const blockReason = !isMeetingType
+                    ? '미팅 유형의 일정에서만 브리핑을 생성할 수 있어요.'
+                    : '딜이 연결된 일정에서만 브리핑을 생성할 수 있어요.';
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '24px 16px', backgroundColor: '#F8F8F5', borderRadius: 8, textAlign: 'center' }}>
+                      <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>아직 작성된 브리핑이 없어요.</span>
+                      {canGenerate ? (
+                        <>
+                          <span style={{ fontSize: 11, color: '#9CA193' }}>최근 뉴스·공시·미팅 내역을 정리해 드릴게요.</span>
+                          <button onClick={generateBriefing} style={{ marginTop: 6, padding: '7px 16px', borderRadius: 6, border: 'none', backgroundColor: '#06B6D4', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                            브리핑 생성하기
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{blockReason}</span>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {!briefingLoading && !briefingError && briefing && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

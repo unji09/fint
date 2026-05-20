@@ -55,7 +55,17 @@ export function useBriefing(activityId: string | null) {
     setError(null);
     try {
       const res = await fetchWithAuth(`/ai/briefing?activityId=${activityId}`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        const code = j?.code ?? j?.errorCode ?? j?.data?.code;
+        const msg = code === 'AC305'
+          ? '미팅 유형의 일정에서만 브리핑을 생성할 수 있어요.'
+          : code === 'AC306'
+          ? '딜이 연결된 일정에서만 브리핑을 생성할 수 있어요.'
+          : '브리핑 생성에 실패했어요. 잠시 후 다시 시도해 주세요.';
+        setError(msg);
+        return;
+      }
       const j = await res.json();
       const data = j?.data ?? j;
       setBriefing({
